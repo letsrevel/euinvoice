@@ -63,6 +63,11 @@ All notable changes to this project are documented here. The format follows
   cached per process and calls are thread-safe. A document a stylesheet cannot evaluate (e.g. a
   non-numeric amount) yields one fatal `SCHEMATRON-RUNTIME` finding instead of an exception. Needs the
   `[validate]` extra.
+- `euinvoice.profiles`: the `Profile` type (id, title, BT-24, supported syntaxes, official rule sets
+  by name, BT-23 default, Factur-X file name and conformance level) with `prepare(invoice)`, which
+  sets BT-24 and a missing BT-23 through model validation; the EN 16931 core profile `EN16931`
+  (`urn:cen.eu:en16931:2017`, UBL and CII, CEN rules); and `profiles.get(bt24)`, which raises
+  `UnsupportedDocumentError` listing the known identifiers for an unknown BT-24.
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from

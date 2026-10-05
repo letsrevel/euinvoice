@@ -1,4 +1,4 @@
-"""Synthetic invoices for the model tests (fake parties, example.com, test IBAN; CLAUDE.md fixtures rule)."""
+"""Synthetic invoices shared by the test suite (fake parties, example.com, test IBAN; CLAUDE.md fixtures rule)."""
 
 import datetime
 import typing as t
