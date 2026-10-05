@@ -47,7 +47,12 @@ class ArtifactsNotAvailableError(EuInvoiceError):
 
 
 class ArtifactIntegrityError(EuInvoiceError):
-    """A fetched or cached artifact does not match the sha256 pinned in the manifest."""
+    """An official artifact cannot be trusted or used.
+
+    Raised when a download does not match the sha256 pinned in the manifest, a redirect leaves https,
+    an archive member is unsafe (absolute path, ``..``, symlink), a manifest entry is malformed, or a
+    rule file cannot be compiled.
+    """
 
 
 class PdfError(EuInvoiceError):
