@@ -311,4 +311,6 @@ syntax's writer reports the gap.
   `cbc:Note`): the code is the text between a leading `#…#` (e.g. `#ADU#text`, as in the XRechnung test
   suite).
 * **BT-8 in CII.** The model stores UNTDID 2005 codes (3, 35, 432); CII requires UNTDID 2475 codes
-  (5, 29, 72). The sourced correspondence between the two is tracked on #13 (CII writer).
+  (5, 29, 72). The correspondence 3 = 5, 35 = 29, 432 = 72 is the European Commission's "EN16931 code
+  lists values v17b - used from 2026-05-15" (ec.europa.eu, Registry of supporting artefacts to implement
+  EN16931), sheet "Time"; `euinvoice/syntax/cii/_build.py` encodes it.
