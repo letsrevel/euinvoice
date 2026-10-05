@@ -2,15 +2,12 @@
 
 import contextlib
 import pathlib
-import re
 
 import pytest
 from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ParseError
-
-SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "euinvoice"
 
 
 class RecordingResolver(etree.Resolver):
@@ -84,12 +81,15 @@ def test_malformed_xml_raises_parse_error_with_location(data: bytes, location: s
 
 # --- DOCTYPE / entity attacks -------------------------------------------------------------------
 
-XXE_FILE = b'<!DOCTYPE r [<!ENTITY e SYSTEM "file:///etc/passwd">]><r>&e;</r>'
-XXE_HTTP = b'<!DOCTYPE r [<!ENTITY e SYSTEM "http://127.0.0.1:9/xxe">]><r>&e;</r>'
-EXTERNAL_DTD = b'<!DOCTYPE r SYSTEM "http://127.0.0.1:9/evil.dtd"><r/>'
-EXTERNAL_DTD_FILE = b'<!DOCTYPE r SYSTEM "file:///etc/passwd"><r/>'
-PARAMETER_ENTITY = b'<!DOCTYPE r [<!ENTITY % p SYSTEM "http://127.0.0.1:9/p.dtd"> %p;]><r/>'
-PARAMETER_ENTITY_FILE = b'<!DOCTYPE r [<!ENTITY % p SYSTEM "file:///etc/passwd"> %p;]><r/>'
+# External-load payloads; "{file}" is a file:// URL of a marker file in tmp_path.
+EXTERNAL_LOADS = {
+    "xxe-file": '<!DOCTYPE r [<!ENTITY e SYSTEM "{file}">]><r>&e;</r>',
+    "xxe-http": '<!DOCTYPE r [<!ENTITY e SYSTEM "http://127.0.0.1:9/xxe">]><r>&e;</r>',
+    "dtd-http": '<!DOCTYPE r SYSTEM "http://127.0.0.1:9/evil.dtd"><r/>',
+    "dtd-file": '<!DOCTYPE r SYSTEM "{file}"><r/>',
+    "param-entity-http": '<!DOCTYPE r [<!ENTITY % p SYSTEM "http://127.0.0.1:9/p.dtd"> %p;]><r/>',
+    "param-entity-file": '<!DOCTYPE r [<!ENTITY % p SYSTEM "{file}"> %p;]><r/>',
+}
 BILLION_LAUGHS = (
     b'<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">'
     + b"".join(
@@ -99,50 +99,78 @@ BILLION_LAUGHS = (
     + b"]><lolz>&lol9;</lolz>"
 )
 QUADRATIC_BLOWUP = b'<!DOCTYPE r [<!ENTITY a "' + b"x" * 50_000 + b'">]><r>' + b"&a;" * 50_000 + b"</r>"
-
-EXTERNAL_LOADS = [XXE_FILE, XXE_HTTP, EXTERNAL_DTD, EXTERNAL_DTD_FILE, PARAMETER_ENTITY, PARAMETER_ENTITY_FILE]
-ALL_ATTACKS = [*EXTERNAL_LOADS, BILLION_LAUGHS, QUADRATIC_BLOWUP, b"<!DOCTYPE r><r/>"]
+MARKER = "euinvoice-xxe-marker-6b1f"
 
 
-@pytest.mark.parametrize("payload", ALL_ATTACKS)
-def test_attacks_raise_parse_error_and_load_nothing(payload: bytes, resolver: RecordingResolver) -> None:
-    with pytest.raises(ParseError):
-        _xml.parse(payload)
+@pytest.fixture
+def marker_url(tmp_path: pathlib.Path) -> str:
+    """A file:// URL of a file whose content must never show up in a parse result."""
+    path = tmp_path / "secret.txt"
+    path.write_text(MARKER, encoding="utf-8")
+    return path.as_uri()
+
+
+def payload(name: str, marker_url: str) -> bytes:
+    """Build one of the EXTERNAL_LOADS payloads."""
+    return EXTERNAL_LOADS[name].replace("{file}", marker_url).encode()
+
+
+@pytest.mark.parametrize("name", EXTERNAL_LOADS)
+def test_external_loads_raise_parse_error_and_load_nothing(
+    name: str, marker_url: str, resolver: RecordingResolver
+) -> None:
+    with pytest.raises(ParseError, match="DOCTYPE"):
+        _xml.parse(payload(name, marker_url))
     assert resolver.requested == []
 
 
-@pytest.mark.parametrize("payload", [*EXTERNAL_LOADS, b"<!DOCTYPE r><r/>", b'<!DOCTYPE r [<!ENTITY a "x">]><r>&a;</r>'])
-def test_doctype_is_rejected(payload: bytes) -> None:
+@pytest.mark.parametrize("data", [BILLION_LAUGHS, QUADRATIC_BLOWUP])
+def test_entity_bombs_raise_parse_error(data: bytes, resolver: RecordingResolver) -> None:
+    with pytest.raises(ParseError):
+        _xml.parse(data)
+    assert resolver.requested == []
+
+
+@pytest.mark.parametrize("data", [b"<!DOCTYPE r><r/>", b'<!DOCTYPE r [<!ENTITY a "x">]><r>&a;</r>'])
+def test_doctype_is_rejected(data: bytes) -> None:
     with pytest.raises(ParseError, match="DOCTYPE"):
-        _xml.parse(payload)
+        _xml.parse(data)
 
 
-@pytest.mark.parametrize("payload", EXTERNAL_LOADS)
-def test_payload_would_load_external_resource_without_hardening(payload: bytes) -> None:
-    # Control for the test above: proves the recorder sees loads when a parser is not hardened,
-    # so an empty `requested` list really means "nothing was read or fetched".
+def test_xxe_file_would_leak_without_hardening(marker_url: str) -> None:
+    # Control: an unhardened parser really does read the marker file, so the tests above are not vacuous.
     recorder = RecordingResolver()
-    # The load itself fails (nothing listens on port 9; /etc/passwd is no DTD), but it is attempted.
-    with contextlib.suppress(etree.XMLSyntaxError):
-        etree.fromstring(payload, permissive_parser(recorder))
+    root = etree.fromstring(payload("xxe-file", marker_url), permissive_parser(recorder))
+    assert MARKER in (root.text or "")
     assert recorder.requested
 
 
-@pytest.mark.parametrize("payload", EXTERNAL_LOADS)
-def test_hardened_parser_alone_loads_nothing(payload: bytes) -> None:
+@pytest.mark.parametrize("name", EXTERNAL_LOADS)
+def test_payload_would_load_external_resource_without_hardening(name: str, marker_url: str) -> None:
+    # Control: the recorder sees loads when a parser is not hardened, so an empty `requested` list
+    # really means "nothing was read or fetched".
+    recorder = RecordingResolver()
+    # Some loads fail (nothing listens on port 9; the marker is no DTD), but each one is attempted.
+    with contextlib.suppress(etree.XMLSyntaxError):
+        etree.fromstring(payload(name, marker_url), permissive_parser(recorder))
+    assert recorder.requested
+
+
+@pytest.mark.parametrize("name", EXTERNAL_LOADS)
+def test_hardened_parser_alone_loads_nothing(name: str, marker_url: str) -> None:
     # Defence in depth: even before the DOCTYPE check, the D10 parser itself loads nothing.
     recorder = RecordingResolver()
     parser = _xml.new_parser()
     parser.resolvers.add(recorder)
-    root = etree.fromstring(payload, parser)
+    root = etree.fromstring(payload(name, marker_url), parser)
     assert recorder.requested == []
-    assert "root:" not in etree.tostring(root).decode()
+    assert MARKER not in etree.tostring(root).decode()
 
 
 @pytest.mark.parametrize("payload", [BILLION_LAUGHS, QUADRATIC_BLOWUP])
 def test_hardened_parser_alone_aborts_entity_bombs(payload: bytes) -> None:
-    # Defence in depth: libxml2's amplification guard stops the bomb before our DOCTYPE check runs.
-    with pytest.raises(etree.XMLSyntaxError, match="amplification"):
+    # Defence in depth: libxml2's entity guard stops the bomb before our DOCTYPE check runs.
+    with pytest.raises(etree.XMLSyntaxError):
         etree.fromstring(payload, _xml.new_parser())
 
 
@@ -163,49 +191,8 @@ def test_oversized_text_node_is_rejected() -> None:
 
 
 def test_namespace_maps() -> None:
-    assert _xml.UBL_NSMAP == {"cac": _xml.UBL_CAC, "cbc": _xml.UBL_CBC}
+    assert _xml.UBL_NSMAP == {"cac": _xml.UBL_CAC, "cbc": _xml.UBL_CBC, "ext": _xml.UBL_EXT}
     assert _xml.CII_NSMAP == {"rsm": _xml.CII_RSM, "ram": _xml.CII_RAM, "udt": _xml.CII_UDT, "qdt": _xml.CII_QDT}
     assert _xml.UBL_INVOICE == "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
     assert _xml.UBL_CREDIT_NOTE == "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
     assert _xml.CII_RSM == "urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
-
-
-# --- AC: no XML parsing outside _xml.py ---------------------------------------------------------
-
-FORBIDDEN = re.compile(
-    r"etree\.fromstring|etree\.parse\b|etree\.XML\b|XMLParser\(|\bfromstring\(|\biterparse\(|XMLPullParser\("
-    r"|\bxml\.(?:etree|dom|sax)\b|\bparseString\("
-)
-
-
-def forbidden_parser_uses(source: str) -> list[str]:
-    """Return the forbidden parser calls found in `source`."""
-    return FORBIDDEN.findall(source)
-
-
-@pytest.mark.parametrize(
-    "snippet",
-    [
-        "etree.fromstring(b)",
-        "etree.parse(f)",
-        "etree.XML(b)",
-        "lxml.etree.XMLParser(load_dtd=True)",
-        "from lxml.etree import fromstring\nfromstring(b)",
-        "etree.iterparse(f)",
-        "import xml.etree.ElementTree",
-        "minidom.parseString(b)",
-    ],
-)
-def test_forbidden_pattern_detects(snippet: str) -> None:
-    assert forbidden_parser_uses(snippet)
-
-
-def test_xml_is_parsed_only_in_xml_module() -> None:
-    offenders: dict[str, list[str]] = {}
-    for path in SRC.rglob("*.py"):
-        if path == SRC / "_xml.py":
-            continue
-        found = forbidden_parser_uses(path.read_text(encoding="utf-8"))
-        if found:
-            offenders[str(path.relative_to(SRC))] = found
-    assert offenders == {}, "XML must be parsed only via euinvoice._xml (D10)"

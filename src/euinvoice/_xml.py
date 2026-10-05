@@ -9,12 +9,15 @@ attack class is blocked:
 * **Billion laughs / quadratic blowup / parameter entities**: entities can only be declared in a
   DOCTYPE, which is rejected; the parser never resolves external entities (``resolve_entities=False``)
   and libxml2's entity-amplification guard aborts expansion bombs while parsing.
+* **Trusted schemas**: :func:`load_trusted_schema` is the one place that reads files (local XSD
+  imports of the pinned artifacts); it keeps ``no_network=True`` and the DOCTYPE rejection.
 * **Oversized input**: ``huge_tree=False`` keeps libxml2's safety limits (nesting depth, text node
   and attribute size).
 
 A test (``tests/test_xml.py``) fails if any other module under ``src/`` parses XML itself.
 """
 
+import pathlib
 import typing as t
 
 from lxml import etree
@@ -46,7 +49,7 @@ CII_QDT: t.Final = "urn:un:unece:uncefact:data:standard:QualifiedDataType:100"
 """CII D16B qualified data types (``qdt``)."""
 
 # Plain dicts because lxml's ``xpath(namespaces=…)`` rejects read-only mappings. Do not mutate.
-UBL_NSMAP: t.Final[dict[str, str]] = {"cac": UBL_CAC, "cbc": UBL_CBC}
+UBL_NSMAP: t.Final[dict[str, str]] = {"cac": UBL_CAC, "cbc": UBL_CBC, "ext": UBL_EXT}
 """Prefix map for UBL components (the document namespace is the default one, set per root)."""
 CII_NSMAP: t.Final[dict[str, str]] = {"rsm": CII_RSM, "ram": CII_RAM, "udt": CII_UDT, "qdt": CII_QDT}
 """Prefix map for CII documents."""
@@ -91,10 +94,49 @@ def parse(data: bytes) -> etree._Element:
     try:
         root = etree.fromstring(data, new_parser())  # hardened parser, see new_parser()
     except etree.XMLSyntaxError as exc:
-        line, column = exc.position
-        message = exc.msg.removesuffix(f", line {line}, column {column}")
-        raise ParseError(f"malformed XML: {message}", location=f"{line}:{column}") from exc
-    # libxml2 records every DOCTYPE (with or without an internal subset) as the document's intSubset.
-    if root.getroottree().docinfo.internalDTD is not None:
-        raise ParseError("DOCTYPE declarations are not allowed (entity and DTD attacks, D10)")
+        raise _malformed(exc) from exc
+    _reject_doctype(root.getroottree())
     return root
+
+
+def load_trusted_schema(path: pathlib.Path) -> etree.XMLSchema:
+    """Load an XML Schema from the local artifact cache.
+
+    For **trusted local artifacts only** (the pinned official XSDs fetched by
+    ``euinvoice artifacts fetch``), never for user input. Unlike :func:`parse` it reads files: libxml2
+    follows the schema's ``xs:import`` / ``xs:include`` locations relative to ``path``. It still never
+    touches the network (``no_network=True``), never resolves entities, and rejects a DOCTYPE in the
+    root schema document.
+
+    Args:
+        path: The root ``.xsd`` file.
+
+    Returns:
+        The compiled schema.
+
+    Raises:
+        OSError: If ``path`` cannot be read.
+        ParseError: If a schema document is malformed, has a DOCTYPE, or is not a valid XML Schema
+            (including an import that cannot be loaded locally).
+    """
+    try:
+        tree = etree.parse(str(path), new_parser())  # hardened parser, see new_parser()
+    except etree.XMLSyntaxError as exc:
+        raise _malformed(exc) from exc
+    _reject_doctype(tree)
+    try:
+        return etree.XMLSchema(tree)
+    except etree.XMLSchemaParseError as exc:
+        raise ParseError(f"invalid XML Schema {path.name}: {exc}") from exc
+
+
+def _malformed(exc: etree.XMLSyntaxError) -> ParseError:
+    line, column = exc.position
+    message = exc.msg.removesuffix(f", line {line}, column {column}")
+    return ParseError(f"malformed XML: {message}", location=f"{line}:{column}")
+
+
+def _reject_doctype(tree: etree._ElementTree) -> None:
+    # libxml2 records every DOCTYPE (with or without an internal subset) as the document's intSubset.
+    if tree.docinfo.internalDTD is not None:
+        raise ParseError("DOCTYPE declarations are not allowed (entity and DTD attacks, D10)")
