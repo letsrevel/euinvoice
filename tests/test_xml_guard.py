@@ -38,6 +38,10 @@ FORBIDDEN_NAMES = frozenset(
         "Schematron",
         "parse_xml",
         "parseString",
+        # saxonche loaders that take a file name positionally.
+        "set_catalog",
+        "set_catalog_files",
+        "set_query_file",
     }
 )
 # Private parser factory of euinvoice._xml: it skips the DOCTYPE check, so it is flagged even on a safe root.
@@ -51,10 +55,63 @@ XML_HELPERS = frozenset({"parse", "load_trusted_schema"})
 # Names imported from these modules are safe roots: a forbidden attribute directly on them is fine
 # (``_xml.parse``, ``urllib.parse``), but not deeper (``_xml.etree.parse``).
 SAFE_MODULES = ("euinvoice", "urllib")
-# Explicit per-file exceptions, as {path relative to src/euinvoice: names}. Keep this tiny and give
-# a reason per entry (e.g. ``parse_xml`` will be allowed only in ``validate/schematron.py``, which
-# hands Saxon bytes that already passed ``_xml.parse``).
-PER_FILE_ALLOWED: dict[str, frozenset[str]] = {}
+# saxonche keyword arguments that make Saxon read a file or URI (from the saxonche 13.0.0 docstrings).
+# D10: documents reach Saxon only through ``_xml.to_xdm``, as text from a tree ``_xml.parse`` accepted.
+SAXON_FILE_KEYWORDS = frozenset(
+    {
+        "source_file",
+        "xml_file_name",
+        "xml_uri",
+        "stylesheet_file",
+        "associated_file",
+        "file_name",
+        "input_file_name",
+        "query_file",
+        "xsd_file",
+        "json_file_name",
+        "package_file_name",
+    }
+)
+# saxonche methods that accept one of the keywords above; a ``**`` splat in a call to them could hide one.
+SAXON_METHODS = frozenset(
+    {
+        "parse_xml",
+        "parse_json",
+        "compile_stylesheet",
+        "import_package",
+        "transform_to_string",
+        "transform_to_value",
+        "transform_to_file",
+        "apply_templates_returning_string",
+        "apply_templates_returning_value",
+        "apply_templates_returning_file",
+        "call_template_returning_string",
+        "call_template_returning_value",
+        "call_template_returning_file",
+        "call_function_returning_string",
+        "call_function_returning_value",
+        "call_function_returning_file",
+        "set_initial_match_selection",
+        "set_global_context_item",
+        "set_context",
+        "run_query_to_string",
+        "run_query_to_value",
+        "run_query_to_file",
+        "register_schema",
+        "validate",
+        "validate_to_node",
+        "compile",
+    }
+)
+# Explicit per-file exceptions, as {path relative to src/euinvoice: {name: exact number of uses}}. Keep
+# this tiny and give a reason per entry; a test fails if the number of uses changes either way.
+PER_FILE_ALLOWED: dict[str, dict[str, int]] = {
+    # Compiles the pinned rule set by path from a recipe-fingerprint-checked cache entry (xsl:include
+    # and xsl:import need a base URI).
+    "validate/schematron.py": {"stylesheet_file": 1},
+    # Compiles the pinned SchXslt pipeline by path (it xsl:includes its sibling stylesheets).
+    "validate/artifacts.py": {"stylesheet_file": 1},
+}
 
 
 def _in(module: str, prefixes: tuple[str, ...]) -> bool:
@@ -101,13 +158,18 @@ def _check_attribute(node: ast.Attribute, allowed: frozenset[str], safe_roots: s
 
 
 def _check_call(node: ast.Call, allowed: frozenset[str]) -> str | None:
-    """Flag ``ElementTree(file=...)``, ``getattr(x, "<forbidden>")`` and dynamic imports of parser modules."""
+    """Flag ``ElementTree(file=...)``, saxonche file keywords, ``getattr(x, "<forbidden>")`` and dynamic imports."""
     func = node.func
     name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
     first = node.args[1 if name == "getattr" else 0] if len(node.args) > (name == "getattr") else None
     constant = first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
     if name == "ElementTree" and (len(node.args) > 1 or any(k.arg == "file" for k in node.keywords)):
         return f"line {node.lineno}: ElementTree(file=...)"
+    keyword = next((k.arg for k in node.keywords if k.arg in SAXON_FILE_KEYWORDS - allowed), None)
+    if keyword:
+        return f"line {node.lineno}: {keyword}=..."
+    if isinstance(func, ast.Attribute) and name in SAXON_METHODS and any(k.arg is None for k in node.keywords):
+        return f"line {node.lineno}: {name}(**...)"
     if name == "getattr" and constant in (FORBIDDEN_NAMES | PRIVATE_XML_NAMES) - allowed:
         return f"line {node.lineno}: getattr(..., {constant!r})"
     if name in {"import_module", "__import__"} and constant and _in(constant, FORBIDDEN_MODULES):
@@ -173,6 +235,24 @@ def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) ->
         "from xml import sax",
         "from xml.dom import minidom\nminidom.parseString(b)",
         "proc.parse_xml(xml_text=s)",
+        "doc_builder.parse_xml(xml_uri=u)",
+        "executable.transform_to_string(source_file=p)",
+        "executable.transform_to_value(source_file=p)",
+        "xslt.compile_stylesheet(stylesheet_file=p)",
+        "xslt.compile_stylesheet(associated_file=p)",
+        "executable.set_initial_match_selection(file_name=p)",
+        "xquery.set_context(xml_file_name=p)",
+        "xquery.run_query_to_string(input_file_name=p)",
+        "xquery.run_query_to_value(query_file=p)",
+        "validator.register_schema(xsd_file=p)",
+        "compiler.compile(xsd_file=p)",
+        "proc.parse_json(json_file_name=p)",
+        "xslt.import_package(package_file_name=p)",
+        "proc.parse_xml(**kw)",
+        "executable.transform_to_string(xdm_node=n, **kw)",
+        "xslt.compile_stylesheet(**{'stylesheet_file': p})",
+        "proc.set_catalog(p)",
+        "xquery.set_query_file(p)",
         "self.parser.parse(b)",
         "from euinvoice._xml import etree\netree.fromstring(b)",
         "from ._xml import etree as ET\nET.XML(b)",
@@ -215,6 +295,10 @@ def test_guard_detects(snippet: str) -> None:
         "from lxml import etree\netree.tostring(e)",
         "from lxml import etree\netree.ElementTree(root)",
         "from euinvoice.model import *",
+        "executable.transform_to_string(xdm_node=node)",
+        "xslt.compile_stylesheet(stylesheet_text=s)",
+        "build(**options)",
+        "obj.render(**options)",
     ],
 )
 def test_guard_allows(snippet: str) -> None:
@@ -223,15 +307,35 @@ def test_guard_allows(snippet: str) -> None:
 
 def test_per_file_allowlist() -> None:
     assert forbidden_parser_uses("proc.parse_xml(xml_text=s)", frozenset({"parse_xml"})) == []
+    assert forbidden_parser_uses("xslt.compile_stylesheet(stylesheet_file=p)", frozenset({"stylesheet_file"})) == []
+    assert forbidden_parser_uses("e.transform_to_string(source_file=p)", frozenset({"stylesheet_file"})) != []
+
+
+def allowed_use_counts(source: str, allowed: dict[str, int]) -> dict[str, int]:
+    """How many uses of each allowlisted name ``source`` has (uses that disappear when it is allowed)."""
+    names = frozenset(allowed)
+    baseline = len(forbidden_parser_uses(source, names))
+    return {name: len(forbidden_parser_uses(source, names - {name})) - baseline for name in names}
+
+
+def test_allowed_use_counts_are_exact() -> None:
+    source = "a.compile_stylesheet(stylesheet_file=p)\nb.compile_stylesheet(stylesheet_file=q)"
+    assert allowed_use_counts(source, {"stylesheet_file": 1}) == {"stylesheet_file": 2}
 
 
 def test_xml_is_parsed_only_in_xml_module() -> None:
     offenders: dict[str, list[str]] = {}
+    counts: dict[str, dict[str, int]] = {}
     for path in SRC.rglob("*.py"):
         relative = path.relative_to(SRC).as_posix()
         if relative == "_xml.py":
             continue
-        found = forbidden_parser_uses(path.read_text(encoding="utf-8"), PER_FILE_ALLOWED.get(relative, frozenset()))
+        source = path.read_text(encoding="utf-8")
+        allowed = PER_FILE_ALLOWED.get(relative, {})
+        found = forbidden_parser_uses(source, frozenset(allowed))
         if found:
             offenders[relative] = found
+        if allowed:
+            counts[relative] = allowed_use_counts(source, allowed)
     assert offenders == {}, "XML must be parsed only via euinvoice._xml (D10)"
+    assert counts == PER_FILE_ALLOWED, "allowlisted uses changed: review them and update PER_FILE_ALLOWED"

@@ -37,8 +37,10 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path, PurePosixPath
 
-from euinvoice import __version__
-from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError
+from lxml import etree
+
+from euinvoice import __version__, _xml
+from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
 
 ENV_VAR = "EUINVOICE_ARTIFACTS_DIR"
 DEFAULT_CACHE_DIR = "~/.cache/euinvoice"
@@ -380,8 +382,11 @@ def _extract(source: Source, archive: Path, dest: Path) -> None:
 def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
     """Compile each ``precompile`` Schematron to a sibling ``.xslt`` with SchXslt on Saxon.
 
-    The inputs are sha256-pinned official artifacts, not user documents, so they are handed to Saxon
-    by file path; D10 (hardened parsing) governs invoice input.
+    Only the pinned SchXslt pipeline is loaded by path (it includes its sibling stylesheets). Each
+    ``.sch`` reaches Saxon through :func:`euinvoice._xml.to_xdm` (D10), so it has no base URI and a
+    schema with ``sch:include`` or ``sch:extends[@href]`` is refused. For the Peppol ``.sch`` files, which
+    use neither, the output differs from a by-path compile only in SchXslt's ``dct:created`` timestamp
+    and generated ids (checked on Peppol 3.0.21).
     """
     if compiler is None or not (compiler / SCHXSLT_PIPELINE).is_file():
         raise ArtifactsNotAvailableError(
@@ -406,9 +411,36 @@ def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
             if not sch.is_file():
                 raise ArtifactIntegrityError(f"{source.name}: precompile entry {rel!r} is not in the archive")
             try:
-                xslt = executable.transform_to_string(source_file=str(sch))
-            except saxonche.PySaxonApiError as exc:
+                node = _xml.to_xdm(proc, _standalone_schematron(source, rel, sch.read_bytes()))
+                xslt = executable.transform_to_string(xdm_node=node)
+            except (ParseError, saxonche.PySaxonApiError) as exc:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt failed on {rel}: {exc}") from exc
             if xslt is None:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt produced no output for {rel}")
             sch.with_suffix(".xslt").write_text(xslt, encoding="utf-8")
+
+
+def _standalone_schematron(source: Source, rel: str, data: bytes) -> etree._Element:
+    """Parse a ``.sch`` and refuse it if it pulls in other files.
+
+    The schema reaches SchXslt as text without a base URI, so a reference to another file would be
+    resolved against the current directory instead of the artifact. SchXslt 1.10.1 follows three:
+
+    * ``sch:include`` and ``sch:extends[@href]``, loaded at compile time (``2.0/include.xsl``, template
+      ``match="sch:include | sch:extends[@href]"``); ``sch:extends[@rule]`` is an in-schema reference.
+    * ``sch:pattern[@documents]``, loaded at validation time: the generated XSLT runs
+      ``source-document href="{resolve-uri(., $base-uri)}"`` (``2.0/compile/compile-2.0.xsl``,
+      ``xsl:when test="@documents"``). Abstract patterns pass ``@documents`` on to their instances
+      (``2.0/expand.xsl``), so every pattern is checked.
+    """
+    root = _xml.parse(data)
+    sch = f"{{{_xml.SCHEMATRON}}}"
+    for element in root.iter(f"{sch}include", f"{sch}extends", f"{sch}pattern"):
+        name = etree.QName(element).localname
+        target = element.get("documents") if name == "pattern" else element.get("href")
+        if name == "include" or target is not None:
+            raise ArtifactIntegrityError(
+                f"{source.name}: {rel} pulls in another file (sch:{name} {target!r}), "
+                "which cannot be resolved without a base URI"
+            )
+    return root

@@ -309,11 +309,42 @@ def test_schematron_that_fails_to_compile_names_the_sch(tmp_path: Path, net: Fak
         artifacts.fetch([RULES], root=tmp_path, sources=sources)
 
 
+def test_schematron_with_a_doctype_is_refused_before_saxon(tmp_path: Path, net: FakeNet) -> None:
+    sch = b'<!DOCTYPE schema [<!ENTITY t "T1">]>' + FAKE_SCH.replace(b"T1", b"&t;")
+    sources = precompile_sources(net, sch=sch)
+    with pytest.raises(ArtifactIntegrityError, match="DOCTYPE"):
+        artifacts.fetch([RULES], root=tmp_path, sources=sources)
+
+
+@pytest.mark.parametrize(
+    "element",
+    [
+        '<include href="other.sch"/>',
+        '<pattern><rule context="/"><extends href="rules.sch"/></rule></pattern>',
+        '<pattern documents="\'codes.xml\'"><rule context="/"/></pattern>',
+        '<pattern abstract="true" id="p" documents="\'codes.xml\'"/>',
+    ],
+)
+def test_schematron_that_pulls_in_other_files_is_refused(tmp_path: Path, net: FakeNet, element: str) -> None:
+    # Without a base URI SchXslt would resolve the href against the current directory.
+    sch = FAKE_SCH.replace(b"</schema>", element.encode() + b"</schema>")
+    sources = precompile_sources(net, sch=sch)
+    with pytest.raises(ArtifactIntegrityError, match=r"rules/sch/R\.sch pulls in another file"):
+        artifacts.fetch([RULES], root=tmp_path, sources=sources)
+
+
+def test_schematron_extends_of_an_abstract_rule_is_fine(tmp_path: Path, net: FakeNet) -> None:
+    body = b'<pattern><rule abstract="true" id="a"/><rule context="/"><extends rule="a"/></rule></pattern>'
+    sources = precompile_sources(net, sch=FAKE_SCH.replace(b"</schema>", body + b"</schema>"))
+    result = artifacts.fetch([RULES], root=tmp_path, sources=sources)
+    assert "<compiled>T1</compiled>" in (result[RULES] / "rules" / "sch" / "R.xslt").read_text(encoding="utf-8")
+
+
 def test_schxslt_without_output_is_an_integrity_error(
     tmp_path: Path, net: FakeNet, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class Executable:
-        def transform_to_string(self, source_file: str) -> None:
+        def transform_to_string(self, xdm_node: object) -> None:
             return None
 
     class Proc:
@@ -328,6 +359,9 @@ def test_schxslt_without_output_is_an_integrity_error(
 
         def compile_stylesheet(self, stylesheet_file: str) -> Executable:
             return Executable()
+
+        def parse_xml(self, xml_text: str, encoding: str) -> object:
+            return object()
 
     fake = types.SimpleNamespace(PySaxonProcessor=lambda license: Proc(), PySaxonApiError=RuntimeError)
     monkeypatch.setitem(sys.modules, "saxonche", fake)

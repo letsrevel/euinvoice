@@ -43,3 +43,16 @@ All notable changes to this project are documented here. The format follows
 - `euinvoice.validate.xsd.validate()` also validates UN/CEFACT CII D16B `CrossIndustryInvoice`
   documents, against the D16B SCRDM Subset schema of the pinned KoSIT validator configuration
   (`resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd`, used by every KoSIT CII scenario).
+- `euinvoice.validate.report`: `Finding`, `Severity` and `ValidationReport` (validation results as data).
+- `euinvoice.validate.schematron`: runs one official compiled rule set (CEN EN 16931 UBL/CII, Peppol
+  BIS 3.0 UBL/CII, XRechnung UBL/CII) on Saxon and maps every SVRL failed assert or successful report
+  to a `Finding` with its rule id, severity (from `@flag`; a missing or unknown flag counts as `error`),
+  XPath location and message. Input is hardened-parsed before Saxon sees it; compiled stylesheets are
+  cached per process and calls are thread-safe. A document a stylesheet cannot evaluate (e.g. a
+  non-numeric amount) yields one fatal `SCHEMATRON-RUNTIME` finding instead of an exception. Needs the
+  `[validate]` extra.
+
+### Changed
+- The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
+  hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
+  files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.
