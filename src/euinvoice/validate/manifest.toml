@@ -1,0 +1,127 @@
+# Pinned official validation artifacts and upstream example corpora (IMPLEMENTATION_PLAN.md D7, §3).
+#
+# Nothing listed here is ever committed. `python -m euinvoice artifacts fetch` downloads each archive,
+# checks its sha256, and extracts the matching members into
+# `$EUINVOICE_ARTIFACTS_DIR/<source>/<version>/` (default `~/.cache/euinvoice`).
+#
+# Fields per source:
+#   version           directory name under the cache; bump it together with url + sha256
+#   url               https download of a zip archive
+#   sha256            of the archive bytes, computed from a real download
+#   license           licence of the upstream content (we only fetch, never redistribute)
+#   members           fnmatch globs over the archive member paths after `strip_components`;
+#                     `*` also matches `/`, so "rules/sch/*" includes subdirectories
+#   strip_components  leading path components to drop (GitHub archives wrap everything in one dir)
+#   precompile        `.sch` files (relative to the extracted dir) that ship without compiled XSLT;
+#                     they are compiled with SchXslt (source `schxslt`) into a sibling `.xslt`
+#   note              what the archive contains and why it is pinned at this version
+#
+# Changing a pin: update version + url + sha256 together, run `make conformance`, add a CHANGELOG
+# note and open a dedicated PR (CLAUDE.md, "Artifacts and fixtures").
+#
+# ponytail: Factur-X / ZUGFeRD specification package (per-profile XSD + Schematron) is NOT pinned.
+# FNFE-MPE (fnfe-mpe.org/factur-x, Factur-X 1.09.2) and FeRD (ferd-net.de, ZUGFeRD 2.5.2) only
+# serve it behind an e-mail form, with no stable direct URL. Tracked as a needs-human question;
+# add a `facturx` source here once an official direct URL (or a maintainer-provided mirror) exists.
+
+schema_version = 1
+
+[sources.cen-ubl]
+version = "1.3.16"
+url = "https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-1.3.16/en16931-ubl-1.3.16.zip"
+sha256 = "bafada015efbc5248bf5e05ad2191e1d9833ef96e9dd5f4bce420a747342da85"
+license = "EUPL-1.2"
+members = ["*"]
+note = """CEN/TC 434 EN 16931 validation artifacts for UBL 2.1, release validation-1.3.16 \
+(2026-04-13, newest release as of 2026-10-05): schematron/ (abstract, UBL, codelist, preprocessed), \
+xslt/EN16931-UBL-validation.xslt (compiled) and examples/ (official UBL examples). No XSD."""
+
+[sources.cen-cii]
+version = "1.3.16"
+url = "https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-1.3.16/en16931-cii-1.3.16.zip"
+sha256 = "1cd53cb8a84d38aedc82c0caede217da983a7934dd663f793a092fd66443c561"
+license = "EUPL-1.2"
+members = ["*"]
+note = """CEN/TC 434 EN 16931 validation artifacts for UN/CEFACT CII D16B, release validation-1.3.16: \
+schematron/ (abstract, CII, codelist incl. EN16931-CII-codes.sch, preprocessed), \
+xslt/EN16931-CII-validation.xslt (compiled) and examples/ (incl. CII-BR-CO-10-RoundingIssue.xml). \
+Does NOT contain the CII XSD: see `xrechnung-validator-configuration`."""
+
+[sources.peppol-bis]
+version = "3.0.21"
+# ponytail: GitHub-generated archive of a commit. GitHub does not contractually guarantee stable
+# archive checksums; if the sha256 ever drifts, re-verify the content and re-pin.
+url = "https://github.com/OpenPEPPOL/peppol-bis-invoice-3/archive/806866bd2bd91d7e9623b68f08164e8fbe9e67a0.zip"
+sha256 = "25939567e01b65fe5c93412f49ee3d7dffd264dd508aeb21c6447fcf83ef4755"
+license = "none stated (repository has no licence file; fetch only, never redistribute)"
+members = ["rules/sch/*", "rules/examples/*", "rules/unit-UBL-*", "rules/unit-CII-*"]
+strip_components = 1
+precompile = ["rules/sch/PEPPOL-EN16931-UBL.sch", "rules/sch/PEPPOL-EN16931-CII.sch"]
+note = """Peppol BIS Billing 3.0 release 3.0.21 (published 2026-05-20, mandatory from 2026-08-17 per \
+docs.peppol.eu/poacc/billing/3.0/release-notes/). Upstream did not tag 3.0.21 (newest tag is v3.0.20); \
+commit 806866bd (head of branch 2026-Q2-QA2, 2026-06-10) is pinned because its rules/sch/PEPPOL-EN16931-UBL.sch \
+and CEN-EN16931-UBL.sch are byte-identical (git blob 17b05402 / 58de2a5d) to the files published at \
+docs.peppol.eu/poacc/billing/3.0/files/, and XRechnung Schematron 2.6.0 states it uses Peppol 3.0.21. \
+Rules ship as .sch only, so the PEPPOL-EN16931-*.sch files are precompiled with SchXslt."""
+
+[sources.xrechnung-schematron]
+version = "2.6.0"
+url = "https://github.com/itplr-kosit/xrechnung-schematron/releases/download/v2.6.0/xrechnung-3.0.2-schematron-2.6.0.zip"
+sha256 = "ca5e07afd04e72cd283d581590ffff3a15f4aac9d2f40c993345d78e67ea22b4"
+license = "Apache-2.0"
+members = ["*"]
+note = """KoSIT XRechnung 3.0.2 Schematron v2.6.0 (2026-08-31): schematron/{ubl,cii}/XRechnung-*-validation.sch \
+plus compiled .xsl, common.sch, CHANGELOG, LICENSE. Built against CEN 1.3.16 and Peppol 3.0.21."""
+
+[sources.xrechnung-testsuite]
+version = "2026-08-31"
+url = "https://github.com/itplr-kosit/xrechnung-testsuite/releases/download/v2026-08-31/xrechnung-3.0.2-testsuite-2026-08-31.zip"
+sha256 = "1e81ef7563e0fa04c0e0b0631318a7e0843a3c0beb57d83ef95ac0c4a095e3d7"
+license = "Apache-2.0"
+members = ["*"]
+note = """KoSIT XRechnung 3.0.2 test suite v2026-08-31: instances/{standard,extension,technical-cases} \
+in UBL (*_ubl.xml) and CII (*_uncefact.xml)."""
+
+[sources.xrechnung-validator-configuration]
+version = "2026-08-31"
+url = "https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v2026-08-31/xrechnung-3.0.2-validator-configuration-2026-08-31.zip"
+sha256 = "2530cd107c414511c5d0462ec10f886910395abfca820db82e83d70bf01221a8"
+license = "Apache-2.0"
+members = ["*"]
+note = """KoSIT validator scenarios for XRechnung 3.0.2 (v2026-08-31): scenarios.xml plus resources/. \
+This is the pinned source of the UN/CEFACT CII D16B XSD (resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd \
+and its 3 imports), which is in neither CEN release zip. Its content equals the CEN repository's \
+cii/schema/D16B SCRDM (Subset)/uncoupled clm/ files modulo CRLF line endings. The UNECE download \
+(unece.org/fileadmin/DAM/cefact/xml_schemas/D16B_SCRDM__Subset__CII.zip) answers 403 behind a \
+Cloudflare challenge to non-browser clients, so it cannot be fetched in CI. Also carries the UBL 2.1 XSD."""
+
+[sources.ubl-2_1]
+version = "2.1"
+url = "https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip"
+sha256 = "60b80d76394a8a2add90723ecb8e0e2e9d826775de9749df37a72d60703f86ed"
+license = "OASIS IPR Policy (Copyright (c) OASIS Open 2013)"
+members = ["xsd/*"]
+note = """OASIS UBL 2.1 OS package (58 MB); only xsd/ (common + maindoc, incl. UBL-Invoice-2.1.xsd and \
+UBL-CreditNote-2.1.xsd) is extracted."""
+
+[sources.zugferd-corpus]
+version = "d891458e9822"
+# ponytail: GitHub-generated archive of a commit; checksum stability is not guaranteed by GitHub.
+url = "https://github.com/ZUGFeRD/corpus/archive/d891458e9822e34271a5438497bf924e89955979.zip"
+sha256 = "d5359c24404c9b076b631ddce01f2f96ea717683b0240e464c90129ef830c833"
+license = "Apache-2.0"
+members = ["*"]
+strip_components = 1
+note = """ZUGFeRD / Factur-X sample corpus at master commit d891458e9822e34271a5438497bf924e89955979 \
+(2026-08-11): ZUGFeRDv1/, ZUGFeRDv2/, XML-Rechnung/, PEPPOL/, fatturaPA/, incoming/, other/, unstructured/. Contains no XSD or Schematron."""
+
+[sources.schxslt]
+version = "1.10.1"
+url = "https://codeberg.org/SchXslt/schxslt/releases/download/v1.10.1/schxslt-1.10.1-xslt-only.zip"
+sha256 = "e141fabd4804a0ea527945dc7253dd38f9ef8957d9b219b94e13d16859cff7f0"
+license = "MIT"
+members = ["*"]
+strip_components = 1
+note = """SchXslt 1.10.1 (2024-10-18), the newest 1.x release, XSLT-only distribution. The project moved \
+from GitHub to Codeberg (github.com/schxslt/schxslt is gone; the Codeberg repo is archived in favour \
+of SchXslt2). 2.0/pipeline-for-svrl.xsl compiles queryBinding="xslt2" Schematron to XSLT (README)."""
