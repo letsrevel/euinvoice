@@ -1,0 +1,31 @@
+name: Dependency checks
+
+# licensecheck: fails on copyleft / source-available licences entering the tree.
+# pip-audit:    fails on known CVEs in the locked graph.
+# nightly.yaml re-runs both against main every night.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: [pyproject.toml, uv.lock, Makefile, .github/workflows/deps.yaml]
+  pull_request:
+    paths: [pyproject.toml, uv.lock, Makefile, .github/workflows/deps.yaml]
+
+permissions:
+  contents: read
+
+jobs:
+  licensecheck:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: make licensecheck
+
+  pip-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: make audit

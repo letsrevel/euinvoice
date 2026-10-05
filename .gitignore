@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.audit-reqs.txt
+issues.md
+
+# Downloaded official artifacts / corpora (never committed, see IMPLEMENTATION_PLAN.md D7)
+.artifacts/
+
+# Local
+.DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json
+.claude/worktrees/

@@ -1,0 +1,128 @@
+[project]
+name = "euinvoice"
+version = "0.1.0"
+description = "EN 16931 e-invoicing for Python: build, serialize (UBL/CII), validate, parse and embed (Factur-X) European e-invoices."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Biagio Distefano", email = "biagio@biagiodistefano.io" }
+]
+keywords = ["e-invoicing", "en16931", "peppol", "xrechnung", "factur-x", "zugferd", "ubl", "cii", "einvoice"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Text Processing :: Markup :: XML",
+    "Typing :: Typed",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "lxml>=5.3",
+    "pydantic>=2.11",
+]
+
+[project.optional-dependencies]
+# Official Schematron validation (XSLT 3.0). SaxonC-HE is MPL-2.0.
+validate = [
+    "saxonche>=13.0.0",
+]
+# Factur-X / ZUGFeRD PDF/A-3 embedding and extraction.
+pdf = [
+    "pypdf>=6.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/letsrevel/euinvoice"
+Issues = "https://github.com/letsrevel/euinvoice/issues"
+Changelog = "https://github.com/letsrevel/euinvoice/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.168.4",
+    "licensecheck>=2026.0.8",
+    "lxml-stubs>=0.5.1",
+    "mypy>=2.4.0",
+    "pip-audit>=2.10.1",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+preview = true
+# Compared to revel-backend: adds bugbear (B), comprehensions (C4), naming (N), pytest style (PT),
+# pyupgrade (UP), simplify (SIM), ruff-specific (RUF), and flake8-bandit (S), which replaces the
+# separate bandit run. Security rules that matter most here (hardened XML parsing) are enforced
+# by tests, see CLAUDE.md.
+select = ["B", "C4", "C90", "D", "E", "F", "I", "N", "import-private-name", "too-many-nested-blocks", "PT", "RUF", "S", "SIM", "T20", "UP", "W"]
+ignore = ["undocumented-public-module", "undocumented-public-package", "undocumented-magic-method", "undocumented-public-init"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "assert", "import-private-name"]
+"scripts/**" = ["print"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.pylint]
+max-nested-blocks = 4
+
+[tool.mypy]
+strict = true
+extra_checks = true
+warn_unreachable = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+# saxonche ships no type information.
+module = "saxonche.*"
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config -m 'not conformance'"
+xfail_strict = true
+markers = [
+    "conformance: runs the official validation artifacts and upstream example corpora (needs `make artifacts`); run with `make conformance`",
+]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true
+source = ["euinvoice"]
+
+[tool.coverage.report]
+fail_under = 95
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if t.TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@t.overload",
+]

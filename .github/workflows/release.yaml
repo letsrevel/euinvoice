@@ -1,0 +1,94 @@
+name: Release
+
+# Merging a PR from a `release/vX.Y.Z` branch into main:
+#   1. validates branch version == pyproject version == top CHANGELOG section,
+#   2. builds sdist + wheel,
+#   3. tags + creates the GitHub release (notes = curated CHANGELOG section),
+#   4. publishes to PyPI via Trusted Publishing (OIDC; no API token stored anywhere).
+# Unlike revel-backend there is no separate publish workflow, so no GitHub App token is needed:
+# everything happens in one run, and the GITHUB_TOKEN's "no downstream workflows" rule is moot.
+#
+# One-time human setup: PyPI → euinvoice → Publishing → add a trusted publisher
+# (owner letsrevel, repo euinvoice, workflow release.yaml, environment pypi).
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event.pull_request.merged == true && startsWith(github.head_ref, 'release/v')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Resolve and validate versions
+        id: ver
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_HEAD_REF#release/v}"
+          PYPROJECT="$(uv version --short)"
+          CHANGELOG="$(grep -m1 -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          echo "branch=$BRANCH pyproject=$PYPROJECT changelog=$CHANGELOG"
+          [[ "$BRANCH" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::bad branch version $BRANCH"; exit 1; }
+          [ "$BRANCH" = "$PYPROJECT" ] && [ "$BRANCH" = "$CHANGELOG" ] || { echo "::error::version mismatch"; exit 1; }
+          if git rev-parse "v$BRANCH" >/dev/null 2>&1; then echo "::error::tag v$BRANCH exists"; exit 1; fi
+          echo "version=$BRANCH" >> "$GITHUB_OUTPUT"
+      - name: Extract curated release notes
+        run: |
+          awk -v ver="${{ steps.ver.outputs.version }}" '
+            $0 ~ "^## \\[" ver "\\]" {flag=1; next}
+            flag && /^## \[/ {exit}
+            flag {print}
+          ' CHANGELOG.md > release-notes.md
+          [ -s release-notes.md ] || { echo "::error::empty CHANGELOG section"; exit 1; }
+      - run: uv build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: |
+            dist/
+            release-notes.md
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { name: dist }
+      - name: Create tag + GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          V: v${{ needs.build.outputs.version }}
+        run: |
+          gh release create "$V" dist/* --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" --title "$V" --notes-file release-notes.md
+
+  pypi:
+    needs: [build, github-release]
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with: { name: dist }
+      - uses: astral-sh/setup-uv@v7
+        with: { version: "0.11.18" }
+      - name: Publish to PyPI (trusted publishing)
+        run: uv publish --trusted-publishing always dist/*

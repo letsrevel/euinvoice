@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  workflow_dispatch: {}
+  # No path filters: every job here is a required status check on main; a filtered workflow
+  # that doesn't fire leaves its required contexts stuck on "Expected — Waiting for status".
+  push:
+    branches: [main]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  checks:
+    name: Lint & type checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: ruff format
+        run: uv run ruff format --check .
+      - name: ruff lint
+        run: uv run ruff check .
+      - name: mypy (strict)
+        run: uv run mypy
+      - name: File length (max 600 lines)
+        run: ./scripts/check-file-length.sh 600
+
+  test:
+    name: Tests (py${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Unit tests + coverage gate (95% branch)
+        run: uv run pytest -n auto --cov --cov-report=term --cov-report=xml
+      - name: Upload coverage to Codecov
+        if: matrix.python == '3.14' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # Runs the official CEN / Peppol / XRechnung / Factur-X Schematron and the upstream example
+  # corpora. Artifacts are downloaded (pinned + sha256-verified) and cached by manifest hash.
+  conformance:
+    name: Conformance (official artifacts)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: Restore artifact cache
+        uses: actions/cache@v5
+        with:
+          path: .artifacts
+          key: artifacts-${{ hashFiles('src/euinvoice/validate/manifest.toml') }}
+      - name: Fetch artifacts
+        env:
+          EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
+        # ponytail: tolerate the manifest not existing yet (bootstrap, before milestone M5 lands).
+        run: |
+          if [ -f src/euinvoice/validate/manifest.toml ]; then make artifacts; else echo "no manifest yet, skipping"; fi
+      - name: Conformance suite
+        env:
+          EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
+        # pytest exits 5 when no tests are collected (before any conformance test exists).
+        run: uv run pytest -n auto -m conformance || [ $? -eq 5 ]
+
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - name: Build
+        run: uv build
+      - name: Smoke-test the wheel in a clean venv (no dev deps, no extras)
+        run: |
+          uv venv /tmp/wheeltest
+          uv pip install --python /tmp/wheeltest/bin/python dist/*.whl
+          /tmp/wheeltest/bin/python -c "import euinvoice; print(euinvoice.__version__)"

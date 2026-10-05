@@ -1,0 +1,25 @@
+name: Setup euinvoice environment
+description: >
+  Shared CI setup: uv (pinned) + the locked dependency graph with all extras and the dev group.
+  Edit here, not in the jobs.
+
+inputs:
+  python-version:
+    description: Python version to run on (uv downloads it if needed).
+    default: "3.14"
+
+runs:
+  using: composite
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        version: "0.11.18"
+        enable-cache: true
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dependencies
+      shell: bash
+      # --locked fails visibly if uv.lock drifted from pyproject.toml (replaces revel-backend's
+      # separate "git diff uv.lock" step).
+      run: uv sync --locked --all-extras --group dev

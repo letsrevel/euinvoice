@@ -1,0 +1,69 @@
+name: Nightly
+
+# Against main, every night:
+#   - pip-audit + licensecheck, so newly disclosed CVEs / reclassified licences surface within ~24h.
+#   - upstream drift: are newer official artifacts released (CEN, Peppol, XRechnung, Factur-X)?
+#     Peppol publishes rule releases twice a year with mandatory dates, so this matters.
+# Each failing job opens (or bumps) a deduplicated tracker issue.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deps:
+    name: pip-audit + licensecheck (main)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: main }
+      - uses: ./.github/actions/setup
+      - run: make audit
+      - run: make licensecheck
+      - name: Open tracker issue on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const prefix = "Nightly dependency check failure";
+            const run = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const { data } = await github.rest.issues.listForRepo({ ...context.repo, state: "open", labels: "dependencies", per_page: 50 });
+            const match = data.find((i) => i.title.startsWith(prefix));
+            if (match) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: match.number, body: `Another failing run: ${run}` });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title: `${prefix} (${new Date().toISOString().slice(0, 10)})`, body: `Run: ${run}`, labels: ["dependencies", "security"] });
+            }
+
+  upstream:
+    name: Upstream artifact drift
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: main }
+      - uses: ./.github/actions/setup
+      - name: Compare pinned manifest with latest upstream releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # ponytail: no-op until scripts/check_upstream.py lands (milestone M5).
+        run: |
+          if [ -f scripts/check_upstream.py ]; then uv run python scripts/check_upstream.py; else echo "not yet implemented"; fi
+      - name: Open tracker issue on drift
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const prefix = "Upstream validation artifacts changed";
+            const run = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const { data } = await github.rest.issues.listForRepo({ ...context.repo, state: "open", labels: "artifacts", per_page: 50 });
+            const match = data.find((i) => i.title.startsWith(prefix));
+            if (match) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: match.number, body: `Still drifting: ${run}` });
+            } else {
+              await github.rest.issues.create({ ...context.repo, title: `${prefix} (${new Date().toISOString().slice(0, 10)})`, body: `See the job log for which pins are behind: ${run}`, labels: ["artifacts"] });
+            }
