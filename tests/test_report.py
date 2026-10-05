@@ -1,10 +1,10 @@
-"""Unit tests for the validation report data types (IMPLEMENTATION_PLAN.md D9)."""
+"""Unit tests for the report data types (IMPLEMENTATION_PLAN.md D9)."""
 
 import dataclasses
 
 import pytest
 
-from euinvoice.validate.report import Finding, Severity, ValidationReport
+from euinvoice.report import Finding, Severity, ValidationReport
 
 
 def finding(severity: Severity) -> Finding:

@@ -9,8 +9,8 @@ import pytest
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
+from euinvoice.report import Finding, Severity
 from euinvoice.validate import artifacts, xsd
-from euinvoice.validate.report import Finding, Severity
 
 # Synthetic stand-ins for the UBL 2.1 maindoc schemas. Like the real ones, they import a sibling
 # directory (../common), so the confinement root must be the whole xsd/ directory.

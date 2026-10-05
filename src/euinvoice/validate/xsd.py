@@ -12,7 +12,7 @@ then checked by the schema itself (a wrong one is a ``No matching global declara
   EN 16931 CII artifacts are written for, and the schema every CII scenario of the KoSIT
   ``scenarios.xml`` (XRechnung, XRechnung extension, CVD and plain EN 16931) validates against.
 
-Every schema-validity error becomes a :class:`~euinvoice.validate.report.Finding` with rule id ``XSD``
+Every schema-validity error becomes a :class:`~euinvoice.report.Finding` with rule id ``XSD``
 and severity ``fatal``, located by line number and element path: a document that is not schema-valid
 cannot be processed further, and the official validators reject it. The KoSIT validator's report
 stylesheet (``resources/default-report.xsl`` of ``xrechnung-validator-configuration``, template
@@ -37,8 +37,8 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import UnsupportedDocumentError
+from euinvoice.report import Finding, Severity
 from euinvoice.validate import artifacts
-from euinvoice.validate.report import Finding, Severity
 
 RULE_ID: t.Final = "XSD"
 """The ``rule_id`` of every XSD finding."""

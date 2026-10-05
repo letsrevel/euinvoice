@@ -10,9 +10,9 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
+from euinvoice.report import Finding, Severity
 from euinvoice.validate import artifacts, schematron
 from euinvoice.validate.artifacts import Source
-from euinvoice.validate.report import Finding, Severity
 
 SVRL_NS = _xml.SVRL
 
