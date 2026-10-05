@@ -72,6 +72,9 @@ DEFAULT_OUTPUT = REPO / "src" / "euinvoice" / "model" / "codes" / "_generated.py
 _CONTAINS = re.compile(r"contains\(\s*'([^']*)'")
 _EQUALS = re.compile(r"@[\w:-]+\s*=\s*'([^']*)'")
 _CASE_FOLD = re.compile(r"\b(?:upper|lower)-case\(")
+# Model params that hold a multi-code list but are not code lists. BR-CO-09: the VAT identifier prefixes
+# (BT-31, BT-48, BT-63) of a business rule, not a BR-CL rule (abstract/EN16931-model.sch, CEN 1.3.16).
+_NOT_CODE_LISTS: t.Final[frozenset[str]] = frozenset({"BR-CO-09"})
 
 
 class GenerationError(Exception):
@@ -188,8 +191,9 @@ TABLE: tuple[CodeList, ...] = (
     CodeList(
         "UNTDID_4451_NOTE_SUBJECT_UBL",
         "Note subject codes, UBL: a restriction of UNTDID 4451, bound in the UBL model file, not the "
-        "codes file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), as a "
-        "substring of the list, only if that code has 3 characters. A strict subset of "
+        "codes file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), not "
+        "normalize-spaced, as a substring of the list. A note without '#', or whose '#...#' segment is "
+        "not exactly 3 characters long, is not checked at all. A strict subset of "
         "UNTDID_4451_TEXT_SUBJECT (CII).",
         (Ref("ubl", "BR-CL-08"),),
     ),
@@ -261,8 +265,8 @@ def extract_model(data: bytes) -> RuleLists:
     """Extract the code lists of the BR-CL-* params of a CEN model binding file.
 
     The ``schematron/{UBL,CII}/EN16931-*-model.sch`` files bind the abstract rules to a syntax with
-    ``<param name="BR-CL-08" value="..."/>``. Params of other rules are ignored, even if they hold a
-    list literal (BR-CO-09 lists VAT identifier prefixes, which is not a BR-CL code list).
+    ``<param name="BR-CL-08" value="..."/>``. Params of other rules are ignored, but one that holds a
+    multi-code list literal fails unless it is in :data:`_NOT_CODE_LISTS` (fail closed).
 
     Args:
         data: The ``.sch`` file bytes.
@@ -272,13 +276,16 @@ def extract_model(data: bytes) -> RuleLists:
 
     Raises:
         euinvoice.errors.ParseError: Malformed XML or a DOCTYPE (hardened parser, D10).
-        GenerationError: A duplicate BR-CL param, or one whose value holds no recognised list.
+        GenerationError: A duplicate BR-CL param, one whose value holds no recognised list, or a
+            multi-code list in a non-BR-CL param missing from :data:`_NOT_CODE_LISTS`.
     """
     lists: RuleLists = {}
     for node in _xml.parse(data).iter(f"{SCH}param"):
-        name = node.get("name", "")
+        name, value = node.get("name", ""), node.get("value", "")
         if name.startswith("BR-CL-"):
-            _add(lists, name, node.get("value", ""))
+            _add(lists, name, value)
+        elif name not in _NOT_CODE_LISTS and any(len(lit.split()) > 1 for lit in _CONTAINS.findall(value)):
+            raise GenerationError(f"{name}: a code list outside a BR-CL param; claim it or add it to _NOT_CODE_LISTS")
     return lists
 
 

@@ -135,6 +135,12 @@ def test_extract_model_rejects_a_br_cl_param_without_a_recognised_code_list() ->
         gen.extract_model(sch.encode())
 
 
+def test_extract_model_rejects_a_code_list_in_an_unacknowledged_non_br_cl_param() -> None:
+    sch = f"<pattern {SCH_NS}><param name='BR-CO-99' value=\"contains(' A B ', substring(., 1, 1))\"/></pattern>"
+    with pytest.raises(gen.GenerationError, match="BR-CO-99: a code list outside a BR-CL param"):
+        gen.extract_model(sch.encode())
+
+
 def test_extract_model_rejects_a_br_cl_param_without_value() -> None:
     with pytest.raises(gen.GenerationError, match="BR-CL-98: no code list"):
         gen.extract_model(f"<pattern {SCH_NS}><param name='BR-CL-98'/></pattern>".encode())
@@ -262,14 +268,24 @@ def test_render_refuses_to_exceed_the_file_length_limit() -> None:
         gen.render({"BIG": codes}, table, (), max_lines=30)
 
 
+# Like the CEN 1.3.16 CII model file: params, none of them a BR-CL rule.
+SYNTHETIC_CII_MODEL = f"""<?xml version="1.0" encoding="UTF-8"?>
+<pattern {SCH_NS} is-a="EN16931" id="EN16931-CII-Model">
+  <param name="BR-02" value="normalize-space(rsm:ExchangedDocument/ram:ID) != ''"/>
+</pattern>
+"""
+
+
 def _write_inputs(tmp_path: Path, ubl_model: str) -> tuple[gen.Input, ...]:
     (tmp_path / "ubl.sch").write_text(SYNTHETIC_UBL, encoding="utf-8")
     (tmp_path / "ubl-model.sch").write_text(ubl_model, encoding="utf-8")
     (tmp_path / "cii.sch").write_text(SYNTHETIC_CII, encoding="iso-8859-1")
+    (tmp_path / "cii-model.sch").write_text(SYNTHETIC_CII_MODEL, encoding="utf-8")
     return (
         gen.Input("ubl", "cen-ubl", "9.9", tmp_path, "ubl.sch", gen.extract),
         gen.Input("ubl", "cen-ubl", "9.9", tmp_path, "ubl-model.sch", gen.extract_model),
         gen.Input("cii", "cen-cii", "9.9", tmp_path, "cii.sch", gen.extract),
+        gen.Input("cii", "cen-cii", "9.9", tmp_path, "cii-model.sch", gen.extract_model),
     )
 
 
@@ -287,6 +303,7 @@ def test_main_writes_the_rendered_module(tmp_path: Path, monkeypatch: pytest.Mon
     assert written == gen.generate()
     assert "#   cen-cii 9.9 cii.sch\n" in written
     assert "#   cen-ubl 9.9 ubl-model.sch\n" in written
+    assert "#   cen-cii 9.9 cii-model.sch\n" in written
     assert 'NOTE_UBL: t.Final[frozenset[str]] = frozenset({\n    "AAA", "AAB",\n})' in written
 
 

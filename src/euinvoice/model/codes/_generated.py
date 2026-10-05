@@ -178,9 +178,10 @@ UNTDID_4451_TEXT_SUBJECT: t.Final[frozenset[str]] = frozenset({
 })
 
 # Note subject codes, UBL: a restriction of UNTDID 4451, bound in the UBL model file, not the codes
-# file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), as a substring of
-# the list, only if that code has 3 characters. A strict subset of UNTDID_4451_TEXT_SUBJECT (CII).
-# BR-CL-08 (ubl).
+# file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), not
+# normalize-spaced, as a substring of the list. A note without '#', or whose '#...#' segment is not
+# exactly 3 characters long, is not checked at all. A strict subset of UNTDID_4451_TEXT_SUBJECT
+# (CII). BR-CL-08 (ubl).
 UNTDID_4451_NOTE_SUBJECT_UBL: t.Final[frozenset[str]] = frozenset({
     "AAA", "AAB", "AAC", "AAD", "AAE", "AAF", "AAG", "AAI", "AAJ", "AAK", "AAL", "AAM", "AAN",
     "AAO", "AAP", "AAQ", "AAR", "AAS", "AAT", "AAU", "AAV", "AAW", "AAX", "AAY", "AAZ", "ABA",
