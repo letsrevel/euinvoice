@@ -30,8 +30,10 @@ def _index(profiles: Iterable[Profile]) -> dict[str, Profile]:
     return index
 
 
-# ponytail: one profile per BT-24. Factur-X EN16931 and XRECHNUNG reuse the BT-24 of EN 16931 core and
-# XRechnung (plan §5), so the PDF container, not BT-24, must pick them; #22 extends the lookup for that.
+# ponytail: one profile per BT-24. Factur-X profiles that share a BT-24 (EN16931 with EN 16931 core,
+# XRECHNUNG with XRechnung; plan §5) stay out of _PROFILES: the Factur-X container selects them by its XMP
+# fx:ConformanceLevel. Levels with their own BT-24 register here normally. The shared core BT-24 is
+# corroborated by the ZUGFeRD corpus, but the Factur-X spec package is not pinned yet (#42).
 _PROFILES: t.Final = (EN16931,)
 _BY_BT24: t.Final[Mapping[str, Profile]] = _index(_PROFILES)
 

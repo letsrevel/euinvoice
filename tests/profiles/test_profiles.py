@@ -71,6 +71,24 @@ class TestProfile:
         with pytest.raises(ValueError, match="at least one rule set"):
             _profile(rule_sets=())
 
+    def test_rejects_an_unknown_rule_set(self) -> None:
+        with pytest.raises(ValueError, match="'kosit'"):
+            _profile(rule_sets=("cen", "kosit"))
+
+    def test_rejects_a_repeated_rule_set(self) -> None:
+        with pytest.raises(ValueError, match="repeats a rule set"):
+            _profile(rule_sets=("cen", "cen"))
+
+    def test_rejects_peppol_with_xrechnung(self) -> None:
+        # The XRechnung XSLT re-asserts PEPPOL-EN16931-R* rules: running both double-counts them.
+        with pytest.raises(ValueError, match="counted twice"):
+            _profile(rule_sets=("cen", "peppol", "xrechnung"))
+
+    @pytest.mark.parametrize("rule_sets", [("cen", "peppol"), ("cen", "xrechnung"), ("peppol",)])
+    def test_accepts_known_rule_set_combinations(self, rule_sets: tuple[str, ...]) -> None:
+        # "cen" is not required: Factur-X MINIMUM and BASIC WL are not EN 16931 documents.
+        assert _profile(rule_sets=rule_sets).rule_sets == rule_sets
+
 
 class TestEn16931:
     def test_declares_the_core_identifiers(self) -> None:
@@ -98,6 +116,16 @@ class TestPrepare:
         pc = ProcessControl(business_process_type="urn:example:process", specification_identifier=PEPPOL_BT24)
         prepared = _profile(business_process_type="urn:example:default").prepare(make_invoice(process_control=pc))
         assert prepared.process_control.business_process_type == "urn:example:process"
+
+    def test_keeps_the_bt23_while_replacing_the_bt24(self, make_invoice: MakeInvoice) -> None:
+        pc = ProcessControl(
+            business_process_type="urn:fdc:peppol.eu:2017:poacc:billing:01:1.0", specification_identifier=PEPPOL_BT24
+        )
+        prepared = EN16931.prepare(make_invoice(process_control=pc))
+        assert prepared.process_control == ProcessControl(
+            business_process_type="urn:fdc:peppol.eu:2017:poacc:billing:01:1.0",
+            specification_identifier="urn:cen.eu:en16931:2017",
+        )
 
     def test_fills_a_missing_bt23_with_the_profile_default(self, make_invoice: MakeInvoice) -> None:
         prepared = _profile(business_process_type="urn:example:default").prepare(make_invoice())

@@ -6,8 +6,8 @@ Example:
     True
 """
 
-from euinvoice.profiles._base import SYNTAXES, Profile
+from euinvoice.profiles._base import Profile
 from euinvoice.profiles.en16931 import EN16931
 from euinvoice.profiles.registry import get
 
-__all__ = ["EN16931", "SYNTAXES", "Profile", "get"]
+__all__ = ["EN16931", "Profile", "get"]
