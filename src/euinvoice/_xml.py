@@ -9,16 +9,19 @@ attack class is blocked:
 * **Billion laughs / quadratic blowup / parameter entities**: entities can only be declared in a
   DOCTYPE, which is rejected; the parser never resolves external entities (``resolve_entities=False``)
   and libxml2's entity-amplification guard aborts expansion bombs while parsing.
-* **Trusted schemas**: :func:`load_trusted_schema` is the one place that reads files (local XSD
-  imports of the pinned artifacts); it keeps ``no_network=True`` and the DOCTYPE rejection.
+* **Trusted schemas**: :func:`load_trusted_schema` is the one place that reads files. It is for the
+  pinned, sha256-verified XSDs only, and a confining resolver keeps every load local and inside the
+  schema package.
 * **Oversized input**: ``huge_tree=False`` keeps libxml2's safety limits (nesting depth, text node
   and attribute size).
 
-A test (``tests/test_xml.py``) fails if any other module under ``src/`` parses XML itself.
+A test (``tests/test_xml_guard.py``) fails if any other module under ``src/`` parses XML itself.
 """
 
 import pathlib
 import typing as t
+import urllib.parse
+import urllib.request
 
 from lxml import etree
 
@@ -99,35 +102,83 @@ def parse(data: bytes) -> etree._Element:
     return root
 
 
-def load_trusted_schema(path: pathlib.Path) -> etree.XMLSchema:
+def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None) -> etree.XMLSchema:
     """Load an XML Schema from the local artifact cache.
 
-    For **trusted local artifacts only** (the pinned official XSDs fetched by
-    ``euinvoice artifacts fetch``), never for user input. Unlike :func:`parse` it reads files: libxml2
-    follows the schema's ``xs:import`` / ``xs:include`` locations relative to ``path``. It still never
-    touches the network (``no_network=True``), never resolves entities, and rejects a DOCTYPE in the
-    root schema document.
+    For **trusted local artifacts only** (the pinned, sha256-verified XSDs fetched by
+    ``euinvoice artifacts fetch``), never for user input. The root schema goes through the hardened
+    parser and must not have a DOCTYPE. Documents it imports or includes are parsed by libxml2 with
+    libxml2's own options, not ours. The protection for them is the sha256 pin plus a confining
+    resolver: every document or entity libxml2 tries to load (imports, includes, DTDs, external
+    entities) must be a local file inside ``root``. Anything else (``http://``, other schemes, paths
+    outside ``root``) is refused and turns the whole load into a ``ParseError``. This holds whether or
+    not the bundled libxml2 was built with HTTP support.
 
     Args:
         path: The root ``.xsd`` file.
+        root: The directory every loaded file must be inside. Defaults to ``path``'s directory. Pass
+            the schema package's top directory when the schema imports siblings such as
+            ``../common/*.xsd`` (UBL 2.1 ``maindoc`` does).
 
     Returns:
         The compiled schema.
 
     Raises:
+        ValueError: If ``path`` is not inside ``root``.
         OSError: If ``path`` cannot be read.
-        ParseError: If a schema document is malformed, has a DOCTYPE, or is not a valid XML Schema
-            (including an import that cannot be loaded locally).
+        ParseError: If the root schema is malformed or has a DOCTYPE, if any load was refused by the
+            confining resolver, or if the schema does not compile. On its own, libxml2 silently skips
+            an ``xs:import`` it cannot load and fails only on a failed ``xs:include`` or a reference
+            into the missing import. The resolver makes every refused load an error instead.
     """
+    confine = (root or path.parent).resolve()
+    if not path.resolve().is_relative_to(confine):
+        raise ValueError(f"schema {path} is not inside {confine}")
+    resolver = _ConfiningResolver(confine)
+    parser = new_parser()
+    parser.resolvers.add(resolver)
     try:
-        tree = etree.parse(str(path), new_parser())  # hardened parser, see new_parser()
+        tree = etree.parse(str(path), parser)  # hardened parser, see new_parser()
     except etree.XMLSyntaxError as exc:
         raise _malformed(exc) from exc
     _reject_doctype(tree)
+    error: etree.XMLSchemaParseError | None = None
     try:
-        return etree.XMLSchema(tree)
+        schema = etree.XMLSchema(tree)
     except etree.XMLSchemaParseError as exc:
-        raise ParseError(f"invalid XML Schema {path.name}: {exc}") from exc
+        error = exc
+    # libxml2 swallows exceptions raised in a resolver, so refusals are collected and reported here.
+    if resolver.refused:
+        raise ParseError(f"schema {path.name} tried to load {resolver.refused[0]!r}, outside {confine}") from error
+    if error is not None:
+        raise ParseError(f"invalid XML Schema {path.name}: {error}") from error
+    return schema
+
+
+class _ConfiningResolver(etree.Resolver):
+    """Lets libxml2 load only local files inside ``root``; records and refuses everything else."""
+
+    def __init__(self, root: pathlib.Path) -> None:
+        super().__init__()
+        self.root = root
+        self.refused: list[str] = []
+
+    def resolve(self, system_url: str, public_id: str, context: object) -> t.Any:  # type: ignore[override]
+        # lxml-stubs omit the `context` argument and `resolve_filename`; both exist since lxml 2.x.
+        local = _local_path(system_url)
+        if local is None or not local.is_relative_to(self.root):
+            self.refused.append(system_url)
+            raise ParseError(f"refused to load {system_url!r}")
+        return self.resolve_filename(str(local), context)  # type: ignore[attr-defined]  # see above
+
+
+def _local_path(url: str) -> pathlib.Path | None:
+    """The resolved local path of a ``file:`` URL or a plain path; ``None`` for any other scheme."""
+    if url.startswith("file:"):
+        return pathlib.Path(urllib.request.url2pathname(urllib.parse.urlsplit(url).path)).resolve()
+    if "://" in url:
+        return None
+    return pathlib.Path(url).resolve()
 
 
 def _malformed(exc: etree.XMLSyntaxError) -> ParseError:

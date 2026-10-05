@@ -11,8 +11,8 @@ import pytest
 
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "euinvoice"
 
-# Parser entry points of lxml, the stdlib and saxonche, flagged as attribute or imported name
-# whatever object they hang off.
+# Parser and loader entry points of lxml, the stdlib and saxonche, flagged as attribute or imported
+# name whatever object they hang off (unless directly on a safe name, see below).
 FORBIDDEN_NAMES = frozenset(
     {
         "fromstring",
@@ -28,14 +28,23 @@ FORBIDDEN_NAMES = frozenset(
         "HTMLParser",
         "ETCompatXMLParser",
         "XMLSchema",
+        "DTD",
+        "RelaxNG",
+        "XSLT",
+        "XInclude",
+        "xinclude",
         "parse_xml",
         "parseString",
     }
 )
 # Whole modules that are parsers in their own right.
 FORBIDDEN_MODULES = ("xml", "lxml.objectify", "lxml.html")
-# Imports from these modules may bind a forbidden name, and attribute access on what they bind is
-# fine: our own package (``_xml.parse``) and ``urllib.parse``.
+# Module names that must never count as a safe root, even when imported from euinvoice.
+PARSER_MODULE_NAMES = frozenset({"etree", "objectify", "html", "ElementTree", "minidom", "sax", "expat"})
+# The public helpers of euinvoice._xml.
+XML_HELPERS = frozenset({"parse", "new_parser", "load_trusted_schema"})
+# Names imported from these modules are safe roots: a forbidden attribute directly on them is fine
+# (``_xml.parse``, ``urllib.parse``), but not deeper (``_xml.etree.parse``).
 SAFE_MODULES = ("euinvoice", "urllib")
 # Explicit per-file exceptions, as {path relative to src/euinvoice: names}. Keep this tiny and give
 # a reason per entry (e.g. ``parse_xml`` will be allowed only in ``validate/schematron.py``, which
@@ -45,12 +54,6 @@ PER_FILE_ALLOWED: dict[str, frozenset[str]] = {}
 
 def _in(module: str, prefixes: tuple[str, ...]) -> bool:
     return any(module == p or module.startswith(p + ".") for p in prefixes)
-
-
-def _root_name(node: ast.expr) -> str | None:
-    while isinstance(node, ast.Attribute):
-        node = node.value
-    return node.id if isinstance(node, ast.Name) else None
 
 
 def _check_import(node: ast.Import | ast.ImportFrom, allowed: frozenset[str], safe_roots: set[str]) -> list[str]:
@@ -64,16 +67,39 @@ def _check_import(node: ast.Import | ast.ImportFrom, allowed: frozenset[str], sa
                 safe_roots.add(alias.asname or alias.name.split(".")[0])
         return found
     module = node.module or ""
+    names = [a.name for a in node.names]
     if node.level or _in(module, SAFE_MODULES):
-        safe_roots.update(a.asname or a.name for a in node.names)
-        return []
-    if _in(module, FORBIDDEN_MODULES):
-        return [f"from {module} import ..."]
+        if "*" in names and (module.endswith("_xml") or not (node.level or _in(module, ("euinvoice",)))):
+            return [f"from {module} import *"]
+        if module.endswith("_xml") or names == ["_xml"]:
+            bad = [n for n in names if n in (FORBIDDEN_NAMES | PARSER_MODULE_NAMES) - XML_HELPERS - allowed]
+        else:
+            bad = [n for n in names if n in PARSER_MODULE_NAMES]
+        safe_roots.update(a.asname or a.name for a in node.names if a.name not in PARSER_MODULE_NAMES)
+        return [f"from {module} import {n}" for n in bad]
+    if "*" in names or _in(module, FORBIDDEN_MODULES):
+        return [f"from {module} import {', '.join(names)}"]
     return [
-        f"from {module} import {a.name}"
-        for a in node.names
-        if a.name in FORBIDDEN_NAMES - allowed or f"{module}.{a.name}" in FORBIDDEN_MODULES
+        f"from {module} import {n}"
+        for n in names
+        if n in FORBIDDEN_NAMES - allowed or f"{module}.{n}" in FORBIDDEN_MODULES
     ]
+
+
+def _check_node(node: ast.AST, allowed: frozenset[str], safe_roots: set[str]) -> str | None:
+    """Return a description if ``node`` is a forbidden attribute use or ``ElementTree(file=...)`` call."""
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr in FORBIDDEN_NAMES - allowed
+        and not (isinstance(node.value, ast.Name) and node.value.id in safe_roots)
+    ):
+        return f"line {node.lineno}: .{node.attr}"
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+        if name == "ElementTree" and (len(node.args) > 1 or any(k.arg == "file" for k in node.keywords)):
+            return f"line {node.lineno}: ElementTree(file=...)"
+    return None
 
 
 def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) -> list[str]:
@@ -85,12 +111,9 @@ def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) ->
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             found += _check_import(node, allowed, safe_roots)
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr in FORBIDDEN_NAMES - allowed
-            and _root_name(node.value) not in safe_roots
-        ):
-            found.append(f"line {node.lineno}: .{node.attr}")
+        problem = _check_node(node, allowed, safe_roots)
+        if problem:
+            found.append(problem)
     return found
 
 
@@ -106,12 +129,20 @@ def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) ->
         "from lxml.etree import parse",
         "from lxml.etree import XML as x",
         "from lxml.etree import XMLParser as P",
+        "from lxml.etree import *\nfromstring(b)",
         "from lxml import etree\netree.XMLID(b)",
         "from lxml import etree\netree.XMLDTDID(b)",
         "from lxml import etree\netree.HTML(b)",
         "from lxml import etree\netree.iterparse(f)",
         "from lxml import etree\netree.fromstringlist([b])",
         "from lxml import etree\netree.XMLSchema(file='x.xsd')",
+        "from lxml import etree\netree.DTD(p)",
+        "from lxml import etree\netree.RelaxNG(file=p)",
+        "from lxml import etree\netree.XInclude()",
+        "tree.xinclude()",
+        "from lxml import etree\netree.ElementTree(file=p)",
+        "from lxml import etree\netree.ElementTree(None, p)",
+        "from lxml.etree import ElementTree\nElementTree(file=p)",
         "from lxml import objectify\nobjectify.parse(f)",
         "from lxml import html",
         "import lxml.html",
@@ -121,6 +152,13 @@ def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) ->
         "from xml.dom import minidom\nminidom.parseString(b)",
         "proc.parse_xml(xml_text=s)",
         "self.parser.parse(b)",
+        "from euinvoice._xml import etree\netree.fromstring(b)",
+        "from ._xml import etree as ET\nET.XML(b)",
+        "from .._xml import XMLParser",
+        "from euinvoice._xml import *",
+        "import euinvoice._xml as x\nx.etree.parse(b)",
+        "from euinvoice import _xml\n_xml.etree.fromstring(b)",
+        "from euinvoice.syntax import etree\netree.fromstring(b)",
     ],
 )
 def test_guard_detects(snippet: str) -> None:
@@ -132,12 +170,15 @@ def test_guard_detects(snippet: str) -> None:
     [
         '"""Never call etree.fromstring() here; use _xml.parse()."""',
         "from euinvoice import _xml\n_xml.parse(b)",
-        "from . import _xml\n_xml.parse(b)",
-        "from euinvoice._xml import parse\nparse(b)",
-        "import euinvoice._xml\neuinvoice._xml.parse(b)",
+        "from . import _xml\n_xml.parse(b)\n_xml.load_trusted_schema(p)",
+        "from euinvoice._xml import parse, load_trusted_schema, UBL_NSMAP\nparse(b)",
+        "from ._xml import new_parser",
+        "import euinvoice._xml as x\nx.parse(b)",
         "import urllib.parse\nurllib.parse.quote(s)",
         "from urllib import parse",
         "from lxml import etree\netree.tostring(e)",
+        "from lxml import etree\netree.ElementTree(root)",
+        "from euinvoice.model import *",
     ],
 )
 def test_guard_allows(snippet: str) -> None:
