@@ -67,7 +67,7 @@ All notable changes to this project are documented here. The format follows
 - `euinvoice.validate.xsd.validate()` also validates UN/CEFACT CII D16B `CrossIndustryInvoice`
   documents, against the D16B SCRDM Subset schema of the pinned KoSIT validator configuration
   (`resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd`, used by every KoSIT CII scenario).
-- `euinvoice.validate.report`: `Finding`, `Severity` and `ValidationReport` (validation results as data).
+- `euinvoice.report`: `Finding`, `Severity` and `ValidationReport` (validation results as data).
 - `euinvoice.validate.schematron`: runs one official compiled rule set (CEN EN 16931 UBL/CII, Peppol
   BIS 3.0 UBL/CII, XRechnung UBL/CII) on Saxon and maps every SVRL failed assert or successful report
   to a `Finding` with its rule id, severity (from `@flag`; a missing or unknown flag counts as `error`),
@@ -91,8 +91,19 @@ All notable changes to this project are documented here. The format follows
   order (EN 16931: CEN; Peppol: CEN, Peppol; XRechnung: CEN, XRechnung), with the raw official
   severities. Without a profile it is picked by BT-24; an unregistered or missing BT-24 falls back to
   EN 16931 core and the report says so in an `information` finding (`EUINVOICE-PROFILE-FALLBACK`).
+- `euinvoice.calc` (D11): `complete(draft, *, paid_amount, rounding_amount,
+  vat_total_in_accounting_currency, exemption_reasons)` derives the line net amounts (BT-131, Peppol
+  R120 convention), the document totals (BG-22, BR-CO-10…16) and the VAT breakdown per category and
+  rate (BG-23, BR-CO-17, BR-<x>-08), rounding half up to cents, and returns a validated `Invoice`.
+  `check(invoice)` reports fatal `Finding`s with the official rule ids for BR-CO-10…17, BR-48, BR-53
+  and the per-category rules BR-<x>-01/05/06/07/08/09/10 (S, Z, E, AE, K, G, O, L, M), applying the
+  stricter of the UBL and CII tolerances. `ExemptionReason` carries BT-120/BT-121 per category.
+  `complete()` reproduces the totals of every CEN 1.3.16 and Peppol 3.0.21 example (except one HUF
+  example that rounds VAT to whole forints).
 
 ### Changed
+- `Finding`, `Severity` and `ValidationReport` moved from `euinvoice.validate.report` to
+  `euinvoice.report` so `calc` can use them without depending on `validate`.
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.
