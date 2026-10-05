@@ -25,3 +25,6 @@ All notable changes to this project are documented here. The format follows
   precompiles Schematron-only rule sets (Peppol) to XSLT with SchXslt. Idempotent and offline on a
   warm cache. `euinvoice.validate.artifacts.source_dir()` looks entries up and raises
   `ArtifactsNotAvailableError` naming the fetch command.
+- Hardened XML input handling: every XML document is parsed with entity resolution, DTD loading and
+  network access disabled. Documents with a DOCTYPE, malformed XML and input over libxml2's safety
+  limits are rejected with `ParseError`.
