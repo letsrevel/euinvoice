@@ -23,6 +23,7 @@ import json
 import os
 import re
 import sys
+import traceback
 import typing as t
 import urllib.error
 import urllib.request
@@ -326,6 +327,7 @@ def main(fetch: Get = get) -> int:
     try:
         return run(fetch)
     except Exception as exc:  # any crash is reported as ERROR, never as drift
+        traceback.print_exc()  # stderr: keep the stack in the nightly log
         print(f"ERROR      check_upstream crashed: {type(exc).__name__}: {exc}")
         return 2
 
