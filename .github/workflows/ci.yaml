@@ -67,14 +67,11 @@ jobs:
       - name: Fetch artifacts
         env:
           EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
-        # ponytail: tolerate the manifest not existing yet (bootstrap, before milestone M5 lands).
-        run: |
-          if [ -f src/euinvoice/validate/manifest.toml ]; then make artifacts; else echo "no manifest yet, skipping"; fi
+        run: make artifacts
       - name: Conformance suite
         env:
           EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
-        # pytest exits 5 when no tests are collected (before any conformance test exists).
-        run: uv run pytest -n auto -m conformance || [ $? -eq 5 ]
+        run: uv run pytest -n auto -m conformance
 
   build:
     name: Build sdist + wheel

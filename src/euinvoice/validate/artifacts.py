@@ -1,23 +1,31 @@
 """Fetch, verify and look up the pinned official validation artifacts (IMPLEMENTATION_PLAN.md D7).
 
 The sources are pinned in ``manifest.toml`` next to this module. :func:`fetch` is the only code in
-euinvoice that touches the network: it downloads each archive with :mod:`urllib`, checks its sha256,
-extracts the selected members safely into ``<cache>/<source>/<version>/`` and, for rule sets that ship
-as Schematron only (Peppol), compiles them to XSLT with SchXslt. Everything else, :func:`source_dir`
-in particular, only reads the cache and raises :class:`ArtifactsNotAvailableError` when it is cold.
+euinvoice that touches the network: it downloads each archive with :mod:`urllib` (https only, also
+across redirects), checks its sha256, extracts the selected members safely into
+``<cache>/<source>/<version>/`` and, for rule sets that ship as Schematron only (Peppol), compiles them
+to XSLT with SchXslt. Everything else, :func:`source_dir` in particular, only reads the cache and raises
+:class:`ArtifactsNotAvailableError` when it is cold.
 
 Layout of a complete entry::
 
-    <cache>/<source>/<version>/...            extracted members (minus ``strip_components``)
-    <cache>/<source>/<version>/.euinvoice-sha256   marker: the archive sha256, written last
+    <cache>/<source>/<version>/...                       extracted members (minus ``strip_components``)
+    <cache>/<source>/<version>/.euinvoice-fingerprint    marker, written last
 
-The marker is written into a temporary directory that is renamed into place, so an entry is either
-complete or absent. A warm cache therefore needs no network at all.
+The marker holds a fingerprint of the whole recipe (archive sha256, member globs, stripping,
+precompile list and, when precompiling, the SchXslt pin), so changing any of them rebuilds the entry.
+It is written into a temporary directory that is renamed into place, so an entry is either complete
+or absent. A warm cache therefore needs no network at all.
 """
 
+import contextlib
 import fnmatch
+import functools
 import hashlib
+import http.client
+import json
 import os
+import re
 import shutil
 import stat
 import tempfile
@@ -35,15 +43,30 @@ from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError
 ENV_VAR = "EUINVOICE_ARTIFACTS_DIR"
 DEFAULT_CACHE_DIR = "~/.cache/euinvoice"
 FETCH_COMMAND = "python -m euinvoice artifacts fetch"
-MARKER = ".euinvoice-sha256"
+MARKER = ".euinvoice-fingerprint"
+
+# Keys of manifest.toml; a unit test keeps this in sync with the packaged manifest.
+SourceName = t.Literal[
+    "cen-ubl",
+    "cen-cii",
+    "peppol-bis",
+    "xrechnung-schematron",
+    "xrechnung-testsuite",
+    "xrechnung-validator-configuration",
+    "ubl-2_1",
+    "zugferd-corpus",
+    "schxslt",
+]
 
 # The Schematron → XSLT compiler source and its entry point for queryBinding="xslt2" schemas
 # (SchXslt 1.10.1 README, "XSLT only": transform the schema with pipeline-for-svrl.xsl).
-SCHXSLT_SOURCE = "schxslt"
+SCHXSLT_SOURCE: SourceName = "schxslt"
 SCHXSLT_PIPELINE = "2.0/pipeline-for-svrl.xsl"
 
 _CHUNK = 1 << 20
 _TIMEOUT_S = 120
+_SAFE_SEGMENT = re.compile(r"[A-Za-z0-9._-]+")
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,32 +96,66 @@ class Source:
     note: str = ""
 
 
+def _check_source(source: Source) -> Source:
+    """Reject manifest entries that could escape the cache or bypass https / sha256 pinning."""
+    problems = [
+        f"{field} {value!r} must match [A-Za-z0-9._-]+ and not be '.' or '..'"
+        for field, value in (("name", source.name), ("version", source.version))
+        if not _SAFE_SEGMENT.fullmatch(value) or value in {".", ".."}
+    ]
+    if not source.url.startswith("https://"):
+        problems.append(f"url {source.url!r} must use https")
+    if not _SHA256.fullmatch(source.sha256):
+        problems.append(f"sha256 {source.sha256!r} must be 64 hex characters")
+    if source.strip_components < 0:
+        problems.append("strip_components must be >= 0")
+    for rel in source.precompile:
+        path = PurePosixPath(rel)
+        if path.is_absolute() or ".." in path.parts or path.suffix != ".sch":
+            problems.append(f"precompile entry {rel!r} must be a relative .sch path without '..'")
+    if problems:
+        raise ArtifactIntegrityError(f"manifest source {source.name!r}: " + "; ".join(problems))
+    return source
+
+
 def load_manifest(text: str | None = None) -> dict[str, Source]:
-    """Parse the artifact manifest.
+    """Parse and validate the artifact manifest.
 
     Args:
         text: TOML text to parse; defaults to the packaged ``manifest.toml``.
 
     Returns:
         The sources keyed by name, in manifest order.
+
+    Raises:
+        ArtifactIntegrityError: An entry has an unsafe name/version, a non-https URL or a malformed
+            sha256.
     """
     if text is None:
-        text = resources.files(__package__).joinpath("manifest.toml").read_text(encoding="utf-8")
+        return dict(_packaged_manifest())
     raw = tomllib.loads(text)
     return {
-        name: Source(
-            name=name,
-            version=entry["version"],
-            url=entry["url"],
-            sha256=entry["sha256"].lower(),
-            license=entry["license"],
-            members=tuple(entry["members"]),
-            strip_components=entry.get("strip_components", 0),
-            precompile=tuple(entry.get("precompile", ())),
-            note=entry.get("note", ""),
+        name: _check_source(
+            Source(
+                name=name,
+                version=entry["version"],
+                url=entry["url"],
+                sha256=entry["sha256"].lower(),
+                license=entry["license"],
+                members=tuple(entry["members"]),
+                strip_components=entry.get("strip_components", 0),
+                precompile=tuple(entry.get("precompile", ())),
+                note=entry.get("note", ""),
+            )
         )
         for name, entry in raw["sources"].items()
     }
+
+
+@functools.cache
+def _packaged_manifest() -> t.Mapping[str, Source]:
+    text = resources.files(__package__).joinpath("manifest.toml").read_text(encoding="utf-8")
+    return load_manifest(text)
 
 
 def cache_dir() -> Path:
@@ -106,24 +163,25 @@ def cache_dir() -> Path:
     return Path(os.environ.get(ENV_VAR) or DEFAULT_CACHE_DIR).expanduser()
 
 
-def source_dir(name: str, *, root: Path | None = None, sources: t.Mapping[str, Source] | None = None) -> Path:
+def source_dir(name: SourceName, *, root: Path | None = None, sources: t.Mapping[str, Source] | None = None) -> Path:
     """Return the extracted directory of a fetched source, without touching the network.
 
     Args:
         name: Manifest key, e.g. ``"cen-ubl"``.
         root: Cache root; defaults to :func:`cache_dir`.
-        sources: Manifest to resolve ``name`` in; defaults to :func:`load_manifest`.
+        sources: Manifest to resolve ``name`` in; defaults to the packaged manifest.
 
     Returns:
         ``<root>/<name>/<version>``.
 
     Raises:
         KeyError: ``name`` is not in the manifest.
-        ArtifactsNotAvailableError: The source has not been fetched (or not completely).
+        ArtifactsNotAvailableError: The source has not been fetched (or not with the current recipe).
     """
-    source = (load_manifest() if sources is None else sources)[name]
+    sources = _packaged_manifest() if sources is None else sources
+    source = sources[name]
     target = _target(source, cache_dir() if root is None else root)
-    if not _is_complete(source, target):
+    if not _is_complete(target, _fingerprint(source, sources)):
         raise ArtifactsNotAvailableError(
             f"Validation artifact {name!r} {source.version} is not in the cache at {target}. "
             f"Run `{FETCH_COMMAND}` (set ${ENV_VAR} to use another cache directory)."
@@ -132,7 +190,7 @@ def source_dir(name: str, *, root: Path | None = None, sources: t.Mapping[str, S
 
 
 def fetch(
-    names: t.Iterable[str] | None = None,
+    names: t.Iterable[SourceName] | None = None,
     *,
     root: Path | None = None,
     sources: t.Mapping[str, Source] | None = None,
@@ -145,28 +203,35 @@ def fetch(
     Args:
         names: Manifest keys to fetch; all sources when ``None``.
         root: Cache root; defaults to :func:`cache_dir`.
-        sources: Manifest; defaults to :func:`load_manifest`.
+        sources: Manifest; defaults to the packaged manifest.
 
     Returns:
         The extracted directory per fetched (or already cached) source name.
 
     Raises:
+        TypeError: ``names`` is a single string instead of an iterable of names.
         KeyError: An unknown source name was requested.
-        ArtifactIntegrityError: A download does not match its pinned sha256, or an archive member
-            is unsafe (absolute path, ``..`` component, symlink).
-        ArtifactsNotAvailableError: Precompiling needs ``saxonche`` (the ``[validate]`` extra).
+        ArtifactIntegrityError: A download does not match its pinned sha256, a redirect leaves https,
+            an archive member is unsafe (absolute path, ``..`` component, symlink) or a Schematron
+            cannot be compiled.
+        ArtifactsNotAvailableError: A download failed (network / HTTP error), or precompiling needs
+            ``saxonche`` (the ``[validate]`` extra).
     """
-    sources = load_manifest() if sources is None else sources
+    if isinstance(names, str):
+        raise TypeError(f"fetch() takes an iterable of source names, not the string {names!r}")
+    sources = _packaged_manifest() if sources is None else sources
     root = cache_dir() if root is None else root
-    wanted = list(dict.fromkeys(sources if names is None else [sources[n].name for n in names]))
+    wanted: list[str] = list(dict.fromkeys(sources if names is None else [sources[n].name for n in names]))
     if any(sources[n].precompile for n in wanted):  # the compiler must be in place first
         wanted = [SCHXSLT_SOURCE, *(n for n in wanted if n != SCHXSLT_SOURCE)]
     result: dict[str, Path] = {}
     for name in wanted:
         source = sources[name]
         target = _target(source, root)
-        if not _is_complete(source, target):
-            _install(source, target, result.get(SCHXSLT_SOURCE))
+        fingerprint = _fingerprint(source, sources)
+        if not _is_complete(target, fingerprint):
+            compiler = _target(sources[SCHXSLT_SOURCE], root) if source.precompile else None
+            _install(source, target, fingerprint, compiler)
         result[name] = target
     return result
 
@@ -175,29 +240,70 @@ def _target(source: Source, root: Path) -> Path:
     return root / source.name / source.version
 
 
-def _is_complete(source: Source, target: Path) -> bool:
+def _fingerprint(source: Source, sources: t.Mapping[str, Source]) -> str:
+    """sha256 of the canonical recipe that produced an entry (see the module docstring)."""
+    recipe: dict[str, object] = {
+        "sha256": source.sha256,
+        "members": list(source.members),
+        "strip_components": source.strip_components,
+        "precompile": list(source.precompile),
+    }
+    if source.precompile:
+        recipe["schxslt"] = [sources[SCHXSLT_SOURCE].sha256, SCHXSLT_PIPELINE]
+    return hashlib.sha256(json.dumps(recipe, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _is_complete(target: Path, fingerprint: str) -> bool:
     marker = target / MARKER
-    return marker.is_file() and marker.read_text(encoding="ascii").strip() == source.sha256
+    return marker.is_file() and marker.read_text(encoding="ascii").strip() == fingerprint
+
+
+class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only to https URLs (urllib would also follow http:// and ftp://)."""
+
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: t.IO[bytes],
+        code: int,
+        msg: str,
+        headers: http.client.HTTPMessage,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        """Refuse a redirect that leaves https, otherwise defer to urllib."""
+        if not newurl.startswith("https://"):
+            raise ArtifactIntegrityError(f"refusing redirect from {req.full_url} to non-https {newurl}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_REDIRECTS = _HttpsOnlyRedirects()
+_OPENER = urllib.request.build_opener(_REDIRECTS)
 
 
 def _open_url(url: str) -> t.BinaryIO:
     """Open ``url`` for reading. The single network entry point (patched in unit tests)."""
     if not url.startswith("https://"):
         raise ValueError(f"artifact URLs must use https: {url}")
-    # The scheme is checked above, so S310 (file:// or custom schemes) does not apply.
-    headers = {"User-Agent": f"euinvoice/{__version__}"}
-    request = urllib.request.Request(url, headers=headers)  # ruff: ignore[suspicious-url-open-usage]
-    response = urllib.request.urlopen(request, timeout=_TIMEOUT_S)  # ruff: ignore[suspicious-url-open-usage]
-    return t.cast(t.BinaryIO, response)
+    # The scheme is checked above and on every redirect, so S310 (file:// or custom schemes) does not apply.
+    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage]
+        url, headers={"User-Agent": f"euinvoice/{__version__}"}
+    )
+    return t.cast(t.BinaryIO, _OPENER.open(request, timeout=_TIMEOUT_S))
 
 
 def _download(source: Source, dest: Path) -> None:
     """Stream ``source.url`` into ``dest`` and verify its sha256."""
     digest = hashlib.sha256()
-    with _open_url(source.url) as response, dest.open("wb") as out:
-        while chunk := response.read(_CHUNK):
-            digest.update(chunk)
-            out.write(chunk)
+    try:
+        with _open_url(source.url) as response, dest.open("wb") as out:
+            while chunk := response.read(_CHUNK):
+                digest.update(chunk)
+                out.write(chunk)
+    except OSError as exc:  # URLError, HTTPError and TimeoutError are OSErrors
+        raise ArtifactsNotAvailableError(
+            f"{source.name} {source.version}: could not download {source.url}: {exc}. "
+            f"Check the network and run `{FETCH_COMMAND}` again."
+        ) from exc
     if digest.hexdigest() != source.sha256:
         raise ArtifactIntegrityError(
             f"{source.name} {source.version}: sha256 of {source.url} is {digest.hexdigest()}, "
@@ -205,7 +311,7 @@ def _download(source: Source, dest: Path) -> None:
         )
 
 
-def _install(source: Source, target: Path, schxslt: Path | None) -> None:
+def _install(source: Source, target: Path, fingerprint: str, compiler: Path | None) -> None:
     """Download, extract and precompile into a temp dir, then rename it to ``target`` atomically."""
     parent = target.parent
     parent.mkdir(parents=True, exist_ok=True)
@@ -218,19 +324,18 @@ def _install(source: Source, target: Path, schxslt: Path | None) -> None:
         _extract(source, archive, content)
         archive.unlink()
         if source.precompile:
-            assert schxslt is not None  # ruff: ignore[assert] - guaranteed by fetch()
-            _precompile(source, content, schxslt)
-        (content / MARKER).write_text(source.sha256 + "\n", encoding="ascii")
+            _precompile(source, content, compiler)
+        (content / MARKER).write_text(fingerprint + "\n", encoding="ascii")
         # ponytail: no file lock. Concurrent fetchers (e.g. pytest-xdist workers) may both download;
         # the first rename wins and the loser discards its copy. Add a lock file if that ever hurts.
-        if _is_complete(source, target):
+        if _is_complete(target, fingerprint):
             return
-        if target.exists():  # stale or incomplete entry: move it aside, it is deleted with staging
+        with contextlib.suppress(FileNotFoundError):  # stale entry: move aside, deleted with staging
             os.replace(target, staging / "stale")
         try:
             os.replace(content, target)
         except OSError:
-            if not _is_complete(source, target):
+            if not _is_complete(target, fingerprint):
                 raise
     finally:
         shutil.rmtree(staging, ignore_errors=True)
@@ -241,7 +346,8 @@ def _safe_member(source: Source, info: zipfile.ZipInfo) -> PurePosixPath | None:
     raw = info.filename
     path = PurePosixPath(raw)
     if (
-        path.is_absolute()
+        not path.parts
+        or path.is_absolute()
         or raw.startswith("\\")
         or ":" in path.parts[0]
         or ".." in path.parts
@@ -271,12 +377,16 @@ def _extract(source: Source, archive: Path, dest: Path) -> None:
                 shutil.copyfileobj(src, dst, _CHUNK)
 
 
-def _precompile(source: Source, content: Path, schxslt: Path) -> None:
+def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
     """Compile each ``precompile`` Schematron to a sibling ``.xslt`` with SchXslt on Saxon.
 
     The inputs are sha256-pinned official artifacts, not user documents, so they are handed to Saxon
     by file path; D10 (hardened parsing) governs invoice input.
     """
+    if compiler is None or not (compiler / SCHXSLT_PIPELINE).is_file():
+        raise ArtifactsNotAvailableError(
+            f"{source.name} needs the {SCHXSLT_SOURCE!r} source to compile its Schematron; run `{FETCH_COMMAND}`."
+        )
     try:
         import saxonche
     except ImportError as exc:
@@ -286,10 +396,19 @@ def _precompile(source: Source, content: Path, schxslt: Path) -> None:
             f"`{FETCH_COMMAND}` again."
         ) from exc
     with saxonche.PySaxonProcessor(license=False) as proc:
-        compiler = proc.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(schxslt / SCHXSLT_PIPELINE))
+        pipeline = compiler / SCHXSLT_PIPELINE
+        try:
+            executable = proc.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(pipeline))
+        except saxonche.PySaxonApiError as exc:
+            raise ArtifactIntegrityError(f"{source.name}: cannot compile SchXslt {pipeline}: {exc}") from exc
         for rel in source.precompile:
             sch = content / rel
             if not sch.is_file():
                 raise ArtifactIntegrityError(f"{source.name}: precompile entry {rel!r} is not in the archive")
-            xslt = compiler.transform_to_string(source_file=str(sch))
+            try:
+                xslt = executable.transform_to_string(source_file=str(sch))
+            except saxonche.PySaxonApiError as exc:
+                raise ArtifactIntegrityError(f"{source.name}: SchXslt failed on {rel}: {exc}") from exc
+            if xslt is None:
+                raise ArtifactIntegrityError(f"{source.name}: SchXslt produced no output for {rel}")
             sch.with_suffix(".xslt").write_text(xslt, encoding="utf-8")

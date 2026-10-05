@@ -1,5 +1,6 @@
 """Real fetch of every pinned source (network on a cold cache). Run with ``make conformance``."""
 
+import typing as t
 from pathlib import Path
 
 import pytest
@@ -16,7 +17,7 @@ def test_every_pinned_source_fetches_verifies_and_is_complete() -> None:
 
     assert set(fetched) == set(sources)
     for name, path in fetched.items():
-        assert artifacts.source_dir(name) == path
+        assert artifacts.source_dir(t.cast(artifacts.SourceName, name)) == path
         assert any(p.is_file() and p.name != artifacts.MARKER for p in path.rglob("*")), name
 
 
@@ -38,7 +39,7 @@ def test_every_pinned_source_fetches_verifies_and_is_complete() -> None:
         ("zugferd-corpus", "LICENSE"),
     ],
 )
-def test_expected_members_are_present(name: str, member: str) -> None:
+def test_expected_members_are_present(name: artifacts.SourceName, member: str) -> None:
     artifacts.fetch([name])
     assert (artifacts.source_dir(name) / member).is_file()
 
