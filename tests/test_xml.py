@@ -26,14 +26,14 @@ class RecordingResolver(etree.Resolver):
 def resolver(monkeypatch: pytest.MonkeyPatch) -> RecordingResolver:
     """Attach a recording resolver to every parser `_xml.parse` creates."""
     recorder = RecordingResolver()
-    original = _xml.new_parser
+    original = _xml._new_parser
 
     def instrumented() -> etree.XMLParser:
         parser = original()
         parser.resolvers.add(recorder)
         return parser
 
-    monkeypatch.setattr(_xml, "new_parser", instrumented)
+    monkeypatch.setattr(_xml, "_new_parser", instrumented)
     return recorder
 
 
@@ -160,7 +160,7 @@ def test_payload_would_load_external_resource_without_hardening(name: str, marke
 def test_hardened_parser_alone_loads_nothing(name: str, marker_url: str) -> None:
     # Defence in depth: even before the DOCTYPE check, the D10 parser itself loads nothing.
     recorder = RecordingResolver()
-    parser = _xml.new_parser()
+    parser = _xml._new_parser()
     parser.resolvers.add(recorder)
     root = etree.fromstring(payload(name, marker_url), parser)
     assert recorder.requested == []
@@ -171,7 +171,7 @@ def test_hardened_parser_alone_loads_nothing(name: str, marker_url: str) -> None
 def test_hardened_parser_alone_aborts_entity_bombs(payload: bytes) -> None:
     # Defence in depth: libxml2's entity guard stops the bomb before our DOCTYPE check runs.
     with pytest.raises(etree.XMLSyntaxError):
-        etree.fromstring(payload, _xml.new_parser())
+        etree.fromstring(payload, _xml._new_parser())
 
 
 # --- oversized input (huge_tree=False limits) ---------------------------------------------------

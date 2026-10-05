@@ -58,7 +58,7 @@ CII_NSMAP: t.Final[dict[str, str]] = {"rsm": CII_RSM, "ram": CII_RAM, "udt": CII
 """Prefix map for CII documents."""
 
 
-def new_parser() -> etree.XMLParser:
+def _new_parser() -> etree.XMLParser:
     """Create the hardened parser of D10.
 
     A new parser per call, because lxml parser objects must not be shared across threads.
@@ -95,7 +95,7 @@ def parse(data: bytes) -> etree._Element:
     if not isinstance(data, bytes):
         raise TypeError(f"XML input must be bytes, got {type(data).__name__}")
     try:
-        root = etree.fromstring(data, new_parser())  # hardened parser, see new_parser()
+        root = etree.fromstring(data, _new_parser())  # hardened parser, see _new_parser()
     except etree.XMLSyntaxError as exc:
         raise _malformed(exc) from exc
     _reject_doctype(root.getroottree())
@@ -135,10 +135,10 @@ def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None)
     if not path.resolve().is_relative_to(confine):
         raise ValueError(f"schema {path} is not inside {confine}")
     resolver = _ConfiningResolver(confine)
-    parser = new_parser()
+    parser = _new_parser()
     parser.resolvers.add(resolver)
     try:
-        tree = etree.parse(str(path), parser)  # hardened parser, see new_parser()
+        tree = etree.parse(str(path), parser)  # hardened parser, see _new_parser()
     except etree.XMLSyntaxError as exc:
         raise _malformed(exc) from exc
     _reject_doctype(tree)
@@ -174,6 +174,7 @@ class _ConfiningResolver(etree.Resolver):
 
 def _local_path(url: str) -> pathlib.Path | None:
     """The resolved local path of a ``file:`` URL or a plain path; ``None`` for any other scheme."""
+    # libxml2 always passes absolute, base-joined URLs here; the caller confines the result to root anyway.
     if url.startswith("file:"):
         return pathlib.Path(urllib.request.url2pathname(urllib.parse.urlsplit(url).path)).resolve()
     if "://" in url:
