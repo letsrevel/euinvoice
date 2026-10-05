@@ -66,6 +66,13 @@ def test_a_well_formed_invoice_with_an_unregistered_bt24_is_classified_without_a
     assert detection.specification_identifier in {PEPPOL, "urn:ferd:CrossIndustryDocument:invoice:1p0:comfort"}
 
 
+def test_bt24_normalization_keeps_non_xml_whitespace() -> None:
+    # normalize-space() strips only XML whitespace, so a no-break space stays and the match fails.
+    detection = detect(ubl(bt24=f"\u00a0{CORE}"))
+    assert detection.specification_identifier == f"\u00a0{CORE}"
+    assert detection.profile is None
+
+
 def test_a_cius_id_never_falls_back_to_the_core_profile() -> None:
     assert detect(ubl(bt24=CORE + "#compliant#urn:example.com:cius")).profile is None
 

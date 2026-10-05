@@ -21,8 +21,6 @@ PDF container's XMP selects a Factur-X profile.
 import dataclasses
 import typing as t
 
-from lxml import etree
-
 from euinvoice import _xml, profiles
 from euinvoice.errors import UnsupportedDocumentError
 
@@ -119,7 +117,8 @@ def detect(data: bytes) -> Detection:
         raise UnsupportedDocumentError(
             f"{len(values)} specification identifiers (BT-24) found, exactly one is allowed ({rules})"
         )
-    bt24 = " ".join(_text(values[0]).split()) if values else ""
+    # XPath normalize-space() strips only #x20, #x9, #xD, #xA; str.split() would also strip e.g. U+00A0.
+    bt24 = str(values[0].xpath("normalize-space(.)")) if values else ""
     if not bt24:
         raise UnsupportedDocumentError(f"{root_name} has no specification identifier (BT-24, required by BR-01)")
     try:
@@ -127,8 +126,3 @@ def detect(data: bytes) -> Detection:
     except UnsupportedDocumentError:
         profile = None
     return Detection(syntax=syntax, root=root_name, specification_identifier=bt24, profile=profile)
-
-
-def _text(element: etree._Element) -> str:
-    """The element's XPath string value (all descendant text), the input of ``normalize-space()``."""
-    return str(element.xpath("string()"))
