@@ -3,11 +3,11 @@
 import pathlib
 
 import pytest
+from conftest import assert_located_xsd_fatal
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError
 from euinvoice.validate import artifacts, xsd
-from euinvoice.validate.report import Severity
 
 pytestmark = pytest.mark.conformance
 
@@ -21,10 +21,6 @@ def cen_ubl_examples() -> list[pathlib.Path]:
     except ArtifactsNotAvailableError:  # collected but deselected by `make test`; the coverage test fails
         return []
     return sorted(p for p in examples.iterdir() if p.suffix.lower() == ".xml")
-
-
-def line_of(data: bytes, needle: bytes) -> int:
-    return data[: data.index(needle)].count(b"\n") + 1
 
 
 def test_cen_ubl_examples_cover_invoices_and_credit_notes() -> None:
@@ -70,9 +66,4 @@ def test_mutated_example_fails_with_a_located_error(original: bytes, mutated: by
 
     findings = xsd.validate(_xml.parse(data))
 
-    assert findings, "a mutated example must not be schema-valid"
-    first = findings[0]
-    assert (first.rule_id, first.severity, first.source) == ("XSD", Severity.FATAL, "xsd:ubl-2_1")
-    # The first element of the mutation is where the schema stops accepting the document.
-    assert first.location == f"{line_of(data, mutated)} {path}"
-    assert message in first.message
+    assert_located_xsd_fatal(findings, data, mutated, path, message, "xsd:ubl-2_1")

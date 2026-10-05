@@ -68,9 +68,10 @@ _SCHEMAS: t.Final[t.Mapping[str, _SchemaSpec]] = {
     # The CII D16B schema imports only its three siblings (qdt, ram, udt), so its own directory is the
     # confinement root.
     # ponytail: keyed by namespace alone, so every rsm document gets this D16B schema. Factur-X / ZUGFeRD
-    # profiles (MINIMUM, BASIC WL, BASIC, EN16931, EXTENDED) share the rsm namespace but the Factur-X
-    # package ships its own per-profile XSDs, which may be stricter; that package is not pinned yet
-    # (needs-human #42). Once it is, schema selection needs the profile (BT-24) as an extra argument
+    # profiles (MINIMUM, BASIC WL, BASIC, EN16931, EXTENDED) share the rsm namespace, and the Factur-X
+    # package ships its own, stricter per-profile XSDs. The risk is a false accept: a MINIMUM or BASIC
+    # document carrying elements its profile forbids passes here. That package is not pinned yet
+    # (needs-human #42); once it is, schema selection needs the profile (BT-24) as an extra argument
     # (#17 / #22).
     _xml.CII_RSM: _SchemaSpec(
         "xrechnung-validator-configuration",
