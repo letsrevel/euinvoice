@@ -16,6 +16,7 @@ def test_every_generated_list_is_exported_and_a_non_empty_frozenset_of_clean_cod
     lists = _generated_lists()
 
     assert set(lists) <= set(codes.__all__)
+    assert set(codes.__all__) - set(lists) == {"ISO_3166_1_COUNTRY", "DocumentType", "VatCategory"}
     assert len(lists) == 21
     for name, value in lists.items():
         assert isinstance(value, frozenset), name
@@ -51,6 +52,17 @@ def test_country_lists_differ_between_syntaxes_exactly_as_documented() -> None:
 
     assert ubl - cii == {"SS"}
     assert cii - ubl == {"AN"}
+
+
+def test_model_country_list_is_the_union_of_both_syntaxes() -> None:
+    assert codes.ISO_3166_1_COUNTRY == codes.ISO_3166_1_COUNTRY_UBL | codes.ISO_3166_1_COUNTRY_CII
+    assert {"SS", "AN", "DE"} <= codes.ISO_3166_1_COUNTRY
+
+
+def test_vatex_codes_are_upper_case_so_callers_match_upper_cased_values() -> None:
+    # BR-CL-22 tests normalize-space(upper-case(.)) against the list (CEN 1.3.16, UBL and CII).
+    assert all(code == code.upper() for code in codes.VATEX_EXEMPTION_REASON)
+    assert " vatex-eu-79-c ".strip().upper() in codes.VATEX_EXEMPTION_REASON
 
 
 def test_vat_point_date_codes_are_different_code_lists_per_syntax() -> None:

@@ -8,7 +8,8 @@
 #     sha256 c260c325dbccbbfdace9b049180aa4c708e45d84e03469a86bdf399b07a7b799
 """EN 16931 code lists (BR-CL-* rules), generated from the pinned CEN code-list Schematron.
 
-Every constant holds the codes its BR-CL asserts accept, sorted. Do not edit: change
+Every constant holds the codes its BR-CL asserts accept, sorted. All asserts but BR-CL-24 (MIME)
+match the value after ``normalize-space``, so strip values before a lookup. Do not edit: change
 ``scripts/gen_codelists.py`` and run ``make codelists``.
 """
 
@@ -221,8 +222,9 @@ UNTDID_7143_ITEM_CLASSIFICATION: t.Final[frozenset[str]] = frozenset({
     "TSP", "TSQ", "TSR", "TSS", "TST", "TSU", "UA", "UP", "VN", "VP", "VS", "VX", "ZZZ",
 })
 
-# ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file. BR-CL-14,
-# BR-CL-15 (ubl).
+# ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file. The
+# syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.
+# BR-CL-14, BR-CL-15 (ubl).
 ISO_3166_1_COUNTRY_UBL: t.Final[frozenset[str]] = frozenset({
     "1A", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX",
     "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR",
@@ -242,8 +244,9 @@ ISO_3166_1_COUNTRY_UBL: t.Final[frozenset[str]] = frozenset({
     "VI", "VN", "VU", "WF", "WS", "XI", "YE", "YT", "ZA", "ZM", "ZW",
 })
 
-# ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file. BR-CL-14,
-# BR-CL-15 (cii).
+# ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file. The
+# syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.
+# BR-CL-14, BR-CL-15 (cii).
 ISO_3166_1_COUNTRY_CII: t.Final[frozenset[str]] = frozenset({
     "1A", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AN", "AO", "AQ", "AR", "AS", "AT", "AU", "AW",
     "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ",
@@ -301,7 +304,8 @@ UNTDID_7161_CHARGE_REASON: t.Final[frozenset[str]] = frozenset({
     "SG", "SH", "SM", "SU", "TAB", "TAC", "TT", "TV", "V1", "V2", "WH", "XAA", "YY", "ZZZ",
 })
 
-# CEF VATEX VAT exemption reason codes. BR-CL-22 (ubl, cii).
+# CEF VATEX VAT exemption reason codes. BR-CL-22 (ubl, cii). The rule upper-cases the value first:
+# match `code.strip().upper()`.
 VATEX_EXEMPTION_REASON: t.Final[frozenset[str]] = frozenset({
     "VATEX-EU-132", "VATEX-EU-132-1A", "VATEX-EU-132-1B", "VATEX-EU-132-1C", "VATEX-EU-132-1D",
     "VATEX-EU-132-1E", "VATEX-EU-132-1F", "VATEX-EU-132-1G", "VATEX-EU-132-1H", "VATEX-EU-132-1I",

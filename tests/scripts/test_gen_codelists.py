@@ -64,14 +64,48 @@ def _extracted() -> dict[gen.Syntax, gen.RuleLists]:
 
 def test_extract_reads_every_list_of_every_assert_in_document_order() -> None:
     assert gen.extract(SYNTHETIC_UBL.encode()) == {
-        "BR-CL-01": (("380", "81"), ("81", "381")),
-        "BR-CL-04": (("EUR", "USD", "CHF"),),
-        "BR-CL-24": (("application/pdf", "image/png"),),
+        "BR-CL-01": gen.Assert((("380", "81"), ("81", "381"))),
+        "BR-CL-04": gen.Assert((("EUR", "USD", "CHF"),)),
+        "BR-CL-24": gen.Assert((("application/pdf", "image/png"),)),
     }
 
 
 def test_extract_honours_the_declared_encoding() -> None:
-    assert gen.extract(SYNTHETIC_CII.encode("iso-8859-1"))["BR-CL-04"] == (("CHF", "EUR", "USD"),)
+    assert gen.extract(SYNTHETIC_CII.encode("iso-8859-1"))["BR-CL-04"] == gen.Assert((("CHF", "EUR", "USD"),))
+
+
+def test_extract_records_case_folding() -> None:
+    # Shape of BR-CL-22 (VATEX) in both CEN 1.3.16 files.
+    value = "concat(' ', normalize-space(upper-case(.)), ' ')"
+    test = f"((not(contains(normalize-space(.), ' ')) and contains(' VATEX-EU-G ', {value})))"
+    sch = f"<pattern {SCH_NS}><rule context='x'><assert id='BR-CL-22' test=\"{test}\"/></rule></pattern>"
+
+    assert gen.extract(sch.encode()) == {"BR-CL-22": gen.Assert((("VATEX-EU-G",),), case_insensitive=True)}
+
+
+def _vatex(*, folded: bool, acknowledged: bool) -> tuple[dict[gen.Syntax, gen.RuleLists], tuple[gen.CodeList, ...]]:
+    extracted: dict[gen.Syntax, gen.RuleLists] = {"ubl": {"BR-CL-22": gen.Assert((("VATEX-EU-G",),), folded)}}
+    entry = gen.CodeList("VATEX", "VATEX.", (gen.Ref("ubl", "BR-CL-22"),), case_insensitive=acknowledged)
+    return extracted, (entry,)
+
+
+@pytest.mark.parametrize(
+    ("folded", "message"),
+    [(True, "case-folds the value but the table says case_insensitive=False"), (False, "is case-sensitive but")],
+)
+def test_build_rejects_case_folding_the_table_does_not_match(folded: bool, message: str) -> None:
+    extracted, table = _vatex(folded=folded, acknowledged=not folded)
+
+    with pytest.raises(gen.GenerationError, match=f"VATEX: ubl BR-CL-22 {message}"):
+        gen.build(extracted, table)
+
+
+def test_render_tells_callers_to_upper_case_for_case_insensitive_lists() -> None:
+    extracted, table = _vatex(folded=True, acknowledged=True)
+
+    source = gen.render(gen.build(extracted, table), table, ())
+
+    assert "match `code.strip().upper()`" in source
 
 
 def test_extract_rejects_an_assert_without_a_recognised_code_list() -> None:
@@ -113,7 +147,7 @@ def test_build_maps_every_list_and_sorts_codes() -> None:
 
 def test_build_rejects_lists_that_differ_between_references() -> None:
     extracted = _extracted()
-    extracted["cii"] = {**extracted["cii"], "BR-CL-04": (("EUR", "USD"),)}
+    extracted["cii"] = {**extracted["cii"], "BR-CL-04": gen.Assert((("EUR", "USD"),))}
 
     with pytest.raises(gen.GenerationError, match="CURRENCY: cii BR-CL-04 differs from ubl BR-CL-04"):
         gen.build(extracted, TABLE)
@@ -179,6 +213,15 @@ def test_render_wraps_long_lists_within_the_line_limit() -> None:
     assert max(len(line) for line in source.splitlines()) <= gen.LINE_LIMIT
     code_lines = [line for line in source.splitlines() if line.startswith('    "C')]
     assert len(code_lines) <= len(codes) // 10  # compact: at least 10 codes per line
+
+
+def test_render_refuses_to_exceed_the_file_length_limit() -> None:
+    table = (gen.CodeList("BIG", "Big.", (gen.Ref("ubl", "BR-CL-23"),)),)
+    codes = tuple(f"C{i:04d}" for i in range(500))
+
+    assert gen.render({"BIG": codes}, table, ()).count("\n") <= gen.MAX_LINES
+    with pytest.raises(gen.GenerationError, match="over the 30-line limit: split the biggest list"):
+        gen.render({"BIG": codes}, table, (), max_lines=30)
 
 
 def test_main_writes_the_rendered_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

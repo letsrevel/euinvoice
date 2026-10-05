@@ -32,9 +32,9 @@ class VatCategory(enum.StrEnum):
     NOT_SUBJECT_TO_VAT = "O"
     """"Not subject to VAT" (BR-O-01)."""
     IGIC = "L"
-    """"IGIC", Canary Islands general indirect tax (BR-AF-01)."""
+    """"IGIC" (BR-AF-01)."""
     IPSI = "M"
-    """"IPSI", Ceuta and Melilla tax (BR-AG-01)."""
+    """"IPSI" (BR-AG-01)."""
     SPLIT_PAYMENT = "B"
     """"Split payment", domestic Italian invoices only (BR-B-01)."""
 

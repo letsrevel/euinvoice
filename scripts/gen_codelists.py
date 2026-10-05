@@ -9,6 +9,11 @@ encode each code list in one of two shapes, both handled by :func:`extract`:
   assert may hold several (UBL BR-CL-01 has one list per root element, UBL BR-CL-10 adds ``SEPA``);
 * ``@mimeCode = 'a' or @mimeCode = 'b'``: equality tests (BR-CL-24).
 
+``contains`` lists are matched against ``normalize-space(...)`` of the value (BR-CL-24 compares the
+attribute as is). BR-CL-22 also upper-cases it
+(``normalize-space(upper-case(.))``); :func:`extract` records any ``upper-case(`` / ``lower-case(`` and
+:func:`build` fails unless the table entry acknowledges it (``case_insensitive=True``).
+
 :data:`TABLE` names every list. :func:`build` fails unless every list of every assert is claimed by
 exactly one entry and every list an entry claims is identical, so a new or changed upstream list stops
 the generator instead of slipping through. Where the UBL and CII files differ, the entry is split by
@@ -28,16 +33,35 @@ from euinvoice import _xml  # ruff: ignore[import-private-name] - the one harden
 from euinvoice.validate import artifacts
 
 Syntax = t.Literal["ubl", "cii"]
-RuleLists = dict[str, tuple[tuple[str, ...], ...]]
+
+
+class Assert(t.NamedTuple):
+    """The code lists of one BR-CL assert.
+
+    Attributes:
+        lists: Its code lists, in document order, codes in upstream order.
+        case_insensitive: The test case-folds the value (``upper-case(`` or ``lower-case(``).
+    """
+
+    lists: tuple[tuple[str, ...], ...]
+    case_insensitive: bool = False
+
+
+RuleLists = dict[str, Assert]
 
 SCH = "{http://purl.oclc.org/dsdl/schematron}"
 LINE_LIMIT = 100
+# scripts/check-file-length.sh limit. ponytail: the generated module is ~510 lines with CEN 1.3.16. If a
+# pin bump crosses this, render() fails; then emit UNECE_REC20_REC21_UNIT (the biggest list, ~150
+# lines) into its own generated module (e.g. codes/_generated_units.py) and re-export it.
+MAX_LINES = 600
 REPO = Path(__file__).resolve().parent.parent
 DEFAULT_OUTPUT = REPO / "src" / "euinvoice" / "model" / "codes" / "_generated.py"
 
 # A list literal inside contains(...), and the right-hand side of `@attr = '...'` (BR-CL-24).
 _CONTAINS = re.compile(r"contains\(\s*'([^']*)'")
 _EQUALS = re.compile(r"@[\w:-]+\s*=\s*'([^']*)'")
+_CASE_FOLD = re.compile(r"\b(?:upper|lower)-case\(")
 
 
 class GenerationError(Exception):
@@ -71,11 +95,14 @@ class CodeList:
         name: Python constant name.
         title: What the code list is (rendered as a comment above the constant).
         refs: The asserts' lists it is extracted from; all must hold the same set of codes.
+        case_insensitive: The asserts case-fold the value before matching; must agree with
+            :attr:`Assert.case_insensitive` of every ref.
     """
 
     name: str
     title: str
     refs: tuple[Ref, ...]
+    case_insensitive: bool = False
 
 
 @dataclass(frozen=True)
@@ -160,19 +187,26 @@ TABLE: tuple[CodeList, ...] = (
     CodeList("UNTDID_7143_ITEM_CLASSIFICATION", "UNTDID 7143 item classification scheme codes.", _both("BR-CL-13")),
     CodeList(
         "ISO_3166_1_COUNTRY_UBL",
-        "ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file.",
+        "ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file. The "
+        "syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
         (Ref("ubl", "BR-CL-14"), Ref("ubl", "BR-CL-15")),
     ),
     CodeList(
         "ISO_3166_1_COUNTRY_CII",
-        "ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file.",
+        "ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file. The "
+        "syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
         (Ref("cii", "BR-CL-14"), Ref("cii", "BR-CL-15")),
     ),
     CodeList("UNTDID_4461_PAYMENT_MEANS", "UNTDID 4461 payment means codes.", _both("BR-CL-16")),
     CodeList("UNTDID_5305_VAT_CATEGORY", "UNTDID 5305 VAT category codes.", _both("BR-CL-17", "BR-CL-18")),
     CodeList("UNTDID_5189_ALLOWANCE_REASON", "UNTDID 5189 allowance reason codes.", _both("BR-CL-19")),
     CodeList("UNTDID_7161_CHARGE_REASON", "UNTDID 7161 charge reason codes.", _both("BR-CL-20")),
-    CodeList("VATEX_EXEMPTION_REASON", "CEF VATEX VAT exemption reason codes.", _both("BR-CL-22")),
+    CodeList(
+        "VATEX_EXEMPTION_REASON",
+        "CEF VATEX VAT exemption reason codes.",
+        _both("BR-CL-22"),
+        case_insensitive=True,
+    ),
     CodeList("UNECE_REC20_REC21_UNIT", "UN/ECE Recommendation 20 unit codes with Rec 21 extension.", _both("BR-CL-23")),
     CodeList("MIME_CODE", "MIME codes of attached binary objects.", _both("BR-CL-24")),
     CodeList("CEF_EAS", "CEF EAS electronic address scheme codes.", _both("BR-CL-25")),
@@ -186,7 +220,7 @@ def extract(data: bytes) -> RuleLists:
         data: The ``.sch`` file bytes (its XML declaration names the encoding).
 
     Returns:
-        Assert id → its code lists, in document order, codes in upstream order.
+        Assert id → its code lists (document order, codes in upstream order) and whether it case-folds.
 
     Raises:
         euinvoice.errors.ParseError: Malformed XML or a DOCTYPE (hardened parser, D10).
@@ -205,7 +239,7 @@ def extract(data: bytes) -> RuleLists:
             found.append(tuple(equals))
         if not found:
             raise GenerationError(f"{rule}: no code list recognised in {test[:80]!r}")
-        lists[rule] = tuple(found)
+        lists[rule] = Assert(tuple(found), bool(_CASE_FOLD.search(test)))
     return lists
 
 
@@ -214,11 +248,13 @@ def _code_order(code: str) -> tuple[int, int, str]:
     return (0, int(code), code) if code.isdigit() else (1, 0, code)
 
 
-def _lookup(extracted: t.Mapping[Syntax, RuleLists], ref: Ref) -> tuple[str, ...] | None:
-    rule_lists = extracted[ref.syntax].get(ref.rule, ())
+def _lookup(extracted: t.Mapping[Syntax, RuleLists], ref: Ref) -> tuple[tuple[str, ...], bool] | None:
+    found = extracted[ref.syntax].get(ref.rule)
+    if found is None:
+        return None
     if ref.index is None:
-        return rule_lists[0] if len(rule_lists) == 1 else None
-    return rule_lists[ref.index] if ref.index < len(rule_lists) else None
+        return (found.lists[0], found.case_insensitive) if len(found.lists) == 1 else None
+    return (found.lists[ref.index], found.case_insensitive) if ref.index < len(found.lists) else None
 
 
 def build(extracted: t.Mapping[Syntax, RuleLists], table: t.Sequence[CodeList]) -> dict[str, tuple[str, ...]]:
@@ -233,16 +269,24 @@ def build(extracted: t.Mapping[Syntax, RuleLists], table: t.Sequence[CodeList]) 
 
     Raises:
         GenerationError: A reference is missing, the references of one constant differ, a list is
-            claimed twice, or a list is claimed by no constant.
+            claimed twice, a list is claimed by no constant, or an entry's ``case_insensitive`` does
+            not match whether its asserts case-fold the value.
     """
     claimed: dict[Ref, str] = {}
     result: dict[str, tuple[str, ...]] = {}
     for entry in table:
         codes: frozenset[str] | None = None
         for ref in entry.refs:
-            found = _lookup(extracted, ref)
-            if found is None:
+            hit = _lookup(extracted, ref)
+            if hit is None:
                 raise GenerationError(f"{entry.name}: {ref} not found")
+            found, case_insensitive = hit
+            if case_insensitive != entry.case_insensitive:
+                raise GenerationError(
+                    f"{entry.name}: {ref} "
+                    + ("case-folds the value" if case_insensitive else "is case-sensitive")
+                    + f" but the table says case_insensitive={entry.case_insensitive}"
+                )
             if ref in claimed:
                 raise GenerationError(f"{ref} claimed by {claimed[ref]} and {entry.name}")
             claimed[ref] = entry.name
@@ -252,11 +296,11 @@ def build(extracted: t.Mapping[Syntax, RuleLists], table: t.Sequence[CodeList]) 
                 raise GenerationError(f"{entry.name}: {ref} differs from {entry.refs[0]}")
         result[entry.name] = tuple(sorted(codes or (), key=_code_order))
     unclaimed = [
-        str(Ref(syntax, rule, None if len(lists) == 1 else i))
+        str(Ref(syntax, rule, None if len(found.lists) == 1 else i))
         for syntax, rule_lists in extracted.items()
-        for rule, lists in rule_lists.items()
-        for i in range(len(lists))
-        if Ref(syntax, rule, None if len(lists) == 1 else i) not in claimed
+        for rule, found in rule_lists.items()
+        for i in range(len(found.lists))
+        if Ref(syntax, rule, None if len(found.lists) == 1 else i) not in claimed
     ]
     if unclaimed:
         raise GenerationError("unmapped code lists: " + ", ".join(unclaimed))
@@ -288,7 +332,11 @@ def _wrap(items: t.Iterable[str], indent: str) -> list[str]:
 
 
 def render(
-    lists: t.Mapping[str, t.Sequence[str]], table: t.Sequence[CodeList], provenance: t.Sequence[Provenance]
+    lists: t.Mapping[str, t.Sequence[str]],
+    table: t.Sequence[CodeList],
+    provenance: t.Sequence[Provenance],
+    *,
+    max_lines: int = MAX_LINES,
 ) -> str:
     """Render the generated module.
 
@@ -296,10 +344,14 @@ def render(
         lists: Output of :func:`build`.
         table: The table ``lists`` was built from (for titles and citations).
         provenance: The input files, cited in the header.
+        max_lines: Most lines the module may have (``scripts/check-file-length.sh``).
 
     Returns:
         Python source: one ``t.Final[frozenset[str]]`` per table entry, codes sorted and wrapped at
         :data:`LINE_LIMIT`, under ``# fmt: off`` so that ``ruff format`` keeps the compact layout.
+
+    Raises:
+        GenerationError: The module would exceed ``max_lines`` (see the ponytail at :data:`MAX_LINES`).
     """
     out = [
         "# Generated by scripts/gen_codelists.py from the pinned CEN EN 16931 code-list Schematron.",
@@ -309,7 +361,8 @@ def render(
         *(line for p in provenance for line in (f"#   {p.source} {p.version} {p.member}", f"#     sha256 {p.sha256}")),
         '"""EN 16931 code lists (BR-CL-* rules), generated from the pinned CEN code-list Schematron.',
         "",
-        "Every constant holds the codes its BR-CL asserts accept, sorted. Do not edit: change",
+        "Every constant holds the codes its BR-CL asserts accept, sorted. All asserts but BR-CL-24 (MIME)",
+        "match the value after ``normalize-space``, so strip values before a lookup. Do not edit: change",
         "``scripts/gen_codelists.py`` and run ``make codelists``.",
         '"""',
         "",
@@ -319,10 +372,20 @@ def render(
     ]
     for entry in table:
         comment = f"{entry.title} {_cite(entry.refs)}."
-        out += ["", *textwrap.wrap(comment, LINE_LIMIT, initial_indent="# ", subsequent_indent="# ")]
+        if entry.case_insensitive:
+            comment += " The rule upper-cases the value first: match `code.strip().upper()`."
+        out += [
+            "",
+            *textwrap.wrap(comment, LINE_LIMIT, initial_indent="# ", subsequent_indent="# ", break_on_hyphens=False),
+        ]
         out.append(f"{entry.name}: t.Final[frozenset[str]] = frozenset({{")
         out += _wrap((f'"{code}",' for code in lists[entry.name]), "    ")
         out.append("})")
+    if len(out) > max_lines:
+        raise GenerationError(
+            f"generated module has {len(out)} lines, over the {max_lines}-line limit: split the biggest "
+            "list (UNECE_REC20_REC21_UNIT) into its own generated module (see MAX_LINES)"
+        )
     return "\n".join(out) + "\n"
 
 
