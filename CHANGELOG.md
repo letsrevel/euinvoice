@@ -28,5 +28,6 @@ All notable changes to this project are documented here. The format follows
 - Hardened XML input handling: every XML document is parsed with entity resolution, DTD loading and
   network access disabled. Documents with a DOCTYPE, malformed XML and input over libxml2's safety
   limits are rejected with `ParseError`.
-- `scripts/check_upstream.py` (run nightly): reports manifest pins that are behind the latest upstream
-  release, tag or commit and exits non-zero on drift or when an upstream cannot be queried.
+- `scripts/check_upstream.py` (run nightly): reports manifest pins that are behind upstream (a release
+  or prerelease published after the pinned one, a new corpus commit, a changed Peppol rule file on
+  docs.peppol.eu) and exits non-zero on drift or when an upstream cannot be checked.

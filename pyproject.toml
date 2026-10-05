@@ -62,7 +62,7 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 preview = true
@@ -93,8 +93,6 @@ warn_unreachable = true
 warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
 files = ["src", "tests", "scripts"]
-# scripts/ is importable as top-level modules (tests import check_upstream), see pytest pythonpath.
-mypy_path = "scripts"
 
 [[tool.mypy.overrides]]
 # saxonche ships no type information.
@@ -108,6 +106,7 @@ warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Dev scripts in scripts/ are importable from tests (tests/scripts/test_<name>.py).
 pythonpath = ["scripts"]
 addopts = "-ra --strict-markers --strict-config -m 'not conformance'"
 xfail_strict = true
