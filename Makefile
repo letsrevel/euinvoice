@@ -43,6 +43,11 @@ test-failed: ## Re-run last failures only
 artifacts: ## Fetch pinned official validation artifacts + example corpora
 	uv run python -m euinvoice artifacts fetch
 
+# Regenerates src/euinvoice/model/codes/_generated.py from the pinned CEN code-list Schematron.
+.PHONY: codelists
+codelists: ## Regenerate the EN 16931 code lists (needs `make artifacts`)
+	uv run python scripts/gen_codelists.py
+
 .PHONY: conformance
 conformance: ## Conformance suite against official Schematron + upstream corpora
 	uv run pytest -n auto -m conformance
