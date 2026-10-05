@@ -17,26 +17,30 @@ from pydantic.fields import FieldInfo
 
 from euinvoice.errors import ModelError
 
-__all__ = ["EuInvoiceModel", "bt", "bt_id", "to_decimal"]
+__all__ = ["XSD_DECIMAL_PATTERN", "EuInvoiceModel", "bt", "bt_id", "to_decimal"]
 
 _BT_ID = re.compile(r"B[TG]-(?:0|[1-9][0-9]*)")
 
-# Lexical space of xs:decimal (XML Schema 1.1 Part 2, §3.3.3): optional sign, digits with an optional
-# fraction, no exponent. Surrounding XML whitespace is collapsed first (whiteSpace=collapse).
-_XSD_DECIMAL = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)")  # ASCII digits only, unlike \d
-_XML_WHITESPACE = " \t\n\r"
+XSD_DECIMAL_PATTERN: t.Final = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
+"""Lexical space of xs:decimal (XML Schema 1.1 Part 2, §3.3.3): optional sign, ASCII digits (unlike
+``\\d``) with an optional fraction, no exponent. Unanchored."""
+
+_XSD_DECIMAL = re.compile(XSD_DECIMAL_PATTERN)
+_XML_WHITESPACE = " \t\n\r"  # stripped first: xs:decimal has whiteSpace=collapse
 
 
 class EuInvoiceModel(pydantic.BaseModel):
     """Base class of every euinvoice model.
 
     Instances are immutable (``frozen``), hashable and compared by value. Unknown fields are rejected
-    (``extra="forbid"``) so typos never vanish silently, and validation is ``strict`` so pydantic never
-    coerces between types behind the caller's back (e.g. ``"3"`` into ``3``). Numeric types do their own,
-    documented conversion (see :func:`to_decimal`).
+    (``extra="forbid"``) so typos never vanish silently. Validation uses pydantic's default (lax) mode,
+    so Python and JSON input behave alike: a list fills a tuple field, a code value fills a ``StrEnum``
+    field, an ISO string fills a date field. A field that must not coerce (e.g. ``"3"`` into ``3``)
+    opts in with ``pydantic.StrictInt`` or ``pydantic.Strict()``. The numeric types are Decimal-only
+    whatever the mode (see :func:`to_decimal`).
     """
 
-    model_config = pydantic.ConfigDict(frozen=True, extra="forbid", strict=True, validate_default=True)
+    model_config = pydantic.ConfigDict(frozen=True, extra="forbid", validate_default=True)
 
 
 def bt(ident: str) -> FieldInfo:

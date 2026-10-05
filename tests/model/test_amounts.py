@@ -1,3 +1,5 @@
+import json
+import re
 import typing as t
 from decimal import MAX_PREC, ROUND_HALF_UP, Decimal, localcontext
 
@@ -7,7 +9,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from euinvoice.errors import ModelError
-from euinvoice.model._base import EuInvoiceModel
+from euinvoice.model._base import XSD_DECIMAL_PATTERN, EuInvoiceModel
 from euinvoice.model.amounts import Amount, Percentage, Quantity, UnitPriceAmount, quantize_amount
 
 
@@ -70,6 +72,44 @@ class TestAllTypes:
         holder = _Holder.model_validate({field: Decimal("1.50")})
         again = _Holder.model_validate_json(holder.model_dump_json())
         assert getattr(again, field).as_tuple() == Decimal("1.50").as_tuple()
+
+    @pytest.mark.parametrize(
+        ("field", "raw", "text"),
+        [
+            ("amount", "1E+3", "1000"),
+            ("amount", "1E+2", "100"),
+            ("price", "0.0000001", "0.0000001"),
+            ("quantity", "1.5E+5", "150000"),
+            ("rate", "-0", "-0"),
+        ],
+    )
+    def test_json_uses_fixed_point_never_exponent(self, field: str, raw: str, text: str) -> None:
+        holder = _Holder.model_validate({field: Decimal(raw)})
+        assert holder.model_dump(mode="json")[field] == text
+        assert json.loads(holder.model_dump_json())[field] == text
+        assert getattr(_Holder.model_validate_json(holder.model_dump_json()), field) == Decimal(raw)
+
+    @pytest.mark.parametrize("field", _FIELDS)
+    def test_python_dump_keeps_decimal(self, field: str) -> None:
+        holder = _Holder.model_validate({field: Decimal("1E+3")})
+        assert holder.model_dump()[field] == Decimal("1E+3")
+
+    @pytest.mark.parametrize("field", _FIELDS)
+    @given(value=finite_decimals)
+    def test_json_round_trip_preserves_every_accepted_value(self, field: str, value: Decimal) -> None:
+        if field == "amount" and value != quantize_amount(value):
+            value = quantize_amount(value)  # Amount accepts at most two decimals
+        holder = _Holder.model_validate({field: value})
+        text = holder.model_dump(mode="json")[field]
+        assert isinstance(text, str)
+        assert re.fullmatch(XSD_DECIMAL_PATTERN, text)
+        assert getattr(_Holder.model_validate_json(holder.model_dump_json()), field) == value
+        assert getattr(_Holder.model_validate(holder.model_dump(mode="json")), field) == value
+
+    @pytest.mark.parametrize("field", _FIELDS)
+    def test_json_schema_advertises_an_xsd_decimal_string(self, field: str) -> None:
+        schema = _Holder.model_json_schema()["properties"][field]["anyOf"][0]
+        assert schema == {"type": "string", "pattern": f"^{XSD_DECIMAL_PATTERN}$"}
 
 
 class TestUnrestrictedTypes:

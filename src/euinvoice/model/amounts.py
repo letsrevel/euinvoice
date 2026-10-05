@@ -1,7 +1,8 @@
 """Decimal types for the EN 16931 semantic data types Amount, Unit price amount, Quantity and Percentage.
 
 All four accept ``Decimal``, ``int`` and ``xs:decimal`` strings, reject ``float``, ``bool``, ``NaN`` and
-infinities (D3, see :func:`euinvoice.model._base.to_decimal`), and never round on their own.
+infinities (D3, see :func:`euinvoice.model._base.to_decimal`), and never round on their own. In JSON
+they are fixed-point strings (``format(v, "f")``) that reload exactly, and their JSON schema says so.
 
 Which business terms are limited to two decimals was read from the pinned CEN validation artifacts
 ``validation-1.3.16``:
@@ -28,7 +29,7 @@ from decimal import MAX_PREC, ROUND_HALF_UP, Decimal, localcontext
 import pydantic
 
 from euinvoice.errors import ModelError
-from euinvoice.model._base import to_decimal
+from euinvoice.model._base import XSD_DECIMAL_PATTERN, to_decimal
 
 __all__ = ["AMOUNT_DECIMALS", "Amount", "Percentage", "Quantity", "UnitPriceAmount", "quantize_amount"]
 
@@ -83,18 +84,26 @@ def _check_amount(value: Decimal) -> Decimal:
     return Decimal((sign, digits[:-surplus] or (0,), -AMOUNT_DECIMALS))
 
 
-_DECIMAL_ONLY = pydantic.BeforeValidator(to_decimal)
+_Number = t.Annotated[
+    Decimal,
+    pydantic.BeforeValidator(to_decimal),
+    # pydantic's default JSON form is str(), which emits "1E+3": not xs:decimal, so to_decimal() would
+    # refuse it on reload. Fixed-point text instead (CLAUDE.md "Money and numbers").
+    pydantic.PlainSerializer(lambda v: format(v, "f"), return_type=str, when_used="json"),
+    # Fractional JSON numbers are refused (they arrive as float), so do not advertise "number".
+    pydantic.WithJsonSchema({"type": "string", "pattern": f"^{XSD_DECIMAL_PATTERN}$"}),
+]
 
-Amount = t.Annotated[Decimal, _DECIMAL_ONLY, pydantic.AfterValidator(_check_amount)]
+Amount = t.Annotated[_Number, pydantic.AfterValidator(_check_amount)]
 """EN 16931 data type Amount: at most two decimals (BR-DEC-*, UBL-DT-01), never rounded implicitly."""
 
-UnitPriceAmount = t.Annotated[Decimal, _DECIMAL_ONLY]
+UnitPriceAmount = _Number
 """EN 16931 data type Unit price amount (BT-146..148): precision is kept as given."""
 
-Quantity = t.Annotated[Decimal, _DECIMAL_ONLY]
+Quantity = _Number
 """EN 16931 data type Quantity (BT-129, BT-149): precision is kept as given."""
 
-Percentage = t.Annotated[Decimal, _DECIMAL_ONLY]
+Percentage = _Number
 """EN 16931 data type Percentage: precision is kept as given.
 
 Rates are percentages, ``19`` rather than ``0.19``: BR-S-09 computes the VAT as ``Percent div 100``.

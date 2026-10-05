@@ -1,3 +1,4 @@
+import enum
 import typing as t
 from decimal import Decimal
 
@@ -12,6 +13,16 @@ class _Sample(EuInvoiceModel):
     number: t.Annotated[str, bt("BT-1")]
     seller_name: t.Annotated[str | None, bt("BT-27")] = None
     untagged: int = 0
+
+
+class _Kind(enum.StrEnum):
+    INVOICE = "380"
+
+
+class _Lax(EuInvoiceModel):
+    codes: tuple[str, ...] = ()
+    kind: _Kind | None = None
+    count: pydantic.StrictInt = 0
 
 
 class TestEuInvoiceModel:
@@ -29,9 +40,16 @@ class TestEuInvoiceModel:
         assert hash(_Sample(number="INV-1")) == hash(_Sample(number="INV-1"))
         assert _Sample(number="INV-1") != _Sample(number="INV-2")
 
-    def test_is_strict_about_scalar_coercion(self) -> None:
+    def test_python_input_fills_tuple_and_str_enum_fields_like_json(self) -> None:
+        python = _Lax.model_validate({"codes": ["a", "b"], "kind": "380"})
+        json = _Lax.model_validate_json('{"codes": ["a", "b"], "kind": "380"}')
+        assert python == json
+        assert python.codes == ("a", "b")
+        assert python.kind is _Kind.INVOICE
+
+    def test_strict_opt_in_per_field(self) -> None:
         with pytest.raises(pydantic.ValidationError):
-            _Sample.model_validate({"number": "INV-1", "untagged": "3"})
+            _Lax.model_validate({"count": "3"})
 
 
 class TestBtMetadata:
