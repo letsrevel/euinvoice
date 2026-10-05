@@ -19,6 +19,7 @@ compared exactly upstream, so they are neither stripped nor changed.
 """
 
 import datetime
+import re
 import typing as t
 from collections.abc import Callable
 from decimal import Decimal
@@ -107,8 +108,15 @@ invoice the official Schematron accepts (D8).
 """
 
 
+_ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
 def _date_input(value: object) -> object:
-    """Let a ``date`` or an ISO 8601 string through; refuse what lax mode would silently convert.
+    """Let a ``date`` or a ``YYYY-MM-DD`` string through; refuse what lax mode would silently convert.
+
+    Pydantic's lax date parsing also takes Unix timestamps (``"1767225600"``), zero-time datetimes
+    (offsets dropped) and numbers. UBL ``xs:date`` and CII format 102 accept none of these in the model's
+    form, so only the ISO calendar date is accepted (CII ``YYYYMMDD`` is converted by the CII reader).
 
     Args:
         value: The raw input.
@@ -117,18 +125,21 @@ def _date_input(value: object) -> object:
         ``value`` unchanged, for pydantic's date parsing.
 
     Raises:
-        ModelError: ``value`` is a ``datetime`` (its time would be dropped) or a number (a timestamp).
+        ModelError: ``value`` is a ``datetime``, a number, or a string other than ``YYYY-MM-DD``.
     """
-    if isinstance(value, datetime.datetime) or not isinstance(value, datetime.date | str):
-        raise ModelError(f"expected a datetime.date or an ISO 8601 'YYYY-MM-DD' string, got {type(value).__name__}")
-    return value
+    if isinstance(value, str) and _ISO_DATE.fullmatch(value):
+        return value
+    if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+        return value
+    raise ModelError(f"expected a datetime.date or an ISO 8601 'YYYY-MM-DD' string, got {value!r}")
 
 
 Date = t.Annotated[datetime.date, pydantic.BeforeValidator(_date_input)]
 """EN 16931 Date.
 
-A ``datetime.date`` (not a ``datetime``: no silent truncation of a time) or an ISO 8601 string, so a
-``model_dump(mode="json")`` dict validates back. Numbers (timestamps) and ``bool`` are refused.
+A ``datetime.date`` (not a ``datetime``: no silent truncation of a time) or a ``YYYY-MM-DD`` string, so a
+``model_dump(mode="json")`` dict validates back. Numbers, timestamp strings, ``YYYYMMDD`` and
+datetime strings are refused.
 """
 
 
@@ -290,7 +301,7 @@ class BinaryObject(EuInvoiceModel):
     ``model_validate_json``, which decodes the base64. The XRechnung 3.0.2 spec (§8.2, §11.2) gives mime code and
     filename cardinality 1, and UBL enforces both (UBL-DT-06/07, fatal), but the CEN CII rules and the
     CII XSD do not. The syntax-neutral model therefore keeps both optional, so a CEN-valid CII invoice
-    always loads (D8); see "Open questions" in ``docs/reference/bt-mapping.md``.
+    always loads (D8); see "Decisions" (M3) in ``docs/reference/bt-mapping.md``.
     """
 
     model_config = pydantic.ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")

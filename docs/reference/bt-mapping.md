@@ -97,7 +97,7 @@ is unbounded.
 | BT-20 | Payment terms | `payment_terms` | 0..1 | XR table | Text | `/Invoice/cac:PaymentTerms/cbc:Note` | `STL/ram:SpecifiedTradePaymentTerms/ram:Description` |
 | BG-1 | INVOICE NOTE | `notes[]` | 0..n | XR table | Group | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote` |
 | BT-21 | Invoice note subject code | `notes[].subject_code` | 0..1 | XR table | Code | `/Invoice/cbc:Note (code = text between leading #…#, CEN UBL BR-CL-08)` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:SubjectCode` |
-| BT-22 | Invoice note | `notes[].note` | 0..1 | XR 1, no CEN rule: decision D1 | Text | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:Content` |
+| BT-22 | Invoice note | `notes[].note` | 0..1 | XR 1, no CEN rule: decision M1 | Text | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:Content` |
 | BG-2 | PROCESS CONTROL | `process_control` | 1 | CEN BR-01 (via BT-24) | Group | `/Invoice (no own element)` | `/rsm:ExchangedDocumentContext` |
 | BT-23 | Business process type | `process_control.business_process_type` | 0..1 | XR 1 via PEPPOL-EN16931-R001 (XR changelog 3.0.1) | Text | `/Invoice/cbc:ProfileID` | `/rsm:ExchangedDocumentContext/ram:BusinessProcessSpecifiedDocumentContextParameter/ram:ID` |
 | BT-24 | Specification identifier | `process_control.specification_identifier` | 1 | CEN BR-01 | Identifier | `/Invoice/cbc:CustomizationID` | `/rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID` |
@@ -183,7 +183,7 @@ is unbounded.
 | BT-85 | Payment account name | `payment_instructions.credit_transfers[].payment_account_name` | 0..1 | XR table | Text | `/Invoice/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:Name` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:AccountName` |
 | BT-86 | Payment service provider identifier | `payment_instructions.credit_transfers[].payment_service_provider_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:PaymentMeans/cac:PayeeFinancialAccount/cac:FinancialInstitutionBranch/cbc:ID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeeSpecifiedCreditorFinancialInstitution/ram:BICID` |
 | BG-18 | PAYMENT CARD INFORMATION | `payment_instructions.payment_card` | 0..1 | XR table; see note N2 | Group | `/Invoice/cac:PaymentMeans/cac:CardAccount` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard` |
-| BT-87 | Payment card primary account number | `payment_instructions.payment_card.primary_account_number` | 0..1 | XR 1 and UBL XSD 1, no CEN rule, CII XSD 0..1: decision D2 | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:PrimaryAccountNumberID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:ID` |
+| BT-87 | Payment card primary account number | `payment_instructions.payment_card.primary_account_number` | 0..1 | XR 1 and UBL XSD 1, no CEN rule, CII XSD 0..1: decision M2 | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:PrimaryAccountNumberID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:ID` |
 | BT-88 | Payment card holder name | `payment_instructions.payment_card.holder_name` | 0..1 | XR table | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:HolderName` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:CardholderName` |
 | BG-19 | DIRECT DEBIT | `payment_instructions.direct_debit` | 0..1 | XR table | Group | `/Invoice/cac:PaymentMeans/cac:PaymentMandate` | `STL (ram:ApplicableHeaderTradeSettlement)` |
 | BT-89 | Mandate reference identifier | `payment_instructions.direct_debit.mandate_reference_identifier` | 0..1 | XR 1 (BR-DE-29, XR changelog 2.3.0) | Identifier | `/Invoice/cac:PaymentMeans/cac:PaymentMandate/cbc:ID` | `STL/ram:SpecifiedTradePaymentTerms/ram:DirectDebitMandateID` |
@@ -209,7 +209,7 @@ is unbounded.
 | BT-122 | Supporting document reference | `additional_supporting_documents[].reference` | 1 | CEN BR-52 | Document Reference | `/Invoice/cac:AdditionalDocumentReference/cbc:ID` | `AGR/ram:AdditionalReferencedDocument/ram:IssuerAssignedID[following-sibling::ram:TypeCode='916']` |
 | BT-123 | Supporting document description | `additional_supporting_documents[].description` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cbc:DocumentDescription` | `AGR/ram:AdditionalReferencedDocument/ram:Name` |
 | BT-124 | External document location | `additional_supporting_documents[].external_location` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cac:ExternalReference/cbc:URI` | `AGR/ram:AdditionalReferencedDocument/ram:URIID` |
-| BT-125 | Attached document | `additional_supporting_documents[].attached_document` | 0..1 | XR table; decision D3 | Binary Object | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cbc:EmbeddedDocumentBinaryObject` | `AGR/ram:AdditionalReferencedDocument/ram:AttachmentBinaryObject` |
+| BT-125 | Attached document | `additional_supporting_documents[].attached_document` | 0..1 | XR table; decision M3 | Binary Object | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cbc:EmbeddedDocumentBinaryObject` | `AGR/ram:AdditionalReferencedDocument/ram:AttachmentBinaryObject` |
 | BG-22 | DOCUMENT TOTALS | `totals` | 1 | UBL XSD cac:LegalMonetaryTotal minOccurs=1 (UBL-Invoice-2.1.xsd:921); CII: BR-CO-15 (fatal, $Invoice context) | Group | `/Invoice/cac:LegalMonetaryTotal` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation` |
 | BT-106 | Sum of Invoice line net amount | `totals.sum_of_line_net_amounts` | 1 | CEN BR-12 | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:LineTotalAmount` |
 | BT-107 | Sum of allowances on document level | `totals.sum_of_allowances` | 0..1 | XR table | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:AllowanceTotalAmount` |
@@ -299,12 +299,12 @@ Where XR and a syntax disagree and no CEN rule decides, the model takes the most
 valid option, so it never refuses an invoice the official CEN Schematron accepts (D8). The stricter
 syntax's writer reports the gap.
 
-* **D1 · BT-22 Invoice note is optional in BG-1.** XR gives `1`, but no CEN rule requires it and the CII
+* **M1 · BT-22 Invoice note is optional in BG-1.** XR gives `1`, but no CEN rule requires it and the CII
   XSD allows `ram:IncludedNote` with only a `ram:SubjectCode`.
-* **D2 · BT-87 Payment card primary account number is optional in BG-18.** XR gives `1` and the UBL XSD
+* **M2 · BT-87 Payment card primary account number is optional in BG-18.** XR gives `1` and the UBL XSD
   requires `cbc:PrimaryAccountNumberID`, but no CEN rule requires it and the CII XSD makes
   `ram:ApplicableTradeSettlementFinancialCard/ram:ID` optional. The UBL writer must report its absence.
-* **D3 · BT-125 mime code and filename are optional.** XR gives both `1` and UBL enforces them
+* **M3 · BT-125 mime code and filename are optional.** XR gives both `1` and UBL enforces them
   (UBL-DT-06/07, fatal), but the CEN CII rules and the CII XSD do not. The UBL writer must report their
   absence.
 * **BT-21 in UBL** is bound by CEN UBL BR-CL-08 (`UBL/EN16931-UBL-model.sch`, fatal, context

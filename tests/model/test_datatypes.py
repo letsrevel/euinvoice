@@ -112,11 +112,32 @@ class TestDate:
         assert _Holder(date="2026-02-01").date == datetime.date(2026, 2, 1)  # type: ignore[arg-type]  # lax on purpose
 
     @pytest.mark.parametrize(
-        "value", [datetime.datetime(2026, 2, 1, 12, 30), datetime.datetime(2026, 2, 1), 0, 1.5, True]
+        "value",
+        [
+            datetime.datetime(2026, 2, 1, 12, 30),
+            datetime.datetime(2026, 2, 1),
+            0,
+            1.5,
+            True,
+            "0",
+            "86400",
+            "1767225600",
+            "1767225600.0",
+            "20260101",
+            "2026-01-01T00:00:00",
+            "2026-01-01T00:00:00+05:00",
+            " 2026-01-01",
+        ],
     )
     def test_datetimes_and_numbers_are_refused(self, value: object) -> None:
         with pytest.raises(pydantic.ValidationError, match=r"expected a datetime\.date"):
             _Holder(date=value)  # type: ignore[arg-type]  # refusing these is the point
+
+    def test_json_timestamp_is_refused(self) -> None:
+        with pytest.raises(pydantic.ValidationError, match=r"expected a datetime\.date"):
+            _Holder.model_validate_json('{"date": "1767225600"}')
+        with pytest.raises(pydantic.ValidationError, match=r"expected a datetime\.date"):
+            _Holder.model_validate({"date": "1767225600"})
 
     def test_json_uses_iso_dates(self) -> None:
         assert _Holder.model_validate_json('{"date": "2026-02-01"}').date == datetime.date(2026, 2, 1)

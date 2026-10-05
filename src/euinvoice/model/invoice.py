@@ -70,7 +70,9 @@ class PrecedingInvoiceReference(EuInvoiceModel):
 class _InvoiceBody(EuInvoiceModel):
     """The fields the invoice shares with its draft: everything except BG-22, BG-23 and BG-25.
 
-    Fields follow the order of EN 16931-1 as restated in the XRechnung 3.0.2 specification §11.1.
+    Fields follow the order of EN 16931-1 as restated in the XRechnung 3.0.2 specification §11.1;
+    :class:`Invoice` appends BG-22, BG-23 and BG-25 after them, and :class:`InvoiceLine` appends BT-131
+    last. Field order carries no meaning: writers follow the XSD sequence, not the model's order.
     """
 
     number: t.Annotated[NonBlankText, bt("BT-1")]

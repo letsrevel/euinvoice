@@ -29,7 +29,7 @@ class PaymentCardInformation(EuInvoiceModel):
     """PAYMENT CARD INFORMATION (BG-18).
 
     The primary account number is optional here although the XRechnung and Peppol tables give it
-    cardinality 1: no CEN rule requires it and the CII XSD makes it optional (see "Open questions" in
+    cardinality 1: no CEN rule requires it and the CII XSD makes it optional (see "Decisions" (M2) in
     ``docs/reference/bt-mapping.md``). BR-51 (at most the first 6 and last 4 digits) is a warning in UBL
     and is left to the Schematron.
     """
