@@ -17,8 +17,7 @@ CII_ROOT = f"{{{_xml.CII_RSM}}}CrossIndustryInvoice"
 GUIDELINE = "string(rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID)"
 # ZUGFeRD corpus guideline ids (BT-24) of the EN 16931 and XRechnung CII profiles, which use the D16B
 # schema. The other Factur-X levels have their own per-profile XSDs (not pinned yet, needs-human #42),
-# which are stricter: a MINIMUM / BASIC document with elements its profile forbids still passes the D16B
-# schema, so asserting them here would only prove a false accept.
+# which may be stricter (unverified, #42), so asserting them against D16B could hide a false accept.
 EN16931 = "urn:cen.eu:en16931:2017"
 XRECHNUNG_PREFIX = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_"
 XRECHNUNG_1_2 = "urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_1.2"
