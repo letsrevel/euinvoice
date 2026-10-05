@@ -120,6 +120,9 @@ def get_json(url: str) -> t.Any:
     try:
         with _OPENER.open(request, timeout=_TIMEOUT_S) as response:
             return json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        exc.close()  # an HTTPError holds the response body; release it (ResourceWarning otherwise)
+        raise UpstreamError(f"GET {url} failed: {exc}") from exc
     except (urllib.error.URLError, OSError, ValueError) as exc:
         raise UpstreamError(f"GET {url} failed: {exc}") from exc
 
