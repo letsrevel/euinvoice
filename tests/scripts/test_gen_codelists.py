@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from euinvoice.errors import ParseError
-
 import gen_codelists as gen
+from euinvoice.errors import ParseError
 
 SCH_NS = 'xmlns="http://purl.oclc.org/dsdl/schematron"'
 

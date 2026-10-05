@@ -24,7 +24,7 @@ import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 
-from euinvoice import _xml
+from euinvoice import _xml  # ruff: ignore[import-private-name] - the one hardened parser (D10), also for dev scripts
 from euinvoice.validate import artifacts
 
 Syntax = t.Literal["ubl", "cii"]
