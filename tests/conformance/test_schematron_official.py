@@ -156,6 +156,10 @@ def check_vefa_test(test: etree._Element, rule_set: schematron.RuleSet) -> list[
     """
     document = next(c for c in test if isinstance(c.tag, str) and not c.tag.startswith(VEFA))
     findings = schematron.run(rule_set, document)
+    # A run-time error replaces every other finding, which would make the <success> checks vacuous.
+    runtime = [f.message for f in findings if f.rule_id == schematron.RUNTIME_ERROR_RULE_ID]
+    if runtime:
+        return [f"stylesheet could not evaluate the test document: {runtime[0]}"]
     fired = collections.Counter((f.rule_id, f.severity) for f in findings)
     misses = []
     for kind, rule, number in expectations(test):

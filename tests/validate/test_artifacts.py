@@ -318,7 +318,12 @@ def test_schematron_with_a_doctype_is_refused_before_saxon(tmp_path: Path, net: 
 
 @pytest.mark.parametrize(
     "element",
-    ['<include href="other.sch"/>', '<pattern><rule context="/"><extends href="rules.sch"/></rule></pattern>'],
+    [
+        '<include href="other.sch"/>',
+        '<pattern><rule context="/"><extends href="rules.sch"/></rule></pattern>',
+        '<pattern documents="\'codes.xml\'"><rule context="/"/></pattern>',
+        '<pattern abstract="true" id="p" documents="\'codes.xml\'"/>',
+    ],
 )
 def test_schematron_that_pulls_in_other_files_is_refused(tmp_path: Path, net: FakeNet, element: str) -> None:
     # Without a base URI SchXslt would resolve the href against the current directory.

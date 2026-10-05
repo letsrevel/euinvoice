@@ -424,16 +424,23 @@ def _standalone_schematron(source: Source, rel: str, data: bytes) -> etree._Elem
     """Parse a ``.sch`` and refuse it if it pulls in other files.
 
     The schema reaches SchXslt as text without a base URI, so a reference to another file would be
-    resolved against the current directory instead of the artifact. The elements SchXslt loads files
-    for are ``sch:include`` and ``sch:extends[@href]`` (SchXslt 1.10.1 ``2.0/include.xsl``, template
-    ``match="sch:include | sch:extends[@href]"``); ``sch:extends[@rule]`` is an in-schema reference.
+    resolved against the current directory instead of the artifact. SchXslt 1.10.1 follows three:
+
+    * ``sch:include`` and ``sch:extends[@href]``, loaded at compile time (``2.0/include.xsl``, template
+      ``match="sch:include | sch:extends[@href]"``); ``sch:extends[@rule]`` is an in-schema reference.
+    * ``sch:pattern[@documents]``, loaded at validation time: the generated XSLT runs
+      ``source-document href="{resolve-uri(., $base-uri)}"`` (``2.0/compile/compile-2.0.xsl``,
+      ``xsl:when test="@documents"``). Abstract patterns pass ``@documents`` on to their instances
+      (``2.0/expand.xsl``), so every pattern is checked.
     """
     root = _xml.parse(data)
     sch = f"{{{_xml.SCHEMATRON}}}"
-    for element in root.iter(f"{sch}include", f"{sch}extends"):
-        if element.tag == f"{sch}include" or element.get("href") is not None:
+    for element in root.iter(f"{sch}include", f"{sch}extends", f"{sch}pattern"):
+        name = etree.QName(element).localname
+        target = element.get("documents") if name == "pattern" else element.get("href")
+        if name == "include" or target is not None:
             raise ArtifactIntegrityError(
-                f"{source.name}: {rel} pulls in another file ({etree.QName(element).localname}"
-                f" href={element.get('href')!r}), which the precompile cannot resolve without a base URI"
+                f"{source.name}: {rel} pulls in another file (sch:{name} {target!r}), "
+                "which cannot be resolved without a base URI"
             )
     return root
