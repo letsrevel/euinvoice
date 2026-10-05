@@ -1,4 +1,4 @@
-"""Shared helpers of the conformance tests."""
+"""Shared helpers of the XSD conformance tests."""
 
 from euinvoice.validate.report import Finding, Severity
 

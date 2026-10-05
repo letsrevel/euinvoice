@@ -3,7 +3,7 @@
 import typing as t
 
 import pytest
-from conftest import assert_located_xsd_fatal
+from _xsd_helpers import assert_located_xsd_fatal
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError
