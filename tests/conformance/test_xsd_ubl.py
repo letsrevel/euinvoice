@@ -74,5 +74,5 @@ def test_mutated_example_fails_with_a_located_error(original: bytes, mutated: by
     first = findings[0]
     assert (first.rule_id, first.severity, first.source) == ("XSD", Severity.FATAL, "xsd:ubl-2_1")
     # The first element of the mutation is where the schema stops accepting the document.
-    assert first.location == f"{line_of(data, mutated)}:0 {path}"
+    assert first.location == f"{line_of(data, mutated)} {path}"
     assert message in first.message

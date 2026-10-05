@@ -77,7 +77,7 @@ def test_unknown_element_becomes_a_located_fatal_xsd_finding() -> None:
     assert finding.rule_id == "XSD"
     assert finding.severity is Severity.FATAL
     assert finding.source == "xsd:ubl-2_1"
-    assert finding.location == "3:0 /*/cbc:Bogus"  # line 3; libxml2 tracks no column while validating
+    assert finding.location == "3 /*/cbc:Bogus"
     assert "Bogus" in finding.message
     assert "This element is not expected" in finding.message
 
@@ -88,7 +88,7 @@ def test_every_error_is_reported_in_document_order() -> None:
 
     findings = xsd.validate(_xml.parse(data))
 
-    assert [f.location for f in findings] == ["2:0 /*/cbc:ID", "3:0 /*/cbc:IssueDate"]
+    assert [f.location for f in findings] == ["2 /*/cbc:ID", "3 /*/cbc:IssueDate"]
     assert "'31.01.2026' is not a valid value of the atomic type 'xs:date'" in findings[1].message
 
 
@@ -159,18 +159,13 @@ def spy_on_schema_loads(monkeypatch: pytest.MonkeyPatch) -> list[pathlib.Path]:
     return calls
 
 
-def test_compiled_schema_is_cached_per_path_and_fingerprint(
-    cache: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_schema_is_compiled_once_across_calls(cache: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = spy_on_schema_loads(monkeypatch)
 
     xsd.validate(_xml.parse(VALID_INVOICE))
     xsd.validate(_xml.parse(VALID_INVOICE))
-    assert calls == [cache / "xsd/maindoc/UBL-Invoice-2.1.xsd"]
 
-    path, root = cache / "xsd/maindoc/UBL-Invoice-2.1.xsd", cache / "xsd"
-    assert xsd._compiled(path, root, "other recipe") is not xsd._compiled(path, root, "another recipe")
-    assert len(calls) == 3
+    assert calls == [cache / "xsd/maindoc/UBL-Invoice-2.1.xsd"]
 
 
 @pytest.mark.usefixtures("cache")
@@ -185,19 +180,30 @@ def test_concurrent_validations_keep_their_own_findings() -> None:
         if data == VALID_INVOICE:
             assert findings == ()
         else:
-            assert [f.location for f in findings] == ["3:0 /*/cbc:IssueDate"]
+            assert [f.location for f in findings] == ["3 /*/cbc:IssueDate"]
             assert all(isinstance(f, Finding) for f in findings)
 
 
 @dataclasses.dataclass
 class FakeLogEntry:
     line: int
-    column: int
     path: str | None
     message: str
+    level_name: str = "ERROR"
 
 
-def test_entry_without_element_path_is_located_by_line_and_column_only() -> None:
-    finding = xsd._finding(FakeLogEntry(7, 3, None, "boom"), "xsd:ubl-2_1")
+def test_entry_without_element_path_is_located_by_line_only() -> None:
+    finding = xsd._finding(FakeLogEntry(7, None, "boom"), "xsd:ubl-2_1")
 
-    assert finding == Finding("XSD", Severity.FATAL, "7:3", "boom", "xsd:ubl-2_1")
+    assert finding == Finding("XSD", Severity.FATAL, "7", "boom", "xsd:ubl-2_1")
+
+
+@pytest.mark.parametrize(
+    ("level_name", "severity"),
+    [("WARNING", Severity.WARNING), ("ERROR", Severity.FATAL), ("FATAL", Severity.FATAL)],
+)
+def test_libxml2_warnings_stay_warnings_and_everything_else_is_fatal(level_name: str, severity: Severity) -> None:
+    # KoSIT default-report.xsl, template in:xmlSyntaxError: SEVERITY_WARNING -> warning, else error.
+    finding = xsd._finding(FakeLogEntry(7, "/*/cbc:ID", "boom", level_name), "xsd:ubl-2_1")
+
+    assert finding.severity is severity

@@ -7,11 +7,12 @@ scenarios: ``resources/ubl/2.1/xsd/maindoc/UBL-{Invoice,CreditNote}-2.1.xsd`` in
 CII support is added by extending :data:`_SCHEMAS`.
 
 Every schema-validity error becomes a :class:`~euinvoice.validate.report.Finding` with rule id ``XSD``
-and severity ``fatal``: a document that is not schema-valid cannot be processed further, and the
-official validators reject it. The KoSIT validator's report stylesheet
-(``resources/default-report.xsl`` of ``xrechnung-validator-configuration``, template
-``in:xmlSyntaxError``) reports every XSD error at level ``error``, the level it also gives Schematron
-``fatal`` flags, and any such message makes the XSD step, and so the whole report, invalid.
+and severity ``fatal``, located by line number and element path: a document that is not schema-valid
+cannot be processed further, and the official validators reject it. The KoSIT validator's report
+stylesheet (``resources/default-report.xsl`` of ``xrechnung-validator-configuration``, template
+``in:xmlSyntaxError``) reports every XSD message at level ``error``, the level it also gives Schematron
+``fatal`` flags, and any such message makes the XSD step, and so the whole report, invalid. The same
+template keeps ``SEVERITY_WARNING`` messages as ``warning``, so libxml2 warnings stay warnings here.
 
 Thread safety: compiled schemas are cached per process and shared between threads. An lxml
 ``XMLSchema`` keeps its error log on the object, so concurrent ``validate()`` calls on one schema mix
@@ -71,12 +72,12 @@ class _LogEntry(t.Protocol):
     """The fields of an lxml ``_LogEntry`` used here (lxml-stubs leave ``_ErrorLog`` untyped)."""
 
     line: int
-    column: int
     path: str | None
     message: str
+    level_name: str
 
 
-_cache: dict[tuple[pathlib.Path, str], _Compiled] = {}
+_cache: dict[pathlib.Path, _Compiled] = {}
 _cache_lock = threading.Lock()
 
 
@@ -87,8 +88,8 @@ def validate(element: etree._Element) -> tuple[Finding, ...]:
         element: The document's root element, as returned by ``euinvoice._xml.parse``.
 
     Returns:
-        One ``XSD`` finding (severity ``fatal``) per schema-validity error, in document order; empty
-        when the document is schema-valid.
+        One ``XSD`` finding per schema-validity error (severity ``fatal``, or ``warning`` for a libxml2
+        warning), in document order; empty when the document is schema-valid.
 
     Raises:
         UnsupportedDocumentError: No schema is known for the root element's namespace.
@@ -101,8 +102,7 @@ def validate(element: etree._Element) -> tuple[Finding, ...]:
             f"no XML Schema for root element {element.tag!r}; supported namespaces: {', '.join(_SCHEMAS)}"
         )
     directory = artifacts.source_dir(spec.source)
-    fingerprint = (directory / artifacts.MARKER).read_text(encoding="ascii").strip()
-    compiled = _compiled(directory / spec.path, directory / spec.root, fingerprint)
+    compiled = _compiled(directory / spec.path, directory / spec.root)
     with compiled.lock:
         compiled.schema.validate(element)
         # lxml-stubs declare _ErrorLog as an empty class; at runtime it iterates _LogEntry objects.
@@ -110,27 +110,27 @@ def validate(element: etree._Element) -> tuple[Finding, ...]:
     return tuple(_finding(error, f"xsd:{spec.source}") for error in errors)
 
 
-def _compiled(path: pathlib.Path, root: pathlib.Path, fingerprint: str) -> _Compiled:
+def _compiled(path: pathlib.Path, root: pathlib.Path) -> _Compiled:
     """Return the compiled schema for ``path``, compiling it on first use.
 
-    Keyed by path and the cache entry's fingerprint, so a re-fetch with another recipe recompiles.
+    Keyed by path alone: the path contains the pinned version, and ``artifacts.source_dir`` rejects an
+    entry fetched with another recipe, so the file behind a path cannot change within a process.
     """
-    key = (path, fingerprint)
     with _cache_lock:  # held while compiling, so concurrent first calls compile only once
-        compiled = _cache.get(key)
+        compiled = _cache.get(path)
         if compiled is None:
             compiled = _Compiled(_xml.load_trusted_schema(path, root=root), threading.Lock())
-            _cache[key] = compiled
+            _cache[path] = compiled
     return compiled
 
 
 def _finding(error: _LogEntry, source: str) -> Finding:
-    """Turn one libxml2 schema-validity error into a fatal ``XSD`` finding.
+    """Turn one libxml2 schema-validity message into an ``XSD`` finding.
 
-    The location is ``line:column`` followed by the element path when libxml2 gives one. libxml2 does
-    not track columns while validating, so the column is usually ``0`` (unknown).
+    Warnings stay ``warning`` and everything else is ``fatal`` (KoSIT ``default-report.xsl``, template
+    ``in:xmlSyntaxError``). The location is the line number followed by the element path when libxml2
+    gives one. There is no column: libxml2 does not track columns while validating a parsed tree.
     """
-    location = f"{error.line}:{error.column}"
-    if error.path:
-        location = f"{location} {error.path}"
-    return Finding(rule_id=RULE_ID, severity=Severity.FATAL, location=location, message=error.message, source=source)
+    severity = Severity.WARNING if error.level_name == "WARNING" else Severity.FATAL
+    location = f"{error.line} {error.path}" if error.path else str(error.line)
+    return Finding(rule_id=RULE_ID, severity=severity, location=location, message=error.message, source=source)

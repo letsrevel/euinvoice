@@ -31,7 +31,7 @@ class Finding:
         rule_id: The official rule id (e.g. ``BR-02``, ``PEPPOL-EN16931-R001``, ``BR-DE-15``), or
             ``XSD`` for a schema-validity error.
         severity: How serious the finding is; ``fatal`` and ``error`` make the report not ok.
-        location: Where the problem is (an XPath for Schematron, ``line:column`` for XSD), if known.
+        location: Where the problem is (an XPath for Schematron, the line number and element path for XSD), if known.
         message: The rule's human-readable text.
         source: The rule set that produced it, as the manifest source name plus what ran
             (e.g. ``cen-ubl``, ``peppol-bis``, ``xsd:ubl-2_1``).
