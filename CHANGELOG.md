@@ -16,6 +16,14 @@ All notable changes to this project are documented here. The format follows
   `xs:decimal` strings (never exponent notation) that reload exactly.
 - Model foundations: models are immutable, hashable and reject unknown fields, and every field
   carries its EN 16931 BT/BG id in its JSON schema.
+- The full EN 16931 semantic model, `euinvoice.model.Invoice` (one model for invoices and credit
+  notes): all 32 business groups and 164 business terms, with cardinalities taken from the official
+  rules (a term is required only where a fatal CEN rule requires it), codes checked against the CEN
+  code lists (BR-CL-*), identifier schemes (ICD, EAS, UNTDID 1153/7143), binary attachments, and
+  sign and reason rules BR-27/28, BR-33/38/42/44. `euinvoice.model.bt_index` maps every BT/BG id to
+  its model path and back. `docs/reference/bt-mapping.md` lists every id with its UBL and CII XPath
+  and the source of each fact. `InvoiceDraft` / `LineDraft` share every field with `Invoice` /
+  `InvoiceLine` except the derived BG-22, BG-23 and BT-131 (the input of `calc`).
 - Artifact manifest (`euinvoice/validate/manifest.toml`) pinning the official validation artifacts and
   corpora by URL + sha256: CEN EN 16931 1.3.16 (UBL, CII), Peppol BIS Billing 3.0.21, XRechnung
   Schematron 2.6.0, XRechnung test suite and KoSIT validator configuration 2026-08-31 (incl. the CII
