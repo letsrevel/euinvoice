@@ -55,4 +55,4 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
-  files (`sch:include`, `sch:extends[@href]`) is refused.
+  files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.
