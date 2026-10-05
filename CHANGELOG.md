@@ -36,6 +36,10 @@ All notable changes to this project are documented here. The format follows
   UBL/CII differences kept apart (UBL Invoice vs CreditNote type codes, VAT point date code lists,
   country lists, UBL-only `SEPA` scheme). Hand-written `VatCategory` (UNTDID 5305 as restricted by
   BR-CL-17/18) and `DocumentType` (named UNTDID 1001 subset) enums.
+- `euinvoice.model.codes.UNTDID_4451_NOTE_SUBJECT_UBL`: the UBL note subject codes of BR-CL-08 (383
+  codes), which CEN 1.3.16 binds in the UBL model Schematron rather than the codes file. The generator
+  now also reads the BR-CL params of `schematron/{UBL,CII}/EN16931-*-model.sch`. The list is a strict
+  subset of the CII list `UNTDID_4451_TEXT_SUBJECT` (401 codes), which the syntax-neutral model accepts.
 - `euinvoice.validate.xsd.validate()`: UBL 2.1 `Invoice` / `CreditNote` XSD validation against the
   pinned OASIS UBL 2.1 schemas. Each schema error becomes a fatal `XSD` finding located by
   line and element path (libxml2 warnings stay warnings); compiled schemas are cached per process and safe to share across

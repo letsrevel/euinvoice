@@ -17,7 +17,7 @@ def test_every_generated_list_is_exported_and_a_non_empty_frozenset_of_clean_cod
 
     assert set(lists) <= set(codes.__all__)
     assert set(codes.__all__) - set(lists) == {"ISO_3166_1_COUNTRY", "DocumentType", "VatCategory"}
-    assert len(lists) == 21
+    assert len(lists) == 22
     for name, value in lists.items():
         assert isinstance(value, frozenset), name
         assert value, name
@@ -84,3 +84,12 @@ def test_vat_point_date_codes_are_different_code_lists_per_syntax() -> None:
 )
 def test_lists_contain_well_known_codes(name: str, samples: set[str]) -> None:
     assert samples <= t.cast(frozenset[str], getattr(codes, name))
+
+
+def test_note_subject_ubl_list_is_a_strict_subset_of_the_cii_list() -> None:
+    # CEN 1.3.16: UBL BR-CL-08 (schematron/UBL/EN16931-UBL-model.sch) has 383 UNTDID 4451 codes, CII
+    # BR-CL-08 (schematron/codelist/EN16931-CII-codes.sch) 401. The model accepts the CII superset (D8).
+    ubl, cii = codes.UNTDID_4451_NOTE_SUBJECT_UBL, codes.UNTDID_4451_TEXT_SUBJECT
+
+    assert (len(ubl), len(cii)) == (383, 401)
+    assert ubl < cii

@@ -108,6 +108,50 @@ def test_render_tells_callers_to_upper_case_for_case_insensitive_lists() -> None
     assert "match `code.strip().upper()`" in source
 
 
+# Shape of the CEN 1.3.16 UBL *model* file (schematron/UBL/EN16931-UBL-model.sch): abstract-pattern params.
+# BR-CL-08 binds UNTDID 4451 to the `#CODE#` prefix of cbc:Note (line 181); BR-CO-09 holds a list too,
+# but it is a business rule, not a BR-CL code list, so it is ignored.
+UBL_BR_CL_08 = (
+    "(contains(.,'#') and string-length(substring-before(substring-after(.,'#'),'#'))=3 and ( ( "
+    "contains(' AAA AAB ',substring-before(substring-after(.,'#'),'#') ) ) )) or not(contains(.,'#'))"
+)
+SYNTHETIC_UBL_MODEL = f"""<?xml version="1.0" encoding="UTF-8"?>
+<pattern {SCH_NS} is-a="model" id="UBL-model">
+  <param name="BR-01" value="normalize-space(cbc:CustomizationID) != ''"/>
+  <param name="BR-CO-09" value="contains(' 1A AD ', substring(cbc:CompanyID, 1, 2))"/>
+  <param name="BR-CL-08" value="{UBL_BR_CL_08}"/>
+  <param name="Note" value="/ubl:Invoice/cbc:Note | /cn:CreditNote/cbc:Note"/>
+</pattern>
+"""
+
+
+def test_extract_model_reads_only_the_br_cl_params() -> None:
+    assert gen.extract_model(SYNTHETIC_UBL_MODEL.encode()) == {"BR-CL-08": gen.Assert((("AAA", "AAB"),))}
+
+
+def test_extract_model_rejects_a_br_cl_param_without_a_recognised_code_list() -> None:
+    sch = f"<pattern {SCH_NS}><param name='BR-CL-99' value=\"string-length(.) = 3\"/></pattern>"
+    with pytest.raises(gen.GenerationError, match="BR-CL-99: no code list"):
+        gen.extract_model(sch.encode())
+
+
+def test_extract_model_rejects_a_code_list_in_an_unacknowledged_non_br_cl_param() -> None:
+    sch = f"<pattern {SCH_NS}><param name='BR-CO-99' value=\"contains(' A B ', substring(., 1, 1))\"/></pattern>"
+    with pytest.raises(gen.GenerationError, match="BR-CO-99: a code list outside a BR-CL param"):
+        gen.extract_model(sch.encode())
+
+
+def test_extract_model_rejects_a_br_cl_param_without_value() -> None:
+    with pytest.raises(gen.GenerationError, match="BR-CL-98: no code list"):
+        gen.extract_model(f"<pattern {SCH_NS}><param name='BR-CL-98'/></pattern>".encode())
+
+
+def test_extract_model_rejects_duplicate_param_names() -> None:
+    param = "<param name='BR-CL-08' value=\"contains(' A ', .)\"/>"
+    with pytest.raises(gen.GenerationError, match="BR-CL-08 twice"):
+        gen.extract_model(f"<pattern {SCH_NS}>{param}{param}</pattern>".encode())
+
+
 def test_extract_rejects_an_assert_without_a_recognised_code_list() -> None:
     sch = f"<pattern {SCH_NS}><rule context='x'><assert id='BR-CL-99' test=\"string-length(.) = 3\"/></rule></pattern>"
     with pytest.raises(gen.GenerationError, match="BR-CL-99"):
@@ -224,18 +268,60 @@ def test_render_refuses_to_exceed_the_file_length_limit() -> None:
         gen.render({"BIG": codes}, table, (), max_lines=30)
 
 
+# Like the CEN 1.3.16 CII model file: params, none of them a BR-CL rule.
+SYNTHETIC_CII_MODEL = f"""<?xml version="1.0" encoding="UTF-8"?>
+<pattern {SCH_NS} is-a="EN16931" id="EN16931-CII-Model">
+  <param name="BR-02" value="normalize-space(rsm:ExchangedDocument/ram:ID) != ''"/>
+</pattern>
+"""
+
+
+def _write_inputs(tmp_path: Path, ubl_model: str) -> tuple[gen.Input, ...]:
+    (tmp_path / "ubl.sch").write_text(SYNTHETIC_UBL, encoding="utf-8")
+    (tmp_path / "ubl-model.sch").write_text(ubl_model, encoding="utf-8")
+    (tmp_path / "cii.sch").write_text(SYNTHETIC_CII, encoding="iso-8859-1")
+    (tmp_path / "cii-model.sch").write_text(SYNTHETIC_CII_MODEL, encoding="utf-8")
+    return (
+        gen.Input("ubl", "cen-ubl", "9.9", tmp_path, "ubl.sch", gen.extract),
+        gen.Input("ubl", "cen-ubl", "9.9", tmp_path, "ubl-model.sch", gen.extract_model),
+        gen.Input("cii", "cen-cii", "9.9", tmp_path, "cii.sch", gen.extract),
+        gen.Input("cii", "cen-cii", "9.9", tmp_path, "cii-model.sch", gen.extract_model),
+    )
+
+
+NOTE_UBL = gen.CodeList("NOTE_UBL", "UBL note subjects.", (gen.Ref("ubl", "BR-CL-08"),))
+
+
 def test_main_writes_the_rendered_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ubl, cii = tmp_path / "ubl.sch", tmp_path / "cii.sch"
-    ubl.write_text(SYNTHETIC_UBL, encoding="utf-8")
-    cii.write_text(SYNTHETIC_CII, encoding="iso-8859-1")
     out = tmp_path / "out.py"
-    monkeypatch.setattr(gen, "TABLE", TABLE)
-    inputs = {
-        "ubl": gen.Input("cen-ubl", "9.9", tmp_path, "ubl.sch"),
-        "cii": gen.Input("cen-cii", "9.9", tmp_path, "cii.sch"),
-    }
+    monkeypatch.setattr(gen, "TABLE", (*TABLE, NOTE_UBL))
+    inputs = _write_inputs(tmp_path, SYNTHETIC_UBL_MODEL)
     monkeypatch.setattr(gen, "inputs", lambda: inputs)
 
     assert gen.main(["--output", str(out)]) == 0
-    assert out.read_text(encoding="utf-8") == gen.generate()
-    assert "#   cen-cii 9.9 cii.sch\n" in out.read_text(encoding="utf-8")
+    written = out.read_text(encoding="utf-8")
+    assert written == gen.generate()
+    assert "#   cen-cii 9.9 cii.sch\n" in written
+    assert "#   cen-ubl 9.9 ubl-model.sch\n" in written
+    assert "#   cen-cii 9.9 cii-model.sch\n" in written
+    assert 'NOTE_UBL: t.Final[frozenset[str]] = frozenset({\n    "AAA", "AAB",\n})' in written
+
+
+def test_generate_fails_on_an_unclaimed_model_code_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gen, "TABLE", TABLE)
+    inputs = _write_inputs(tmp_path, SYNTHETIC_UBL_MODEL)
+    monkeypatch.setattr(gen, "inputs", lambda: inputs)
+
+    with pytest.raises(gen.GenerationError, match=r"unmapped code lists: ubl BR-CL-08$"):
+        gen.generate()
+
+
+def test_generate_rejects_a_rule_in_both_the_codes_and_the_model_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clash = f"<pattern {SCH_NS}><param name='BR-CL-04' value=\"contains(' EUR ', .)\"/></pattern>"
+    inputs = _write_inputs(tmp_path, clash)
+    monkeypatch.setattr(gen, "inputs", lambda: inputs)
+
+    with pytest.raises(gen.GenerationError, match=r"ubl BR-CL-04 in both ubl\.sch and ubl-model\.sch"):
+        gen.generate()

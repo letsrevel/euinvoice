@@ -1,20 +1,30 @@
-"""Generate ``src/euinvoice/model/codes/_generated.py`` from the pinned CEN code-list Schematron.
+"""Generate ``src/euinvoice/model/codes/_generated.py`` from the pinned CEN code-list and model Schematron.
 
-Run with ``make codelists`` (needs ``make artifacts``). The inputs are the BR-CL-* asserts of
-``schematron/codelist/EN16931-UBL-codes.sch`` (source ``cen-ubl``) and
-``schematron/codelist/EN16931-CII-codes.sch`` (source ``cen-cii``) of the pinned CEN release. They
-encode each code list in one of two shapes, both handled by :func:`extract`:
+Run with ``make codelists`` (needs ``make artifacts``). The inputs of the pinned CEN release are:
+
+* the BR-CL-* asserts of ``schematron/codelist/EN16931-UBL-codes.sch`` (source ``cen-ubl``) and
+  ``schematron/codelist/EN16931-CII-codes.sch`` (source ``cen-cii``), read by :func:`extract`;
+* the BR-CL-* params of the syntax binding files ``schematron/UBL/EN16931-UBL-model.sch`` and
+  ``schematron/CII/EN16931-CII-model.sch``, read by :func:`extract_model`. Some code lists are bound
+  there instead: in CEN 1.3.16, UBL BR-CL-08 (note subject codes; asserted by
+  ``schematron/abstract/EN16931-model.sch``). The CII model file has no BR-CL param, and the
+  ``*-syntax.sch`` files hold no code list.
+
+Both encode each code list in one of two shapes:
 
 * ``contains(' A B C ', concat(' ', normalize-space(.), ' '))``: a space-separated list literal. One
   assert may hold several (UBL BR-CL-01 has one list per root element, UBL BR-CL-10 adds ``SEPA``);
 * ``@mimeCode = 'a' or @mimeCode = 'b'``: equality tests (BR-CL-24).
+
+Lists in model params that are not BR-CL rules (e.g. the BR-CO-09 VAT identifier prefixes) are not
+code lists and are skipped.
 
 ``contains`` lists are matched against ``normalize-space(...)`` of the value (BR-CL-24 compares the
 attribute as is). BR-CL-22 also upper-cases it
 (``normalize-space(upper-case(.))``); :func:`extract` records any ``upper-case(`` / ``lower-case(`` and
 :func:`build` fails unless the table entry acknowledges it (``case_insensitive=True``).
 
-:data:`TABLE` names every list. :func:`build` fails unless every list of every assert is claimed by
+:data:`TABLE` names every list. :func:`build` fails unless every list of every rule is claimed by
 exactly one entry and every list an entry claims is identical, so a new or changed upstream list stops
 the generator instead of slipping through. Where the UBL and CII files differ, the entry is split by
 syntax and the title says how they differ.
@@ -51,7 +61,7 @@ RuleLists = dict[str, Assert]
 
 SCH = "{http://purl.oclc.org/dsdl/schematron}"
 LINE_LIMIT = 100
-# scripts/check-file-length.sh limit. ponytail: the generated module is ~510 lines with CEN 1.3.16. If a
+# scripts/check-file-length.sh limit. ponytail: the generated module is ~550 lines with CEN 1.3.16. If a
 # pin bump crosses this, render() fails; then emit UNECE_REC20_REC21_UNIT (the biggest list, ~150
 # lines) into its own generated module (e.g. codes/_generated_units.py) and re-export it.
 MAX_LINES = 600
@@ -62,6 +72,9 @@ DEFAULT_OUTPUT = REPO / "src" / "euinvoice" / "model" / "codes" / "_generated.py
 _CONTAINS = re.compile(r"contains\(\s*'([^']*)'")
 _EQUALS = re.compile(r"@[\w:-]+\s*=\s*'([^']*)'")
 _CASE_FOLD = re.compile(r"\b(?:upper|lower)-case\(")
+# Model params that hold a multi-code list but are not code lists. BR-CO-09: the VAT identifier prefixes
+# (BT-31, BT-48, BT-63) of a business rule, not a BR-CL rule (abstract/EN16931-model.sch, CEN 1.3.16).
+_NOT_CODE_LISTS: t.Final[frozenset[str]] = frozenset({"BR-CO-09"})
 
 
 class GenerationError(Exception):
@@ -116,12 +129,14 @@ class Provenance:
 
 
 class Input(t.NamedTuple):
-    """One code-list Schematron in the artifact cache."""
+    """One Schematron file in the artifact cache and the function that reads its code lists."""
 
+    syntax: Syntax
     source: artifacts.SourceName
     version: str
     root: Path
     member: str
+    reader: t.Callable[[bytes], RuleLists]
 
 
 def _both(*rules: str) -> tuple[Ref, ...]:
@@ -168,9 +183,19 @@ TABLE: tuple[CodeList, ...] = (
     ),
     CodeList(
         "UNTDID_4451_TEXT_SUBJECT",
-        "Note subject codes: a restriction of UNTDID 4451. Only the CII file has this rule; the UBL file "
-        "has no BR-CL-08.",
+        "Note subject codes, CII (ram:SubjectCode): a restriction of UNTDID 4451. A strict superset of "
+        "UNTDID_4451_NOTE_SUBJECT_UBL. The syntax-neutral model accepts this superset; the per-syntax "
+        "Schematron decides (D8).",
         (Ref("cii", "BR-CL-08"),),
+    ),
+    CodeList(
+        "UNTDID_4451_NOTE_SUBJECT_UBL",
+        "Note subject codes, UBL: a restriction of UNTDID 4451, bound in the UBL model file, not the "
+        "codes file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), not "
+        "normalize-spaced, as a substring of the list. A note without '#', or whose '#...#' segment is "
+        "not exactly 3 characters long, is not checked at all. A strict subset of "
+        "UNTDID_4451_TEXT_SUBJECT (CII).",
+        (Ref("ubl", "BR-CL-08"),),
     ),
     CodeList(
         "ISO_6523_ICD",
@@ -232,15 +257,48 @@ def extract(data: bytes) -> RuleLists:
         rule, test = node.get("id"), node.get("test", "")
         if rule is None:
             raise GenerationError(f"assert without id: {test[:80]!r}")
-        if rule in lists:
-            raise GenerationError(f"{rule} twice in the same file")
-        found = [tuple(lit.split()) for lit in _CONTAINS.findall(test) if lit.strip()]
-        if equals := _EQUALS.findall(test):
-            found.append(tuple(equals))
-        if not found:
-            raise GenerationError(f"{rule}: no code list recognised in {test[:80]!r}")
-        lists[rule] = Assert(tuple(found), bool(_CASE_FOLD.search(test)))
+        _add(lists, rule, test)
     return lists
+
+
+def extract_model(data: bytes) -> RuleLists:
+    """Extract the code lists of the BR-CL-* params of a CEN model binding file.
+
+    The ``schematron/{UBL,CII}/EN16931-*-model.sch`` files bind the abstract rules to a syntax with
+    ``<param name="BR-CL-08" value="..."/>``. Params of other rules are ignored, but one that holds a
+    multi-code list literal fails unless it is in :data:`_NOT_CODE_LISTS` (fail closed).
+
+    Args:
+        data: The ``.sch`` file bytes.
+
+    Returns:
+        Rule id → its code lists, as :func:`extract`.
+
+    Raises:
+        euinvoice.errors.ParseError: Malformed XML or a DOCTYPE (hardened parser, D10).
+        GenerationError: A duplicate BR-CL param, one whose value holds no recognised list, or a
+            multi-code list in a non-BR-CL param missing from :data:`_NOT_CODE_LISTS`.
+    """
+    lists: RuleLists = {}
+    for node in _xml.parse(data).iter(f"{SCH}param"):
+        name, value = node.get("name", ""), node.get("value", "")
+        if name.startswith("BR-CL-"):
+            _add(lists, name, value)
+        elif name not in _NOT_CODE_LISTS and any(len(lit.split()) > 1 for lit in _CONTAINS.findall(value)):
+            raise GenerationError(f"{name}: a code list outside a BR-CL param; claim it or add it to _NOT_CODE_LISTS")
+    return lists
+
+
+def _add(lists: RuleLists, rule: str, test: str) -> None:
+    """Add the code lists of one rule's XPath test to ``lists``."""
+    if rule in lists:
+        raise GenerationError(f"{rule} twice in the same file")
+    found = [tuple(lit.split()) for lit in _CONTAINS.findall(test) if lit.strip()]
+    if equals := _EQUALS.findall(test):
+        found.append(tuple(equals))
+    if not found:
+        raise GenerationError(f"{rule}: no code list recognised in {test[:80]!r}")
+    lists[rule] = Assert(tuple(found), bool(_CASE_FOLD.search(test)))
 
 
 def _code_order(code: str) -> tuple[int, int, str]:
@@ -354,16 +412,16 @@ def render(
         GenerationError: The module would exceed ``max_lines`` (see the ponytail at :data:`MAX_LINES`).
     """
     out = [
-        "# Generated by scripts/gen_codelists.py from the pinned CEN EN 16931 code-list Schematron.",
+        "# Generated by scripts/gen_codelists.py from the pinned CEN EN 16931 Schematron (code-list, model).",
         "# DO NOT EDIT. Regenerate with `make codelists` (after `make artifacts`).",
         "#",
         "# Sources (IMPLEMENTATION_PLAN.md D7, src/euinvoice/validate/manifest.toml):",
         *(line for p in provenance for line in (f"#   {p.source} {p.version} {p.member}", f"#     sha256 {p.sha256}")),
-        '"""EN 16931 code lists (BR-CL-* rules), generated from the pinned CEN code-list Schematron.',
+        '"""EN 16931 code lists (BR-CL-* rules), generated from the pinned CEN Schematron.',
         "",
-        "Every constant holds the codes its BR-CL asserts accept, sorted. All asserts but BR-CL-24 (MIME)",
-        "match the value after ``normalize-space``, so strip values before a lookup. Do not edit: change",
-        "``scripts/gen_codelists.py`` and run ``make codelists``.",
+        "Every constant holds the codes its BR-CL rules accept, sorted. All rules but BR-CL-24 (MIME) and",
+        "UBL BR-CL-08 (note subject, see its comment) match the value after ``normalize-space``, so strip",
+        "values before a lookup. Do not edit: change ``scripts/gen_codelists.py`` and run ``make codelists``.",
         '"""',
         "",
         "import typing as t",
@@ -389,21 +447,23 @@ def render(
     return "\n".join(out) + "\n"
 
 
-def inputs() -> dict[Syntax, Input]:
-    """Return the two pinned code-list Schematron files in the artifact cache.
+def inputs() -> tuple[Input, ...]:
+    """Return the pinned code-list and model Schematron files in the artifact cache.
 
     Raises:
         euinvoice.errors.ArtifactsNotAvailableError: ``make artifacts`` has not been run.
     """
     manifest = artifacts.load_manifest()
-    files: dict[Syntax, tuple[artifacts.SourceName, str]] = {
-        "ubl": ("cen-ubl", "schematron/codelist/EN16931-UBL-codes.sch"),
-        "cii": ("cen-cii", "schematron/codelist/EN16931-CII-codes.sch"),
-    }
-    return {
-        syntax: Input(source, manifest[source].version, artifacts.source_dir(source), member)
-        for syntax, (source, member) in files.items()
-    }
+    files: tuple[tuple[Syntax, artifacts.SourceName, str, t.Callable[[bytes], RuleLists]], ...] = (
+        ("ubl", "cen-ubl", "schematron/codelist/EN16931-UBL-codes.sch", extract),
+        ("ubl", "cen-ubl", "schematron/UBL/EN16931-UBL-model.sch", extract_model),
+        ("cii", "cen-cii", "schematron/codelist/EN16931-CII-codes.sch", extract),
+        ("cii", "cen-cii", "schematron/CII/EN16931-CII-model.sch", extract_model),
+    )
+    return tuple(
+        Input(syntax, source, manifest[source].version, artifacts.source_dir(source), member, reader)
+        for syntax, source, member, reader in files
+    )
 
 
 def generate() -> str:
@@ -411,12 +471,20 @@ def generate() -> str:
 
     Returns:
         The content of ``_generated.py``.
+
+    Raises:
+        GenerationError: Two files of one syntax hold the same rule, or :func:`build` fails.
     """
     extracted: dict[Syntax, RuleLists] = {}
+    origin: dict[tuple[Syntax, str], str] = {}
     provenance: list[Provenance] = []
-    for syntax, (source, version, root, member) in inputs().items():
+    for syntax, source, version, root, member, reader in inputs():
         data = (root / member).read_bytes()
-        extracted[syntax] = extract(data)
+        for rule, found in reader(data).items():
+            if (syntax, rule) in origin:
+                raise GenerationError(f"{syntax} {rule} in both {origin[syntax, rule]} and {member}")
+            origin[syntax, rule] = member
+            extracted.setdefault(syntax, {})[rule] = found
         provenance.append(Provenance(source, version, member, hashlib.sha256(data).hexdigest()))
     return render(build(extracted, TABLE), TABLE, provenance)
 
