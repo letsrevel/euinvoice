@@ -37,8 +37,10 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path, PurePosixPath
 
-from euinvoice import __version__
-from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError
+from lxml import etree
+
+from euinvoice import __version__, _xml
+from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
 
 ENV_VAR = "EUINVOICE_ARTIFACTS_DIR"
 DEFAULT_CACHE_DIR = "~/.cache/euinvoice"
@@ -380,8 +382,11 @@ def _extract(source: Source, archive: Path, dest: Path) -> None:
 def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
     """Compile each ``precompile`` Schematron to a sibling ``.xslt`` with SchXslt on Saxon.
 
-    The inputs are sha256-pinned official artifacts, not user documents, so they are handed to Saxon
-    by file path; D10 (hardened parsing) governs invoice input.
+    Only the pinned SchXslt pipeline is loaded by path (it includes its sibling stylesheets). Each
+    ``.sch`` goes through :func:`euinvoice._xml.parse` and reaches Saxon as an XDM node built from its
+    serialization (D10). That is equivalent for these inputs because the Peppol ``.sch`` files have no
+    ``sch:include``: the output differs from a by-path compile only in SchXslt's ``dct:created``
+    timestamp and generated ids (checked on Peppol 3.0.21).
     """
     if compiler is None or not (compiler / SCHXSLT_PIPELINE).is_file():
         raise ArtifactsNotAvailableError(
@@ -406,8 +411,10 @@ def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
             if not sch.is_file():
                 raise ArtifactIntegrityError(f"{source.name}: precompile entry {rel!r} is not in the archive")
             try:
-                xslt = executable.transform_to_string(source_file=str(sch))
-            except saxonche.PySaxonApiError as exc:
+                text = etree.tostring(_xml.parse(sch.read_bytes()).getroottree(), encoding="unicode")
+                node = proc.parse_xml(xml_text=text, encoding="UTF-8")  # text from _xml.parse, see above
+                xslt = executable.transform_to_string(xdm_node=node)
+            except (ParseError, saxonche.PySaxonApiError) as exc:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt failed on {rel}: {exc}") from exc
             if xslt is None:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt produced no output for {rel}")

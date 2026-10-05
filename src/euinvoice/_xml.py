@@ -51,6 +51,14 @@ CII_UDT: t.Final = "urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100"
 CII_QDT: t.Final = "urn:un:unece:uncefact:data:standard:QualifiedDataType:100"
 """CII D16B qualified data types (``qdt``)."""
 
+SVRL: t.Final = "http://purl.oclc.org/dsdl/svrl"
+"""Schematron Validation Report Language (ISO/IEC 19757-3 Annex D), the output of every compiled rule set.
+
+Verified as the ``svrl`` namespace of the pinned CEN ``EN16931-UBL-validation.xslt`` /
+``EN16931-CII-validation.xslt`` (1.3.16), the SchXslt-compiled Peppol 3.0.21 stylesheets and the
+XRechnung 2.6.0 ``XRechnung-*-validation.xsl``.
+"""
+
 # Plain dicts because lxml's ``xpath(namespaces=…)`` rejects read-only mappings. Do not mutate.
 UBL_NSMAP: t.Final[dict[str, str]] = {"cac": UBL_CAC, "cbc": UBL_CBC, "ext": UBL_EXT}
 """Prefix map for UBL components (the document namespace is the default one, set per root)."""

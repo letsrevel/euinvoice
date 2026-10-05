@@ -51,10 +51,21 @@ XML_HELPERS = frozenset({"parse", "load_trusted_schema"})
 # Names imported from these modules are safe roots: a forbidden attribute directly on them is fine
 # (``_xml.parse``, ``urllib.parse``), but not deeper (``_xml.etree.parse``).
 SAFE_MODULES = ("euinvoice", "urllib")
+# saxonche keyword arguments that make Saxon read a document by file name or URI (D10: Saxon only gets
+# XML that already passed ``_xml.parse``, as an XDM node built from its serialization).
+SAXON_FILE_KEYWORDS = frozenset(
+    {"source_file", "xml_file_name", "xml_uri", "stylesheet_file", "associated_file", "file_name"}
+)
 # Explicit per-file exceptions, as {path relative to src/euinvoice: names}. Keep this tiny and give
-# a reason per entry (e.g. ``parse_xml`` will be allowed only in ``validate/schematron.py``, which
-# hands Saxon bytes that already passed ``_xml.parse``).
-PER_FILE_ALLOWED: dict[str, frozenset[str]] = {}
+# a reason per entry.
+PER_FILE_ALLOWED: dict[str, frozenset[str]] = {
+    # ``parse_xml(xml_text=...)`` only ever gets the serialization of a tree that passed ``_xml.parse``;
+    # ``stylesheet_file=`` loads the pinned, fingerprint-checked compiled rule set (needs a base URI).
+    "validate/schematron.py": frozenset({"parse_xml", "stylesheet_file"}),
+    # Same for the SchXslt precompile: the ``.sch`` goes through ``_xml.parse`` into ``parse_xml``, and
+    # ``stylesheet_file=`` loads the pinned SchXslt pipeline (it ``xsl:include``s its siblings).
+    "validate/artifacts.py": frozenset({"parse_xml", "stylesheet_file"}),
+}
 
 
 def _in(module: str, prefixes: tuple[str, ...]) -> bool:
@@ -101,13 +112,16 @@ def _check_attribute(node: ast.Attribute, allowed: frozenset[str], safe_roots: s
 
 
 def _check_call(node: ast.Call, allowed: frozenset[str]) -> str | None:
-    """Flag ``ElementTree(file=...)``, ``getattr(x, "<forbidden>")`` and dynamic imports of parser modules."""
+    """Flag ``ElementTree(file=...)``, saxonche file keywords, ``getattr(x, "<forbidden>")`` and dynamic imports."""
     func = node.func
     name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
     first = node.args[1 if name == "getattr" else 0] if len(node.args) > (name == "getattr") else None
     constant = first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
     if name == "ElementTree" and (len(node.args) > 1 or any(k.arg == "file" for k in node.keywords)):
         return f"line {node.lineno}: ElementTree(file=...)"
+    keyword = next((k.arg for k in node.keywords if k.arg in SAXON_FILE_KEYWORDS - allowed), None)
+    if keyword:
+        return f"line {node.lineno}: {keyword}=..."
     if name == "getattr" and constant in (FORBIDDEN_NAMES | PRIVATE_XML_NAMES) - allowed:
         return f"line {node.lineno}: getattr(..., {constant!r})"
     if name in {"import_module", "__import__"} and constant and _in(constant, FORBIDDEN_MODULES):
@@ -173,6 +187,13 @@ def forbidden_parser_uses(source: str, allowed: frozenset[str] = frozenset()) ->
         "from xml import sax",
         "from xml.dom import minidom\nminidom.parseString(b)",
         "proc.parse_xml(xml_text=s)",
+        "doc_builder.parse_xml(xml_uri=u)",
+        "executable.transform_to_string(source_file=p)",
+        "executable.transform_to_value(source_file=p)",
+        "xslt.compile_stylesheet(stylesheet_file=p)",
+        "xslt.compile_stylesheet(associated_file=p)",
+        "executable.set_initial_match_selection(file_name=p)",
+        "xquery.set_context(xml_file_name=p)",
         "self.parser.parse(b)",
         "from euinvoice._xml import etree\netree.fromstring(b)",
         "from ._xml import etree as ET\nET.XML(b)",
@@ -215,6 +236,8 @@ def test_guard_detects(snippet: str) -> None:
         "from lxml import etree\netree.tostring(e)",
         "from lxml import etree\netree.ElementTree(root)",
         "from euinvoice.model import *",
+        "executable.transform_to_string(xdm_node=node)",
+        "xslt.compile_stylesheet(stylesheet_text=s)",
     ],
 )
 def test_guard_allows(snippet: str) -> None:
@@ -223,6 +246,8 @@ def test_guard_allows(snippet: str) -> None:
 
 def test_per_file_allowlist() -> None:
     assert forbidden_parser_uses("proc.parse_xml(xml_text=s)", frozenset({"parse_xml"})) == []
+    assert forbidden_parser_uses("xslt.compile_stylesheet(stylesheet_file=p)", frozenset({"stylesheet_file"})) == []
+    assert forbidden_parser_uses("e.transform_to_string(source_file=p)", frozenset({"stylesheet_file"})) != []
 
 
 def test_xml_is_parsed_only_in_xml_module() -> None:
