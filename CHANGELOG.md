@@ -40,3 +40,6 @@ All notable changes to this project are documented here. The format follows
   pinned OASIS UBL 2.1 schemas. Each schema error becomes a fatal `XSD` finding located by
   line and element path (libxml2 warnings stay warnings); compiled schemas are cached per process and safe to share across
   threads.
+- `euinvoice.validate.xsd.validate()` also validates UN/CEFACT CII D16B `CrossIndustryInvoice`
+  documents, against the D16B SCRDM Subset schema of the pinned KoSIT validator configuration
+  (`resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd`, used by every KoSIT CII scenario).
