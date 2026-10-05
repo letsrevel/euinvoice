@@ -10,8 +10,8 @@ Output: one line per finding. ``DRIFT`` names a newer upstream release, tag, com
 that could not be checked.
 
 Exit codes: 0 every pin is current, 1 at least one ``DRIFT`` / ``PRERELEASE``, 2 at least one ``ERROR``
-(an upstream could not be queried, the pinned release is missing upstream, or a manifest source has no
-check). Errors take precedence, and nothing ever passes silently.
+(an upstream could not be queried, the pinned release is missing upstream, a manifest source has no
+check, or the script itself crashed). Errors take precedence, and nothing ever passes silently.
 
 Only stdlib ``urllib`` + ``json``. ``GH_TOKEN`` (if set) is sent as a bearer token to api.github.com
 only; redirects are not followed, so it can never leave that host.
@@ -206,6 +206,8 @@ def _check_releases(source: Source, check: Check, fetch: Get) -> list[tuple[Kind
     if pinned is None:
         raise UpstreamError(f"pinned release {pinned_tag!r} not found in {url}")
     pinned_at = _published(pinned, url)
+    # Accepted (issue #45): a maintenance release on an older line published after the pin is DRIFT too;
+    # if that gets noisy, add per-source ignore_tags with dated comments.
     newer = [r for r in releases if r is not pinned and _published(r, url) > pinned_at]
     return [
         (
@@ -253,6 +255,7 @@ _STRATEGIES: dict[Strategy, t.Callable[[Source, Check, Get], list[tuple[Kind, st
     "head": _check_head,
     "published-sha256": _check_published_sha256,
     "release-notes": _check_release_notes,
+    "static": lambda source, check, fetch: [],  # frozen upstream; also keeps a mixed tuple from raising
 }
 
 
@@ -261,7 +264,7 @@ def findings(source: Source, check: Check, fetch: Get = get) -> list[tuple[Kind,
 
     Args:
         source: The pinned manifest source.
-        check: How to query its upstream; must not be ``static``.
+        check: How to query its upstream (``static`` never finds anything).
         fetch: Body GET function (:func:`get`; replaced in tests).
 
     Raises:
@@ -309,5 +312,23 @@ def run(fetch: Get = get, sources: t.Mapping[str, Source] | None = None) -> int:
     return 2 if errors else (1 if behind else 0)
 
 
+def main(fetch: Get = get) -> int:
+    """Run :func:`run`, turning any unexpected exception into exit code 2.
+
+    Exit 1 means drift to the nightly workflow, so a crash must never surface as Python's default 1.
+
+    Args:
+        fetch: Body GET function.
+
+    Returns:
+        The :func:`run` exit code, or 2 if it raised.
+    """
+    try:
+        return run(fetch)
+    except Exception as exc:  # any crash is reported as ERROR, never as drift
+        print(f"ERROR      check_upstream crashed: {type(exc).__name__}: {exc}")
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(main())
