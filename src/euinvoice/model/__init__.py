@@ -17,12 +17,13 @@ from euinvoice.model.bt_index import BT_INDEX, id_of, path_of
 from euinvoice.model.datatypes import BinaryObject, Identifier, ItemClassificationIdentifier
 from euinvoice.model.delivery import DeliverToAddress, DeliveryInformation, InvoicingPeriod
 from euinvoice.model.documents import AdditionalSupportingDocument
-from euinvoice.model.invoice import Invoice, InvoiceNote, PrecedingInvoiceReference, ProcessControl
+from euinvoice.model.invoice import Invoice, InvoiceDraft, InvoiceNote, PrecedingInvoiceReference, ProcessControl
 from euinvoice.model.lines import (
     InvoiceLine,
     InvoiceLinePeriod,
     ItemAttribute,
     ItemInformation,
+    LineDraft,
     LineVatInformation,
     PriceDetails,
 )
@@ -58,6 +59,7 @@ __all__ = [
     "DocumentTotals",
     "Identifier",
     "Invoice",
+    "InvoiceDraft",
     "InvoiceLine",
     "InvoiceLineAllowance",
     "InvoiceLineCharge",
@@ -67,6 +69,7 @@ __all__ = [
     "ItemAttribute",
     "ItemClassificationIdentifier",
     "ItemInformation",
+    "LineDraft",
     "LineVatInformation",
     "Payee",
     "PaymentCardInformation",

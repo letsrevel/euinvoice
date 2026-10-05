@@ -60,7 +60,7 @@ class TestCodes:
             _vat(category_code=NBSP + "E")
 
     def test_unknown_code_names_the_rule(self) -> None:
-        with pytest.raises(pydantic.ValidationError, match=r"'X' is not a UNTDID 5305 VAT category code"):
+        with pytest.raises(pydantic.ValidationError, match=r"'X' is not in the UNTDID 5305 VAT category list"):
             _vat(category_code="X")
 
     def test_vatex_is_upper_cased_as_br_cl_22_compares_it(self) -> None:
@@ -108,9 +108,15 @@ class TestDate:
     def test_a_date_is_accepted(self) -> None:
         assert _Holder(date=datetime.date(2026, 2, 1)).date == datetime.date(2026, 2, 1)
 
-    def test_a_datetime_is_refused_rather_than_truncated(self) -> None:
-        with pytest.raises(pydantic.ValidationError):
-            _Holder(date=datetime.datetime(2026, 2, 1, 12, 30))
+    def test_an_iso_string_is_accepted(self) -> None:
+        assert _Holder(date="2026-02-01").date == datetime.date(2026, 2, 1)  # type: ignore[arg-type]  # lax on purpose
+
+    @pytest.mark.parametrize(
+        "value", [datetime.datetime(2026, 2, 1, 12, 30), datetime.datetime(2026, 2, 1), 0, 1.5, True]
+    )
+    def test_datetimes_and_numbers_are_refused(self, value: object) -> None:
+        with pytest.raises(pydantic.ValidationError, match=r"expected a datetime\.date"):
+            _Holder(date=value)  # type: ignore[arg-type]  # refusing these is the point
 
     def test_json_uses_iso_dates(self) -> None:
         assert _Holder.model_validate_json('{"date": "2026-02-01"}').date == datetime.date(2026, 2, 1)

@@ -2,8 +2,11 @@
 
 Every EN 16931 business term (BT) and business group (BG) with its path in `euinvoice.model.Invoice`,
 its cardinality in the model, its data type, and its UBL 2.1 and UN/CEFACT CII D16B XPath. The table
-is the mapping table of IMPLEMENTATION_PLAN.md §3. `tests/model/test_bt_mapping_doc.py` checks that
-the ids, model paths and cardinalities below match the model, so this file cannot drift from the code.
+is the mapping table of IMPLEMENTATION_PLAN.md §3.
+`tests/model/test_bt_index.py::test_bt_mapping_doc_matches_the_model` checks that the ids, names,
+model paths and cardinalities below match the model, so those columns cannot drift from the code.
+The derived terms BG-22, BG-23 and BT-131 are absent from `InvoiceDraft` / `LineDraft` (the input of
+`calc`), which otherwise share every field and check with `Invoice` / `InvoiceLine`.
 
 ## Sources
 
@@ -15,7 +18,7 @@ None of them is committed (D7).
 | **CEN** | CEN validation artifacts `validation-1.3.16`: `schematron/abstract/EN16931-model.sch`, `UBL/EN16931-UBL-{model,syntax}.sch`, `CII/EN16931-CII-{model,syntax}.sch`, `codelist/EN16931-{UBL,CII}-codes.sch` (fetched by `make artifacts`) | mandatory terms (BR-01…BR-65, BR-CO-04, BR-CO-18), code lists (BR-CL-*), syntax restrictions (UBL-SR-*, CII-SR-*) |
 | **XR** | XRechnung 3.0.2 specification, chapter 11 "Detailbeschreibung" (xeinkauf.de, `302-XRechnung-2024-06-20.pdf`) | the id inventory, names, data types, the semantic tree (which group holds which term) and the cardinality of every term |
 | **KoSIT viz** | `itplr-kosit/xrechnung-visualization` `v2026-08-31`, `src/xsl/ubl-invoice-xr.xsl` and `src/xsl/cii-xr.xsl` (Apache-2.0): one `xsl:template mode="BT-n" match="<XPath>"` per term | UBL and CII XPaths |
-| **Peppol** | Peppol BIS Billing 3.0.21 syntax binding, `structure/syntax/ubl-invoice.xml` and `ubl-creditnote.xml` at commit `806866bd` (the pinned `peppol-bis` artifact) | UBL XPaths for BT-22, BT-23, BT-24, BG-1, BG-16, cross-check of the others |
+| **Peppol** | Peppol BIS Billing 3.0.21 syntax binding, `structure/syntax/ubl-invoice.xml` and `ubl-creditnote.xml` from the same commit `806866bd` as the pinned `peppol-bis` artifact, but **not part of it** (the manifest extracts only `rules/`); read from GitHub for reference | UBL XPaths for BT-22, BT-23, BT-24, BG-1, BG-16, cross-check of the others |
 | **CEN examples** | `cen-cii/1.3.16/examples/CII_example*.xml` | CII XPaths of BT-7, BT-149, BT-150, which the KoSIT viz does not bind |
 
 ### How cardinalities were decided
@@ -28,9 +31,8 @@ never rejects an invoice the official CEN Schematron accepts (D8):
   is cited in the "Why" column ("CEN BR-xx").
 * Where XR says `1` but EN 16931 does not, a German or Peppol rule adds the requirement (BR-DE-*,
   PEPPOL-EN16931-R*). The model keeps the term optional and names that rule ("XR 1 via …"). Profiles
-  (#20 Peppol, #21 XRechnung) add these requirements back as pre-flight checks.
+  (#11, #12) add these requirements back as pre-flight checks.
 * Everywhere else ("XR table") the model's cardinality equals the XR table, upper bounds included.
-  The generator that wrote this table asserted that for every such row.
 
 ### Identifiers with a scheme, and code lists
 
@@ -39,7 +41,7 @@ never rejects an invoice the official CEN Schematron accepts (D8):
 | BT-3 | code | UNTDID 1001, CEN union of the UBL invoice + credit note lists (62 codes) | BR-CL-01 |
 | BT-5, BT-6 | code | ISO 4217 | BR-CL-04, BR-CL-05 |
 | BT-8 | code | UNTDID 2005 subset 3, 35, 432 (XR §11.1); CII writes UNTDID 2475 (5, 29, 72) | BR-CL-06 |
-| BT-21 | code | UNTDID 4451 | BR-CL-08 (CII only) |
+| BT-21 | code | UNTDID 4451. UBL: the `#code#` prefix of `cbc:Note`; CII: `ram:SubjectCode`. The UBL list (383 codes) is a subset of the CII list (401); the model accepts the CII list (#52) | BR-CL-08 |
 | BT-40, BT-55, BT-69, BT-80, BT-159 | code | ISO 3166-1 alpha-2, union of the UBL and CII lists | BR-CL-14, BR-CL-15 |
 | BT-81 | code | UNTDID 4461 | BR-CL-16 |
 | BT-95, BT-102, BT-118, BT-151 | code | UNTDID 5305 (= `VatCategory`) | BR-CL-17, BR-CL-18 |
@@ -94,8 +96,8 @@ is unbounded.
 | BT-19 | Buyer accounting reference | `buyer_accounting_reference` | 0..1 | XR table | Text | `/Invoice/cbc:AccountingCost` | `STL/ram:ReceivableSpecifiedTradeAccountingAccount/ram:ID` |
 | BT-20 | Payment terms | `payment_terms` | 0..1 | XR table | Text | `/Invoice/cac:PaymentTerms/cbc:Note` | `STL/ram:SpecifiedTradePaymentTerms/ram:Description` |
 | BG-1 | INVOICE NOTE | `notes[]` | 0..n | XR table | Group | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote` |
-| BT-21 | Invoice note subject code | `notes[].subject_code` | 0..1 | XR table | Code | `not bound by a CEN rule (UBL has no BR-CL-08); see note` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:SubjectCode` |
-| BT-22 | Invoice note | `notes[].note` | 0..1 | XR 1, no CEN rule: open question Q1 | Text | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:Content` |
+| BT-21 | Invoice note subject code | `notes[].subject_code` | 0..1 | XR table | Code | `/Invoice/cbc:Note (code = text between leading #…#, CEN UBL BR-CL-08)` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:SubjectCode` |
+| BT-22 | Invoice note | `notes[].note` | 0..1 | XR 1, no CEN rule: decision D1 | Text | `/Invoice/cbc:Note` | `/rsm:ExchangedDocument/ram:IncludedNote/ram:Content` |
 | BG-2 | PROCESS CONTROL | `process_control` | 1 | CEN BR-01 (via BT-24) | Group | `/Invoice (no own element)` | `/rsm:ExchangedDocumentContext` |
 | BT-23 | Business process type | `process_control.business_process_type` | 0..1 | XR 1 via PEPPOL-EN16931-R001 (XR changelog 3.0.1) | Text | `/Invoice/cbc:ProfileID` | `/rsm:ExchangedDocumentContext/ram:BusinessProcessSpecifiedDocumentContextParameter/ram:ID` |
 | BT-24 | Specification identifier | `process_control.specification_identifier` | 1 | CEN BR-01 | Identifier | `/Invoice/cbc:CustomizationID` | `/rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID` |
@@ -128,7 +130,7 @@ is unbounded.
 | BT-45 | Buyer trading name | `buyer.trading_name` | 0..1 | XR table | Text | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyName/cbc:Name` | `AGR/ram:BuyerTradeParty/ram:SpecifiedLegalOrganization/ram:TradingBusinessName` |
 | BT-46 | Buyer identifier | `buyer.identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyIdentification/cbc:ID` | `AGR/ram:BuyerTradeParty/ram:ID[empty(following-sibling::ram:GlobalID/@schemeID)]`<br>`AGR/ram:BuyerTradeParty/ram:GlobalID[exists(@schemeID)]` |
 | BT-47 | Buyer legal registration identifier | `buyer.legal_registration_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID` | `AGR/ram:BuyerTradeParty/ram:SpecifiedLegalOrganization/ram:ID` |
-| BT-48 | Buyer VAT identifier | `buyer.vat_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID[following-sibling::cac:TaxScheme/cbc:ID='VAT']` | `AGR/ram:BuyerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID=('VA', 'VAT')]` |
+| BT-48 | Buyer VAT identifier | `buyer.vat_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PartyTaxScheme/cbc:CompanyID[following-sibling::cac:TaxScheme/cbc:ID='VAT']` | `AGR/ram:BuyerTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']` |
 | BT-49 | Buyer electronic address | `buyer.electronic_address` | 0..1 | XR 1 via PEPPOL-EN16931-R010 (XR changelog 3.0.1) | Identifier | `/Invoice/cac:AccountingCustomerParty/cac:Party/cbc:EndpointID` | `AGR/ram:BuyerTradeParty/ram:URIUniversalCommunication/ram:URIID` |
 | BG-8 | BUYER POSTAL ADDRESS | `buyer.postal_address` | 1 | CEN BR-10 | Group | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress` | `AGR/ram:BuyerTradeParty/ram:PostalTradeAddress` |
 | BT-50 | Buyer address line 1 | `buyer.postal_address.address_line_1` | 0..1 | XR table | Text | `/Invoice/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress/cbc:StreetName` | `AGR/ram:BuyerTradeParty/ram:PostalTradeAddress/ram:LineOne` |
@@ -148,7 +150,7 @@ is unbounded.
 | BT-61 | Payee legal registration identifier | `payee.legal_registration_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:PayeeParty/cac:PartyLegalEntity/cbc:CompanyID` | `STL/ram:PayeeTradeParty/ram:SpecifiedLegalOrganization/ram:ID` |
 | BG-11 | SELLER TAX REPRESENTATIVE PARTY | `seller_tax_representative` | 0..1 | XR table | Group | `/Invoice/cac:TaxRepresentativeParty` | `AGR/ram:SellerTaxRepresentativeTradeParty` |
 | BT-62 | Seller tax representative name | `seller_tax_representative.name` | 1 | CEN BR-18 | Text | `/Invoice/cac:TaxRepresentativeParty/cac:PartyName/cbc:Name` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:Name` |
-| BT-63 | Seller tax representative VAT identifier | `seller_tax_representative.vat_identifier` | 1 | CEN BR-56 | Identifier | `/Invoice/cac:TaxRepresentativeParty/cac:PartyTaxScheme/cbc:CompanyID[following-sibling::cac:TaxScheme/cbc:ID='VAT']` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:SpecifiedTaxRegistration/ram:ID` |
+| BT-63 | Seller tax representative VAT identifier | `seller_tax_representative.vat_identifier` | 1 | CEN BR-56 | Identifier | `/Invoice/cac:TaxRepresentativeParty/cac:PartyTaxScheme/cbc:CompanyID[following-sibling::cac:TaxScheme/cbc:ID='VAT']` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']` |
 | BG-12 | SELLER TAX REPRESENTATIVE POSTAL ADDRESS | `seller_tax_representative.postal_address` | 1 | CEN BR-19 | Group | `/Invoice/cac:TaxRepresentativeParty/cac:PostalAddress` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:PostalTradeAddress` |
 | BT-64 | Tax representative address line 1 | `seller_tax_representative.postal_address.address_line_1` | 0..1 | XR table | Text | `/Invoice/cac:TaxRepresentativeParty/cac:PostalAddress/cbc:StreetName` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:PostalTradeAddress/ram:LineOne` |
 | BT-65 | Tax representative address line 2 | `seller_tax_representative.postal_address.address_line_2` | 0..1 | XR table | Text | `/Invoice/cac:TaxRepresentativeParty/cac:PostalAddress/cbc:AdditionalStreetName` | `AGR/ram:SellerTaxRepresentativeTradeParty/ram:PostalTradeAddress/ram:LineTwo` |
@@ -180,8 +182,8 @@ is unbounded.
 | BT-84 | Payment account identifier | `payment_instructions.credit_transfers[].payment_account_identifier` | 1 | CEN BR-50 | Identifier | `/Invoice/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:ProprietaryID`<br>`STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID` |
 | BT-85 | Payment account name | `payment_instructions.credit_transfers[].payment_account_name` | 0..1 | XR table | Text | `/Invoice/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:Name` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:AccountName` |
 | BT-86 | Payment service provider identifier | `payment_instructions.credit_transfers[].payment_service_provider_identifier` | 0..1 | XR table | Identifier | `/Invoice/cac:PaymentMeans/cac:PayeeFinancialAccount/cac:FinancialInstitutionBranch/cbc:ID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeeSpecifiedCreditorFinancialInstitution/ram:BICID` |
-| BG-18 | PAYMENT CARD INFORMATION | `payment_instructions.payment_card` | 0..1 | XR table | Group | `/Invoice/cac:PaymentMeans/cac:CardAccount` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard` |
-| BT-87 | Payment card primary account number | `payment_instructions.payment_card.primary_account_number` | 0..1 | XR 1 and UBL XSD 1, no CEN rule, CII XSD 0..1: open question Q2 | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:PrimaryAccountNumberID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:ID` |
+| BG-18 | PAYMENT CARD INFORMATION | `payment_instructions.payment_card` | 0..1 | XR table; see note N2 | Group | `/Invoice/cac:PaymentMeans/cac:CardAccount` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard` |
+| BT-87 | Payment card primary account number | `payment_instructions.payment_card.primary_account_number` | 0..1 | XR 1 and UBL XSD 1, no CEN rule, CII XSD 0..1: decision D2 | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:PrimaryAccountNumberID` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:ID` |
 | BT-88 | Payment card holder name | `payment_instructions.payment_card.holder_name` | 0..1 | XR table | Text | `/Invoice/cac:PaymentMeans/cac:CardAccount/cbc:HolderName` | `STL/ram:SpecifiedTradeSettlementPaymentMeans/ram:ApplicableTradeSettlementFinancialCard/ram:CardholderName` |
 | BG-19 | DIRECT DEBIT | `payment_instructions.direct_debit` | 0..1 | XR table | Group | `/Invoice/cac:PaymentMeans/cac:PaymentMandate` | `STL (ram:ApplicableHeaderTradeSettlement)` |
 | BT-89 | Mandate reference identifier | `payment_instructions.direct_debit.mandate_reference_identifier` | 0..1 | XR 1 (BR-DE-29, XR changelog 2.3.0) | Identifier | `/Invoice/cac:PaymentMeans/cac:PaymentMandate/cbc:ID` | `STL/ram:SpecifiedTradePaymentTerms/ram:DirectDebitMandateID` |
@@ -203,13 +205,18 @@ is unbounded.
 | BT-103 | Document level charge VAT rate | `charges[].vat_rate` | 0..1 | XR table | Percentage | `/Invoice/cac:AllowanceCharge/cac:TaxCategory/cbc:Percent[ancestor::cac:AllowanceCharge/cbc:ChargeIndicator='true']` | `STL/ram:SpecifiedTradeAllowanceCharge/ram:CategoryTradeTax/ram:RateApplicablePercent` |
 | BT-104 | Document level charge reason | `charges[].reason` | 0..1 | XR table | Text | `/Invoice/cac:AllowanceCharge/cbc:AllowanceChargeReason[preceding-sibling::cbc:ChargeIndicator='true']` | `STL/ram:SpecifiedTradeAllowanceCharge/ram:Reason` |
 | BT-105 | Document level charge reason code | `charges[].reason_code` | 0..1 | XR table | Code | `/Invoice/cac:AllowanceCharge/cbc:AllowanceChargeReasonCode[preceding-sibling::cbc:ChargeIndicator='true']` | `STL/ram:SpecifiedTradeAllowanceCharge/ram:ReasonCode` |
-| BG-22 | DOCUMENT TOTALS | `totals` | 1 | CEN BR-12..BR-15 | Group | `/Invoice/cac:LegalMonetaryTotal` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation` |
+| BG-24 | ADDITIONAL SUPPORTING DOCUMENTS | `additional_supporting_documents[]` | 0..n | XR table; see note N1 | Group | `/Invoice/cac:AdditionalDocumentReference` | `AGR/ram:AdditionalReferencedDocument` |
+| BT-122 | Supporting document reference | `additional_supporting_documents[].reference` | 1 | CEN BR-52 | Document Reference | `/Invoice/cac:AdditionalDocumentReference/cbc:ID` | `AGR/ram:AdditionalReferencedDocument/ram:IssuerAssignedID[following-sibling::ram:TypeCode='916']` |
+| BT-123 | Supporting document description | `additional_supporting_documents[].description` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cbc:DocumentDescription` | `AGR/ram:AdditionalReferencedDocument/ram:Name` |
+| BT-124 | External document location | `additional_supporting_documents[].external_location` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cac:ExternalReference/cbc:URI` | `AGR/ram:AdditionalReferencedDocument/ram:URIID` |
+| BT-125 | Attached document | `additional_supporting_documents[].attached_document` | 0..1 | XR table; decision D3 | Binary Object | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cbc:EmbeddedDocumentBinaryObject` | `AGR/ram:AdditionalReferencedDocument/ram:AttachmentBinaryObject` |
+| BG-22 | DOCUMENT TOTALS | `totals` | 1 | UBL XSD cac:LegalMonetaryTotal minOccurs=1 (UBL-Invoice-2.1.xsd:921); CII: BR-CO-15 (fatal, $Invoice context) | Group | `/Invoice/cac:LegalMonetaryTotal` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation` |
 | BT-106 | Sum of Invoice line net amount | `totals.sum_of_line_net_amounts` | 1 | CEN BR-12 | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:LineExtensionAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:LineTotalAmount` |
 | BT-107 | Sum of allowances on document level | `totals.sum_of_allowances` | 0..1 | XR table | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:AllowanceTotalAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:AllowanceTotalAmount` |
 | BT-108 | Sum of charges on document level | `totals.sum_of_charges` | 0..1 | XR table | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:ChargeTotalAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:ChargeTotalAmount` |
 | BT-109 | Invoice total amount without VAT | `totals.total_without_vat` | 1 | CEN BR-13 | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:TaxExclusiveAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxBasisTotalAmount` |
-| BT-110 | Invoice total VAT amount | `totals.total_vat` | 0..1 | XR table | Amount | `/Invoice/cac:TaxTotal/cbc:TaxAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount[@currencyID=parent::ram:SpecifiedTradeSettlementHeaderMonetarySummation/preceding-sibling::ram:InvoiceCurrencyCode]` |
-| BT-111 | Invoice total VAT amount in accounting currency | `totals.total_vat_in_accounting_currency` | 0..1 | XR table | Amount | `/Invoice/cac:TaxTotal/cbc:TaxAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount[@currencyID=parent::ram:SpecifiedTradeSettlementHeaderMonetarySummation/preceding-sibling::ram:TaxCurrencyCode]` |
+| BT-110 | Invoice total VAT amount | `totals.total_vat` | 0..1 | XR table | Amount | `/Invoice/cac:TaxTotal/cbc:TaxAmount[@currencyID=/Invoice/cbc:DocumentCurrencyCode]` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount[@currencyID=parent::ram:SpecifiedTradeSettlementHeaderMonetarySummation/preceding-sibling::ram:InvoiceCurrencyCode]` |
+| BT-111 | Invoice total VAT amount in accounting currency | `totals.total_vat_in_accounting_currency` | 0..1 | XR table | Amount | `/Invoice/cac:TaxTotal/cbc:TaxAmount[@currencyID=/Invoice/cbc:TaxCurrencyCode]` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount[@currencyID=parent::ram:SpecifiedTradeSettlementHeaderMonetarySummation/preceding-sibling::ram:TaxCurrencyCode]` |
 | BT-112 | Invoice total amount with VAT | `totals.total_with_vat` | 1 | CEN BR-14 | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:GrandTotalAmount` |
 | BT-113 | Paid amount | `totals.paid_amount` | 0..1 | XR table | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:PrepaidAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TotalPrepaidAmount` |
 | BT-114 | Rounding amount | `totals.rounding_amount` | 0..1 | XR table | Amount | `/Invoice/cac:LegalMonetaryTotal/cbc:PayableRoundingAmount` | `STL/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:RoundingAmount` |
@@ -221,18 +228,12 @@ is unbounded.
 | BT-119 | VAT category rate | `vat_breakdown[].rate` | 0..1 | XR 1 via BR-DE-14; EN: BR-48 except category O | Percentage | `/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:Percent` | `STL/ram:ApplicableTradeTax/ram:RateApplicablePercent` |
 | BT-120 | VAT exemption reason text | `vat_breakdown[].exemption_reason` | 0..1 | XR table | Text | `/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReason` | `STL/ram:ApplicableTradeTax/ram:ExemptionReason` |
 | BT-121 | VAT exemption reason code | `vat_breakdown[].exemption_reason_code` | 0..1 | XR table | Code | `/Invoice/cac:TaxTotal/cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode` | `STL/ram:ApplicableTradeTax/ram:ExemptionReasonCode` |
-| BG-24 | ADDITIONAL SUPPORTING DOCUMENTS | `additional_supporting_documents[]` | 0..n | XR table | Group | `/Invoice/cac:AdditionalDocumentReference` | `AGR/ram:AdditionalReferencedDocument` |
-| BT-122 | Supporting document reference | `additional_supporting_documents[].reference` | 1 | CEN BR-52 | Document Reference | `/Invoice/cac:AdditionalDocumentReference/cbc:ID` | `AGR/ram:AdditionalReferencedDocument/ram:IssuerAssignedID[following-sibling::ram:TypeCode='916']` |
-| BT-123 | Supporting document description | `additional_supporting_documents[].description` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cbc:DocumentDescription` | `AGR/ram:AdditionalReferencedDocument/ram:Name` |
-| BT-124 | External document location | `additional_supporting_documents[].external_location` | 0..1 | XR table | Text | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cac:ExternalReference/cbc:URI` | `AGR/ram:AdditionalReferencedDocument/ram:URIID` |
-| BT-125 | Attached document | `additional_supporting_documents[].attached_document` | 0..1 | XR table | Binary Object | `/Invoice/cac:AdditionalDocumentReference/cac:Attachment/cbc:EmbeddedDocumentBinaryObject` | `AGR/ram:AdditionalReferencedDocument/ram:AttachmentBinaryObject` |
 | BG-25 | INVOICE LINE | `lines[]` | 1..n | CEN BR-16 | Group | `/Invoice/cac:InvoiceLine` | `/rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem` |
 | BT-126 | Invoice line identifier | `lines[].identifier` | 1 | CEN BR-21 | Identifier | `cac:InvoiceLine/cbc:ID` | `LINE/ram:AssociatedDocumentLineDocument/ram:LineID` |
 | BT-127 | Invoice line note | `lines[].note` | 0..1 | XR table | Text | `cac:InvoiceLine/cbc:Note` | `LINE/ram:AssociatedDocumentLineDocument/ram:IncludedNote/ram:Content` |
 | BT-128 | Invoice line object identifier | `lines[].object_identifier` | 0..1 | XR table | Identifier | `cac:InvoiceLine/cac:DocumentReference/cbc:ID[following-sibling::cbc:DocumentTypeCode='130']` | `LINE/ram:SpecifiedLineTradeSettlement/ram:AdditionalReferencedDocument/ram:IssuerAssignedID[following-sibling::ram:TypeCode='130']` |
 | BT-129 | Invoiced quantity | `lines[].invoiced_quantity` | 1 | CEN BR-22 | Quantity | `cac:InvoiceLine/cbc:InvoicedQuantity` | `LINE/ram:SpecifiedLineTradeDelivery/ram:BilledQuantity` |
 | BT-130 | Invoiced quantity unit of measure code | `lines[].invoiced_quantity_unit_code` | 1 | CEN BR-23 | Code | `cac:InvoiceLine/cbc:InvoicedQuantity/@unitCode` | `LINE/ram:SpecifiedLineTradeDelivery/ram:BilledQuantity/@unitCode` |
-| BT-131 | Invoice line net amount | `lines[].net_amount` | 1 | CEN BR-24 | Amount | `cac:InvoiceLine/cbc:LineExtensionAmount` | `LINE/ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount` |
 | BT-132 | Referenced purchase order line reference | `lines[].purchase_order_line_reference` | 0..1 | XR table | Document Reference | `cac:InvoiceLine/cac:OrderLineReference/cbc:LineID` | `LINE/ram:SpecifiedLineTradeAgreement/ram:BuyerOrderReferencedDocument/ram:LineID` |
 | BT-133 | Invoice line Buyer accounting reference | `lines[].buyer_accounting_reference` | 0..1 | XR table | Text | `cac:InvoiceLine/cbc:AccountingCost` | `LINE/ram:SpecifiedLineTradeSettlement/ram:ReceivableSpecifiedTradeAccountingAccount/ram:ID` |
 | BG-26 | INVOICE LINE PERIOD | `lines[].period` | 0..1 | XR table | Group | `cac:InvoiceLine/cac:InvoicePeriod` | `LINE/ram:SpecifiedLineTradeSettlement/ram:BillingSpecifiedPeriod` |
@@ -270,6 +271,17 @@ is unbounded.
 | BG-32 | ITEM ATTRIBUTES | `lines[].item.attributes[]` | 0..n | XR table | Group | `cac:InvoiceLine/cac:Item/cac:AdditionalItemProperty` | `LINE/ram:SpecifiedTradeProduct/ram:ApplicableProductCharacteristic` |
 | BT-160 | Item attribute name | `lines[].item.attributes[].name` | 1 | CEN BR-54 | Text | `cac:InvoiceLine/cac:Item/cac:AdditionalItemProperty/cbc:Name` | `LINE/ram:SpecifiedTradeProduct/ram:ApplicableProductCharacteristic/ram:Description` |
 | BT-161 | Item attribute value | `lines[].item.attributes[].value` | 1 | CEN BR-54 | Text | `cac:InvoiceLine/cac:Item/cac:AdditionalItemProperty/cbc:Value` | `LINE/ram:SpecifiedTradeProduct/ram:ApplicableProductCharacteristic/ram:Value` |
+| BT-131 | Invoice line net amount | `lines[].net_amount` | 1 | CEN BR-24 | Amount | `cac:InvoiceLine/cbc:LineExtensionAmount` | `LINE/ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount` |
+
+## Notes for the mappers
+
+* **N1 · BG-24 shares its elements.** In UBL, `cac:AdditionalDocumentReference` also carries BT-18
+  (`cbc:DocumentTypeCode` 130). In CII, `ram:AdditionalReferencedDocument` also carries BT-17
+  (`ram:TypeCode` 50) and BT-18 (130); a BG-24 entry has `ram:TypeCode` 916. The mappers must filter by
+  type code.
+* **N2 · UBL `cac:CardAccount/cbc:NetworkID`** is mandatory in the UBL 2.1 XSD
+  (`UBL-CommonAggregateComponents-2.1.xsd:3122`, `CardAccountType`) but carries no business term. The UBL writer
+  (#10) has to supply a value whenever BG-18 is present.
 
 ## Library conventions
 
@@ -281,22 +293,22 @@ is unbounded.
 * **BT-130 and BT-150** are separate fields although both syntaxes write them as the `unitCode`
   attribute of the quantity.
 
-## Open questions (needs-human)
+## Decisions (permissive per D8)
 
-The sources do not settle these. Each is resolved with the most permissive structurally valid option,
-so the model never refuses an invoice the official CEN Schematron accepts (D8).
+Where XR and a syntax disagree and no CEN rule decides, the model takes the most permissive structurally
+valid option, so it never refuses an invoice the official CEN Schematron accepts (D8). The stricter
+syntax's writer reports the gap.
 
-* **Q1 · BT-22 Invoice note, cardinality in BG-1.** XR gives `1`, but no CEN rule requires it and the
-  CII XSD allows `ram:IncludedNote` with only a `ram:SubjectCode`. The model keeps BT-22 optional.
-* **Q2 · BT-87 Payment card primary account number, cardinality in BG-18.** XR gives `1` and the UBL XSD
+* **D1 · BT-22 Invoice note is optional in BG-1.** XR gives `1`, but no CEN rule requires it and the CII
+  XSD allows `ram:IncludedNote` with only a `ram:SubjectCode`.
+* **D2 · BT-87 Payment card primary account number is optional in BG-18.** XR gives `1` and the UBL XSD
   requires `cbc:PrimaryAccountNumberID`, but no CEN rule requires it and the CII XSD makes
-  `ram:ApplicableTradeSettlementFinancialCard/ram:ID` optional. The model keeps BT-87 optional; the UBL
-  writer must report its absence.
-* **Q3 · BT-125 mime code and filename.** XR gives both cardinality `1` and UBL enforces them
-  (UBL-DT-06/07, fatal), but the CEN CII rules and the CII XSD do not. The model keeps both optional; the
-  UBL writer must report their absence.
-* **Q4 · BT-21 in UBL.** No CEN rule binds the note subject code in UBL (UBL has no BR-CL-08). The KoSIT
-  visualization reads it from a `cbc:Note` matching `^[A-Z]{3}$` before the note text. The UBL mapper
-  (#10) has to choose a binding.
-* **Q5 · BT-8 in CII.** The model stores UNTDID 2005 codes (3, 35, 432); CII requires UNTDID 2475 codes
-  (5, 29, 72). The CII mapper (#13) needs a sourced correspondence between the two lists.
+  `ram:ApplicableTradeSettlementFinancialCard/ram:ID` optional. The UBL writer must report its absence.
+* **D3 · BT-125 mime code and filename are optional.** XR gives both `1` and UBL enforces them
+  (UBL-DT-06/07, fatal), but the CEN CII rules and the CII XSD do not. The UBL writer must report their
+  absence.
+* **BT-21 in UBL** is bound by CEN UBL BR-CL-08 (`UBL/EN16931-UBL-model.sch`, fatal, context
+  `cbc:Note`): the code is the text between a leading `#…#` (e.g. `#ADU#text`, as in the XRechnung test
+  suite).
+* **BT-8 in CII.** The model stores UNTDID 2005 codes (3, 35, 432); CII requires UNTDID 2475 codes
+  (5, 29, 72). The sourced correspondence between the two is tracked on #13 (CII writer).

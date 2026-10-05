@@ -31,6 +31,7 @@ __all__ = [
     "InvoiceLinePeriod",
     "ItemAttribute",
     "ItemInformation",
+    "LineDraft",
     "LineVatInformation",
     "PriceDetails",
 ]
@@ -99,8 +100,8 @@ class ItemInformation(EuInvoiceModel):
     """ITEM ATTRIBUTES (0..n)."""
 
 
-class InvoiceLine(EuInvoiceModel):
-    """INVOICE LINE (BG-25)."""
+class _LineBody(EuInvoiceModel):
+    """The fields INVOICE LINE (BG-25) shares with its draft: everything except BT-131."""
 
     identifier: t.Annotated[NonBlankText, bt("BT-126")]
     """Invoice line identifier (BR-21)."""
@@ -112,8 +113,6 @@ class InvoiceLine(EuInvoiceModel):
     """Invoiced quantity (BR-22)."""
     invoiced_quantity_unit_code: t.Annotated[UnitCode, bt("BT-130")]
     """Invoiced quantity unit of measure code, UN/ECE Rec 20/21 (BR-23, BR-CL-23)."""
-    net_amount: t.Annotated[Amount, bt("BT-131")]
-    """Invoice line net amount (BR-24)."""
     purchase_order_line_reference: t.Annotated[Text | None, bt("BT-132")] = None
     """Referenced purchase order line reference."""
     buyer_accounting_reference: t.Annotated[Text | None, bt("BT-133")] = None
@@ -130,3 +129,17 @@ class InvoiceLine(EuInvoiceModel):
     """LINE VAT INFORMATION."""
     item: t.Annotated[ItemInformation, bt("BG-31")]
     """ITEM INFORMATION."""
+
+
+class InvoiceLine(_LineBody):
+    """INVOICE LINE (BG-25)."""
+
+    net_amount: t.Annotated[Amount, bt("BT-131")]
+    """Invoice line net amount (BR-24)."""
+
+
+class LineDraft(_LineBody):
+    """An invoice line without its derived net amount (BT-131), the input of ``calc`` (#9).
+
+    It has every field of :class:`InvoiceLine` except ``net_amount``, with the same types and checks.
+    """

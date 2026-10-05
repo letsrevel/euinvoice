@@ -47,10 +47,6 @@ from euinvoice.model.codes import (
 )
 
 __all__ = [
-    "EAS_SCHEME",
-    "ICD_SCHEME",
-    "OBJECT_SCHEME",
-    "STANDARD_ITEM_SCHEME",
     "AllowanceReasonCode",
     "BinaryObject",
     "ChargeReasonCode",
@@ -68,9 +64,6 @@ __all__ = [
     "VatCategoryCode",
     "VatExemptionReasonCode",
     "VatPointDateCode",
-    "at_least_one",
-    "not_negative",
-    "scheme",
 ]
 
 _XPATH_SPACE: t.Final = " \t\r\n"
@@ -113,11 +106,29 @@ the syntaxes (e.g. BT-25, BR-55 in UBL) stay plain :data:`Text`, so the model ne
 invoice the official Schematron accepts (D8).
 """
 
-Date = t.Annotated[datetime.date, pydantic.Strict()]
+
+def _date_input(value: object) -> object:
+    """Let a ``date`` or an ISO 8601 string through; refuse what lax mode would silently convert.
+
+    Args:
+        value: The raw input.
+
+    Returns:
+        ``value`` unchanged, for pydantic's date parsing.
+
+    Raises:
+        ModelError: ``value`` is a ``datetime`` (its time would be dropped) or a number (a timestamp).
+    """
+    if isinstance(value, datetime.datetime) or not isinstance(value, datetime.date | str):
+        raise ModelError(f"expected a datetime.date or an ISO 8601 'YYYY-MM-DD' string, got {type(value).__name__}")
+    return value
+
+
+Date = t.Annotated[datetime.date, pydantic.BeforeValidator(_date_input)]
 """EN 16931 Date.
 
-Strict: Python input must be a ``datetime.date`` that is not a ``datetime`` (no silent truncation of a
-time, no integer timestamps). JSON input is an ISO 8601 ``YYYY-MM-DD`` string.
+A ``datetime.date`` (not a ``datetime``: no silent truncation of a time) or an ISO 8601 string, so a
+``model_dump(mode="json")`` dict validates back. Numbers (timestamps) and ``bool`` are refused.
 """
 
 
@@ -139,7 +150,7 @@ def _code(codes: frozenset[str], name: str, rule: str, *, upper: bool = False) -
         if upper:
             normal = normal.upper()
         if normal not in codes:
-            raise ModelError(f"{value!r} is not a {name} code ({rule})")
+            raise ModelError(f"{value!r} is not in the {name} list ({rule})")
         return normal
 
     return check
@@ -208,8 +219,8 @@ class Identifier(EuInvoiceModel):
     value: Text
     """The identifier itself (content)."""
     scheme_id: Text | None = None
-    """The identification scheme (e.g. an ISO 6523 ICD or CEF EAS code); stored stripped of XML
-    whitespace."""
+    """The identification scheme (e.g. an ISO 6523 ICD or CEF EAS code). Stripped of XML whitespace
+    when the field checks a scheme list."""
 
 
 class ItemClassificationIdentifier(EuInvoiceModel):
@@ -274,7 +285,9 @@ def _mime(value: str) -> str:
 class BinaryObject(EuInvoiceModel):
     """EN 16931 Binary object: the attached document BT-125 with its mime code and filename.
 
-    In JSON the content is base64 text. The XRechnung 3.0.2 spec (§8.2, §11.2) gives mime code and
+    In JSON the content is base64 text. The content field is strict (``bytes`` only), so a dict from
+    ``model_dump(mode="json")`` that holds an attachment must be reloaded from JSON text with
+    ``model_validate_json``, which decodes the base64. The XRechnung 3.0.2 spec (§8.2, §11.2) gives mime code and
     filename cardinality 1, and UBL enforces both (UBL-DT-06/07, fatal), but the CEN CII rules and the
     CII XSD do not. The syntax-neutral model therefore keeps both optional, so a CEN-valid CII invoice
     always loads (D8); see "Open questions" in ``docs/reference/bt-mapping.md``.

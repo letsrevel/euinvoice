@@ -254,7 +254,7 @@ def _group_models(model: type[pydantic.BaseModel]) -> t.Iterator[type[pydantic.B
     yield model
     for name, field in model.model_fields.items():
         inner, _ = _unwrap(field.annotation)
-        if bt_id(model, name) is not None and bt_id(model, name).startswith("BG-"):  # type: ignore[union-attr]  # checked just before
+        if (ident := bt_id(model, name)) is not None and ident.startswith("BG-"):
             yield from _group_models(inner)
 
 

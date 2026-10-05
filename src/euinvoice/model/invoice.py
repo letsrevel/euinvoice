@@ -23,13 +23,13 @@ from euinvoice.model.datatypes import (
 )
 from euinvoice.model.delivery import DeliveryInformation
 from euinvoice.model.documents import AdditionalSupportingDocument
-from euinvoice.model.lines import InvoiceLine
+from euinvoice.model.lines import InvoiceLine, LineDraft
 from euinvoice.model.parties import Buyer, Payee, Seller, SellerTaxRepresentative
 from euinvoice.model.payment import PaymentInstructions
 from euinvoice.model.tax import VatBreakdown
 from euinvoice.model.totals import DocumentTotals
 
-__all__ = ["ROOT_ID", "Invoice", "InvoiceNote", "PrecedingInvoiceReference", "ProcessControl"]
+__all__ = ["ROOT_ID", "Invoice", "InvoiceDraft", "InvoiceNote", "PrecedingInvoiceReference", "ProcessControl"]
 
 ROOT_ID: t.Final = "BG-0"
 """The id this library gives the unnamed EN 16931 root, i.e. :class:`Invoice` itself."""
@@ -67,11 +67,10 @@ class PrecedingInvoiceReference(EuInvoiceModel):
     """Preceding Invoice issue date."""
 
 
-class Invoice(EuInvoiceModel):
-    """An EN 16931 invoice or credit note (the root, ``BG-0``).
+class _InvoiceBody(EuInvoiceModel):
+    """The fields the invoice shares with its draft: everything except BG-22, BG-23 and BG-25.
 
     Fields follow the order of EN 16931-1 as restated in the XRechnung 3.0.2 specification §11.1.
-    Every field carries its BT/BG id (see :mod:`euinvoice.model.bt_index`).
     """
 
     number: t.Annotated[NonBlankText, bt("BT-1")]
@@ -134,11 +133,34 @@ class Invoice(EuInvoiceModel):
     """DOCUMENT LEVEL ALLOWANCES (0..n)."""
     charges: t.Annotated[tuple[DocumentLevelCharge, ...], bt("BG-21")] = ()
     """DOCUMENT LEVEL CHARGES (0..n)."""
-    totals: t.Annotated[DocumentTotals, bt("BG-22")]
-    """DOCUMENT TOTALS (BR-12..BR-15)."""
-    vat_breakdown: t.Annotated[tuple[VatBreakdown, ...], at_least_one("BR-CO-18"), bt("BG-23")]
-    """VAT BREAKDOWN (1..n, BR-CO-18)."""
     additional_supporting_documents: t.Annotated[tuple[AdditionalSupportingDocument, ...], bt("BG-24")] = ()
     """ADDITIONAL SUPPORTING DOCUMENTS (0..n)."""
+
+
+class Invoice(_InvoiceBody):
+    """An EN 16931 invoice or credit note (the root, ``BG-0``).
+
+    Every field carries its BT/BG id (see :mod:`euinvoice.model.bt_index`). Build an invoice with the
+    constructor or ``model_validate``: pydantic's ``model_copy(update=...)`` does **not** validate the
+    updated values.
+    """
+
+    totals: t.Annotated[DocumentTotals, bt("BG-22")]
+    """DOCUMENT TOTALS. Required: the UBL 2.1 XSD has ``cac:LegalMonetaryTotal`` minOccurs=1
+    (``UBL-Invoice-2.1.xsd``), and in CII the CEN rule BR-CO-15 (fatal, invoice context) fails without
+    it."""
+    vat_breakdown: t.Annotated[tuple[VatBreakdown, ...], at_least_one("BR-CO-18"), bt("BG-23")]
+    """VAT BREAKDOWN (1..n, BR-CO-18)."""
     lines: t.Annotated[tuple[InvoiceLine, ...], at_least_one("BR-16"), bt("BG-25")]
     """INVOICE LINE (1..n, BR-16)."""
+
+
+class InvoiceDraft(_InvoiceBody):
+    """An invoice without its derived totals (BG-22) and VAT breakdown (BG-23), the input of ``calc``.
+
+    It has every field of :class:`Invoice` except ``totals`` and ``vat_breakdown``, with the same types
+    and checks; its lines are :class:`LineDraft` (no BT-131).
+    """
+
+    lines: t.Annotated[tuple[LineDraft, ...], at_least_one("BR-16"), bt("BG-25")]
+    """INVOICE LINE drafts (1..n, BR-16)."""
