@@ -1,16 +1,22 @@
 """XML Schema (XSD) validation of e-invoice documents against the pinned official schemas.
 
-The schema is picked by the namespace of the document's root element. Today that covers UBL 2.1
-``Invoice`` and ``CreditNote``, validated against the OASIS UBL 2.1 ``maindoc`` schemas of the
-``ubl-2_1`` artifact source (the same schemas the KoSIT validator configuration uses in its UBL
-scenarios: ``resources/ubl/2.1/xsd/maindoc/UBL-{Invoice,CreditNote}-2.1.xsd`` in ``scenarios.xml``).
-CII support is added by extending :data:`_SCHEMAS`.
+The schema is picked by the namespace of the document's root element; the root element's local name is
+then checked by the schema itself (a wrong one is a ``No matching global declaration`` finding):
+
+* UBL 2.1 ``Invoice`` and ``CreditNote`` are validated against the OASIS UBL 2.1 ``maindoc`` schemas of
+  the ``ubl-2_1`` artifact source (the same schemas the KoSIT validator configuration uses in its UBL
+  scenarios: ``resources/ubl/2.1/xsd/maindoc/UBL-{Invoice,CreditNote}-2.1.xsd`` in ``scenarios.xml``).
+* UN/CEFACT CII D16B ``CrossIndustryInvoice`` is validated against
+  ``resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd`` of the
+  ``xrechnung-validator-configuration`` source: the D16B SCRDM Subset ("uncoupled clm") schema the CEN
+  EN 16931 CII artifacts are written for, and the schema every CII scenario of the KoSIT
+  ``scenarios.xml`` (XRechnung, XRechnung extension, CVD and plain EN 16931) validates against.
 
 Every schema-validity error becomes a :class:`~euinvoice.validate.report.Finding` with rule id ``XSD``
 and severity ``fatal``, located by line number and element path: a document that is not schema-valid
 cannot be processed further, and the official validators reject it. The KoSIT validator's report
 stylesheet (``resources/default-report.xsl`` of ``xrechnung-validator-configuration``, template
-``in:xmlSyntaxError``) reports every XSD message at level ``error``, the level it also gives Schematron
+``in:xmlSyntaxError``) reports every non-warning XSD message at level ``error``, the level it also gives Schematron
 ``fatal`` flags, and any such message makes the XSD step, and so the whole report, invalid. The same
 template keeps ``SEVERITY_WARNING`` messages as ``warning``, so libxml2 warnings stay warnings here.
 
@@ -59,6 +65,18 @@ class _SchemaSpec:
 _SCHEMAS: t.Final[t.Mapping[str, _SchemaSpec]] = {
     _xml.UBL_INVOICE: _SchemaSpec("ubl-2_1", "xsd/maindoc/UBL-Invoice-2.1.xsd", "xsd"),
     _xml.UBL_CREDIT_NOTE: _SchemaSpec("ubl-2_1", "xsd/maindoc/UBL-CreditNote-2.1.xsd", "xsd"),
+    # The CII D16B schema imports only its three siblings (qdt, ram, udt), so its own directory is the
+    # confinement root.
+    # ponytail: keyed by namespace alone, so every rsm document gets this D16B schema. Factur-X / ZUGFeRD
+    # profiles (MINIMUM, BASIC WL, BASIC, EN16931, EXTENDED) share the rsm namespace but the Factur-X
+    # package ships its own per-profile XSDs, which may be stricter; that package is not pinned yet
+    # (needs-human #42). Once it is, schema selection needs the profile (BT-24) as an extra argument
+    # (#17 / #22).
+    _xml.CII_RSM: _SchemaSpec(
+        "xrechnung-validator-configuration",
+        "resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd",
+        "resources/cii/16b/xsd",
+    ),
 }
 
 

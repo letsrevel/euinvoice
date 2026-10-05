@@ -126,7 +126,6 @@ def test_xsi_schema_location_hints_are_ignored() -> None:
 @pytest.mark.parametrize(
     "data",
     [
-        f'<rsm:CrossIndustryInvoice xmlns:rsm="{_xml.CII_RSM}"/>'.encode(),
         b'<Invoice xmlns="urn:example:not-ubl"/>',
         b"<Invoice/>",
     ],
@@ -182,6 +181,87 @@ def test_concurrent_validations_keep_their_own_findings() -> None:
         else:
             assert [f.location for f in findings] == ["3 /*/cbc:IssueDate"]
             assert all(isinstance(f, Finding) for f in findings)
+
+
+# Synthetic stand-in for the CII D16B schema: like the real CrossIndustryInvoice_100pD16B.xsd it imports
+# a sibling file in its own directory (the ram schema).
+CII_RAM_XSD = f"""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="{_xml.CII_RAM}"
+  elementFormDefault="qualified">
+  <xs:element name="ID" type="xs:string"/>
+  <xs:element name="IssueDateTime" type="xs:date"/>
+</xs:schema>"""
+
+CII_XSD = f"""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ram="{_xml.CII_RAM}"
+  targetNamespace="{_xml.CII_RSM}" elementFormDefault="qualified">
+  <xs:import namespace="{_xml.CII_RAM}"
+    schemaLocation="CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd"/>
+  <xs:element name="CrossIndustryInvoice">
+    <xs:complexType><xs:sequence>
+      <xs:element ref="ram:ID"/>
+      <xs:element ref="ram:IssueDateTime"/>
+    </xs:sequence></xs:complexType>
+  </xs:element>
+</xs:schema>"""
+
+
+def cii_doc(body: str, root: str = "CrossIndustryInvoice") -> bytes:
+    return f'<rsm:{root} xmlns:rsm="{_xml.CII_RSM}" xmlns:ram="{_xml.CII_RAM}">\n{body}\n</rsm:{root}>'.encode()
+
+
+VALID_CII = cii_doc("<ram:ID>INV-1</ram:ID>\n<ram:IssueDateTime>2026-01-31</ram:IssueDateTime>")
+
+
+@pytest.fixture
+def cii_cache(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
+    """A warm fake ``xrechnung-validator-configuration`` cache entry holding the synthetic CII schemas."""
+    sources = artifacts.load_manifest()
+    source = sources["xrechnung-validator-configuration"]
+    target = tmp_path / "xrechnung-validator-configuration" / source.version
+    directory = target / "resources" / "cii" / "16b" / "xsd"
+    directory.mkdir(parents=True)
+    (directory / "CrossIndustryInvoice_100pD16B.xsd").write_text(CII_XSD)
+    (directory / "CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd").write_text(CII_RAM_XSD)
+    (target / artifacts.MARKER).write_text(artifacts._fingerprint(source, sources))
+    monkeypatch.setenv(artifacts.ENV_VAR, str(tmp_path))
+    return target
+
+
+@pytest.mark.usefixtures("cii_cache")
+def test_valid_cii_invoice_has_no_findings() -> None:
+    assert xsd.validate(_xml.parse(VALID_CII)) == ()
+
+
+@pytest.mark.usefixtures("cii_cache")
+def test_cii_error_is_a_located_fatal_finding_from_the_validator_configuration() -> None:
+    data = cii_doc("<ram:ID>INV-1</ram:ID>\n<ram:Bogus/>\n<ram:IssueDateTime>2026-01-31</ram:IssueDateTime>")
+
+    (finding,) = xsd.validate(_xml.parse(data))
+
+    assert finding == Finding(
+        "XSD",
+        Severity.FATAL,
+        "3 /rsm:CrossIndustryInvoice/ram:Bogus",
+        finding.message,
+        "xsd:xrechnung-validator-configuration",
+    )
+    assert "This element is not expected" in finding.message
+
+
+@pytest.mark.usefixtures("cii_cache")
+def test_cii_root_of_the_wrong_name_is_an_error() -> None:
+    data = cii_doc("<ram:ID>INV-1</ram:ID>", root="CrossIndustryDocument")
+
+    (finding,) = xsd.validate(_xml.parse(data))
+
+    assert "No matching global declaration" in finding.message
+
+
+def test_cii_schema_is_compiled_from_the_d16b_path(cii_cache: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = spy_on_schema_loads(monkeypatch)
+
+    xsd.validate(_xml.parse(VALID_CII))
+
+    assert calls == [cii_cache / "resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd"]
 
 
 @dataclasses.dataclass
