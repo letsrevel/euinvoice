@@ -29,6 +29,11 @@ All notable changes to this project are documented here. The format follows
   UNTDID 2475, empty notes skipped, and BT-148 derived as BT-146 + BT-147 when only the discount is
   given. It raises `ModelError` for values CII cannot carry (more than one BG-3, BT-150 without BT-149,
   BT-111 without BT-6). `euinvoice.syntax.Syntax` names the syntaxes.
+- `euinvoice.syntax.ubl.write(invoice)`: UBL 2.1 writer for every business term, in UBL 2.1 XSD order.
+  BT-3 picks the root (`CreditNote` for the CEN credit note codes, including 81; `Invoice` otherwise).
+  It raises `ModelError` for content UBL cannot express (BT-87 or the BT-125 mime code/filename
+  missing, BT-110 missing, BT-111 without BT-6, BT-148 without BT-147, BT-150 without BT-149, BT-9 in a
+  credit note without BG-16).
 - Artifact manifest (`euinvoice/validate/manifest.toml`) pinning the official validation artifacts and
   corpora by URL + sha256: CEN EN 16931 1.3.16 (UBL, CII), Peppol BIS Billing 3.0.21, XRechnung
   Schematron 2.6.0, XRechnung test suite and KoSIT validator configuration 2026-08-31 (incl. the CII

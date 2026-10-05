@@ -1,0 +1,133 @@
+"""UBL writer output against the official UBL 2.1 XSD and CEN EN 16931 UBL Schematron (``make artifacts``)."""
+
+import datetime
+import typing as t
+from decimal import Decimal
+
+import pytest
+from _ubl_invoices import TEST_IBAN, full_invoice, minimal_invoice
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
+from euinvoice import _xml
+from euinvoice.model import (
+    CreditTransfer,
+    DeliveryInformation,
+    Identifier,
+    Invoice,
+    InvoiceLine,
+    InvoiceNote,
+    InvoicingPeriod,
+    ItemInformation,
+    LineVatInformation,
+    PaymentInstructions,
+    PriceDetails,
+)
+from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL, UNTDID_1001_INVOICE_TYPE_UBL
+from euinvoice.syntax import ubl
+from euinvoice.validate import schematron, xsd
+from euinvoice.validate.report import Severity
+
+pytestmark = pytest.mark.conformance
+
+_BLOCKING = {Severity.FATAL, Severity.ERROR}
+
+INVOICES: t.Final = {
+    "minimal-invoice": lambda: minimal_invoice(),
+    "minimal-credit-note": lambda: minimal_invoice(type_code="381"),
+    "full-invoice": lambda: full_invoice(),
+    # 381 credit note: BT-9 in cac:PaymentMeans, BT-11 as DocumentTypeCode 50, BT-17 after the ADRs.
+    "full-credit-note": lambda: full_invoice(type_code="381"),
+    "credit-note-code-81": lambda: full_invoice(type_code="81"),
+    # BT-8 instead of BT-7 (BR-CO-03 forbids both).
+    "vat-point-date-code": lambda: full_invoice(vat_point_date=None, vat_point_date_code="35"),
+}
+
+
+@pytest.mark.parametrize("build", INVOICES.values(), ids=INVOICES.keys())
+def test_output_is_schema_valid(build: t.Callable[[], Invoice]) -> None:
+    assert xsd.validate(_xml.parse(ubl.write(build()))) == ()
+
+
+@pytest.mark.parametrize("build", INVOICES.values(), ids=INVOICES.keys())
+def test_output_passes_cen_ubl_schematron(build: t.Callable[[], Invoice]) -> None:
+    findings = schematron.run(schematron.CEN_UBL, ubl.write(build()))
+    assert [f for f in findings if f.severity in _BLOCKING] == []
+
+
+# Narrow strategies: XML-safe text (no control, surrogate or unassigned code points, which XML 1.0 forbids).
+_TEXT = st.text(st.characters(exclude_categories=("Cc", "Cs", "Cn", "Co")), min_size=1, max_size=20)
+_NAME = st.from_regex(r"[A-Za-z][A-Za-z0-9 .-]{0,15}", fullmatch=True)
+_AMOUNT = st.decimals(min_value=0, max_value=10**9, places=2, allow_nan=False, allow_infinity=False)
+_QUANTITY = st.decimals(min_value=0, max_value=10**6, places=4, allow_nan=False, allow_infinity=False)
+_DATE = st.dates(min_value=datetime.date(2000, 1, 1), max_value=datetime.date(2099, 12, 31))
+_TYPE_CODE = st.sampled_from(sorted(UNTDID_1001_INVOICE_TYPE_UBL | UNTDID_1001_CREDIT_NOTE_TYPE_UBL))
+
+
+@st.composite
+def _lines(draw: st.DrawFn) -> tuple[InvoiceLine, ...]:
+    count = draw(st.integers(min_value=1, max_value=3))
+    return tuple(
+        InvoiceLine(
+            identifier=str(index),
+            note=draw(st.none() | _TEXT),
+            invoiced_quantity=draw(_QUANTITY),
+            invoiced_quantity_unit_code=draw(st.sampled_from(["C62", "HUR", "KGM"])),
+            net_amount=draw(_AMOUNT),
+            price_details=PriceDetails(item_net_price=draw(_QUANTITY), base_quantity=draw(st.none() | _QUANTITY)),
+            vat_information=LineVatInformation(
+                category_code=draw(st.sampled_from(["S", "Z", "E"])), rate=Decimal("19")
+            ),
+            item=ItemInformation(name=draw(_NAME), description=draw(st.none() | _TEXT)),
+        )
+        for index in range(1, count + 1)
+    )
+
+
+@st.composite
+def _invoices(draw: st.DrawFn) -> Invoice:
+    type_code = draw(_TYPE_CODE)
+    payment = draw(
+        st.none()
+        | st.builds(
+            PaymentInstructions,
+            payment_means_type_code=st.sampled_from(["30", "58", "1"]),
+            payment_means_text=st.none() | _TEXT,
+            credit_transfers=st.lists(
+                st.builds(CreditTransfer, payment_account_identifier=st.just(TEST_IBAN)), max_size=2
+            ).map(tuple),
+        )
+    )
+    due = draw(st.none() | _DATE)
+    if type_code in UNTDID_1001_CREDIT_NOTE_TYPE_UBL and payment is None:
+        due = None  # a credit note carries BT-9 only in cac:PaymentMeans (the writer refuses it otherwise)
+    return minimal_invoice(
+        number=draw(_NAME),
+        issue_date=draw(_DATE),
+        type_code=type_code,
+        payment_due_date=due,
+        vat_point_date=draw(st.none() | _DATE),
+        buyer_reference=draw(st.none() | _TEXT),
+        project_reference=draw(st.none() | _NAME),
+        sales_order_reference=draw(st.none() | _NAME),
+        tender_or_lot_reference=draw(st.none() | _NAME),
+        invoiced_object_identifier=draw(st.none() | st.builds(Identifier, value=_NAME)),
+        notes=tuple(
+            draw(
+                st.lists(
+                    st.builds(InvoiceNote, subject_code=st.none() | st.just("AAI"), note=st.none() | _TEXT), max_size=2
+                )
+            )
+        ),
+        delivery=draw(
+            st.none() | st.builds(DeliveryInformation, invoicing_period=st.builds(InvoicingPeriod, start_date=_DATE))
+        ),
+        payment_instructions=payment,
+        lines=draw(_lines()),
+    )
+
+
+@settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(_invoices())
+def test_random_invoices_are_schema_valid(document: Invoice) -> None:
+    assert xsd.validate(_xml.parse(ubl.write(document))) == ()

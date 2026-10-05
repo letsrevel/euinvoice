@@ -281,7 +281,18 @@ is unbounded.
   type code.
 * **N2 · UBL `cac:CardAccount/cbc:NetworkID`** is mandatory in the UBL 2.1 XSD
   (`UBL-CommonAggregateComponents-2.1.xsd:3122`, `CardAccountType`) but carries no business term. The UBL writer
-  (#10) has to supply a value whenever BG-18 is present.
+  (#10) has to supply a value whenever BG-18 is present. It writes `NA`, the example value of Peppol BIS
+  3.0.21 `structure/syntax/part/card-payment.xml` ("Syntax required element not related to a business
+  term"); the reader ignores it.
+* **N3 · UBL credit notes.** `CreditNoteType` has neither `cbc:DueDate` nor `cac:ProjectReference`. BT-9 is
+  `/CreditNote/cac:PaymentMeans/cbc:PaymentDueDate` and BT-11 is
+  `/CreditNote/cac:AdditionalDocumentReference/cbc:ID[following-sibling::cbc:DocumentTypeCode='50']`
+  (Peppol `ubl-creditnote.xml`, KoSIT `ubl-creditnote-xr.xsl`; CEN UBL-SR-43 allows code 50 only in a
+  credit note). BT-9 in a credit note therefore needs BG-16.
+* **N4 · UBL writer fill-ins.** `cac:OrderReference/cbc:ID` is mandatory, so BT-14 without BT-13 writes
+  `NA` there (Peppol `ubl-invoice.xml`, BT-13). BT-32 is written with `cac:TaxScheme/cbc:ID` `FC`, as in the
+  XRechnung test suite (CEN only requires a value other than `VAT`, UBL-SR-13). BT-90 is written under
+  `cac:PayeeParty` when BG-10 is present, else under the Seller.
 
 ## Library conventions
 
