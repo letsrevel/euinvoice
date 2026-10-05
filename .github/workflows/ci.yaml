@@ -20,7 +20,7 @@ jobs:
     name: Lint & type checks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: ruff format
         run: uv run ruff format --check .
@@ -39,7 +39,7 @@ jobs:
       matrix:
         python: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with:
           python-version: ${{ matrix.python }}
@@ -57,10 +57,10 @@ jobs:
     name: Conformance (official artifacts)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Restore artifact cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: .artifacts
           key: artifacts-${{ hashFiles('src/euinvoice/validate/manifest.toml') }}
@@ -80,7 +80,7 @@ jobs:
     name: Build sdist + wheel
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Build
         run: uv build
