@@ -58,7 +58,11 @@ def test_output_passes_the_cen_rules(name: str) -> None:
     assert [f for f in findings if f.severity in BLOCKING] == []
 
 
-_text = st.text(alphabet=st.characters(codec="utf-8", exclude_categories=("Cs", "Cc")), min_size=1, max_size=12)
+# XML-compatible characters only (no surrogates, controls or noncharacters such as U+FFFE), and not blank:
+# the model rejects whitespace-only mandatory text (normalize-space(.) != '').
+_text = st.text(
+    alphabet=st.characters(codec="utf-8", exclude_categories=("Cs", "Cc", "Cn")), min_size=1, max_size=12
+).filter(lambda s: s.strip(" \t\r\n") != "")
 _amount = st.decimals(min_value=-(10**6), max_value=10**6, places=2)
 _price = st.decimals(min_value=0, max_value=10**6, places=4)
 _date = st.dates(min_value=datetime.date(1900, 1, 1), max_value=datetime.date(2999, 12, 31))
