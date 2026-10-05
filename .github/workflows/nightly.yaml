@@ -50,20 +50,19 @@ jobs:
       - name: Compare pinned manifest with latest upstream releases
         env:
           GH_TOKEN: ${{ github.token }}
-        # ponytail: no-op until scripts/check_upstream.py lands (milestone M5).
-        run: |
-          if [ -f scripts/check_upstream.py ]; then uv run python scripts/check_upstream.py; else echo "not yet implemented"; fi
+        # Exit 1: DRIFT / PRERELEASE (a pin is behind). Exit 2: ERROR (could not check). Both open the issue.
+        run: uv run python scripts/check_upstream.py
       - name: Open tracker issue on drift
         if: failure()
         uses: actions/github-script@v9
         with:
           script: |
-            const prefix = "Upstream validation artifacts changed";
+            const prefix = "Upstream artifact check failed (drift or error)";
             const run = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const { data } = await github.rest.issues.listForRepo({ ...context.repo, state: "open", labels: "artifacts", per_page: 50 });
             const match = data.find((i) => i.title.startsWith(prefix));
             if (match) {
               await github.rest.issues.createComment({ ...context.repo, issue_number: match.number, body: `Still drifting: ${run}` });
             } else {
-              await github.rest.issues.create({ ...context.repo, title: `${prefix} (${new Date().toISOString().slice(0, 10)})`, body: `See the job log for which pins are behind: ${run}`, labels: ["artifacts"] });
+              await github.rest.issues.create({ ...context.repo, title: `${prefix} (${new Date().toISOString().slice(0, 10)})`, body: `Check the job log for DRIFT, PRERELEASE and ERROR lines (which pins are behind, or which upstream could not be checked): ${run}`, labels: ["artifacts"] });
             }
