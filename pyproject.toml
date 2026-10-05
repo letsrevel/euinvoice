@@ -92,7 +92,9 @@ extra_checks = true
 warn_unreachable = true
 warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
+# scripts/ is importable as top-level modules (tests import check_upstream), see pytest pythonpath.
+mypy_path = "scripts"
 
 [[tool.mypy.overrides]]
 # saxonche ships no type information.
@@ -106,6 +108,7 @@ warn_required_dynamic_aliases = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 addopts = "-ra --strict-markers --strict-config -m 'not conformance'"
 xfail_strict = true
 markers = [

@@ -50,9 +50,8 @@ jobs:
       - name: Compare pinned manifest with latest upstream releases
         env:
           GH_TOKEN: ${{ github.token }}
-        # ponytail: no-op until scripts/check_upstream.py lands (milestone M5).
-        run: |
-          if [ -f scripts/check_upstream.py ]; then uv run python scripts/check_upstream.py; else echo "not yet implemented"; fi
+        # Exit 1: a pin is behind upstream. Exit 2: an upstream could not be queried. Both open the issue.
+        run: uv run python scripts/check_upstream.py
       - name: Open tracker issue on drift
         if: failure()
         uses: actions/github-script@v9
