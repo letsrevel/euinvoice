@@ -66,6 +66,19 @@ def test_dropping_the_invoice_number_yields_exactly_br02_fatal() -> None:
     assert not ValidationReport(findings).ok
 
 
+def test_amount_the_rules_cannot_evaluate_is_a_blocking_finding_not_an_exception() -> None:
+    # CEN's BR-CO rules cast cbc:PayableAmount to xs:decimal; "abc" makes the stylesheet fail (FORG0001).
+    root = _xml.parse(cen_example("ubl-tc434-example1.xml"))
+    payable = next(root.iter(f"{{{_xml.UBL_CBC}}}PayableAmount"))
+    payable.text = "abc"
+
+    findings = schematron.run(schematron.CEN_UBL, root)
+
+    assert [(f.rule_id, f.severity) for f in findings] == [(schematron.RUNTIME_ERROR_RULE_ID, Severity.FATAL)]
+    assert 'Cannot convert string "abc" to xs:decimal' in findings[0].message
+    assert not ValidationReport(findings).ok
+
+
 @pytest.mark.parametrize("path", CEN_UBL_EXAMPLES, ids=lambda p: p.name)
 def test_every_cen_ubl_example_passes_the_cen_ubl_rules(path: Path) -> None:
     assert ValidationReport(schematron.run(schematron.CEN_UBL, path.read_bytes())).ok
@@ -100,7 +113,7 @@ def test_profile_rule_sets_pass_an_upstream_valid_instance(
 def test_every_assert_in_the_pinned_stylesheets_has_a_known_flag(rule_set: schematron.RuleSet) -> None:
     # Backs the "missing or unknown flag → error" fallback in svrl_findings: no pinned rule relies on it.
     # CEN writes the flag as <xsl:attribute name="flag">, SchXslt (Peppol, XRechnung) as a literal attribute.
-    xsl = "{http://www.w3.org/1999/XSL/Transform}"
+    xsl = f"{{{_xml.XSLT}}}"
     path = artifacts.fetch([rule_set.source])[rule_set.source] / rule_set.stylesheet
     stylesheet = _xml.parse(path.read_bytes())
     flags: collections.Counter[str | None] = collections.Counter()
@@ -113,7 +126,7 @@ def test_every_assert_in_the_pinned_stylesheets_has_a_known_flag(rule_set: schem
 
 # --- Peppol vefa unit tests (rules/unit-*) through the runner --------------------------------------
 
-VEFA = "{http://difi.no/xsd/vefa/validator/1.0}"
+VEFA = f"{{{_xml.VEFA}}}"
 
 
 def vefa_files() -> list[Path]:

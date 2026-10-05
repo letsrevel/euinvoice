@@ -48,8 +48,11 @@ All notable changes to this project are documented here. The format follows
   BIS 3.0 UBL/CII, XRechnung UBL/CII) on Saxon and maps every SVRL failed assert or successful report
   to a `Finding` with its rule id, severity (from `@flag`; a missing or unknown flag counts as `error`),
   XPath location and message. Input is hardened-parsed before Saxon sees it; compiled stylesheets are
-  cached per process and calls are thread-safe. Needs the `[validate]` extra.
+  cached per process and calls are thread-safe. A document a stylesheet cannot evaluate (e.g. a
+  non-numeric amount) yields one fatal `SCHEMATRON-RUNTIME` finding instead of an exception. Needs the
+  `[validate]` extra.
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
-  hardened-parsed XML instead of by file path (same compiled output).
+  hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
+  files (`sch:include`, `sch:extends[@href]`) is refused.

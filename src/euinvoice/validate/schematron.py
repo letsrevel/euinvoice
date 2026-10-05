@@ -7,10 +7,19 @@ at fetch time (:mod:`euinvoice.validate.artifacts`). The stylesheet writes an SV
 ``svrl:successful-report`` in it becomes a :class:`~euinvoice.validate.report.Finding`. Nothing is
 filtered or downgraded.
 
-Input hardening (D10): the document always passes :func:`euinvoice._xml.parse` first; Saxon only
-receives the lxml re-serialization of that tree, as an XDM node built from text. The only file Saxon
-reads by path is the pinned stylesheet itself, from a cache entry whose fingerprint
-:func:`~euinvoice.validate.artifacts.source_dir` has just checked.
+Input hardening (D10): the document reaches Saxon only through :func:`euinvoice._xml.to_xdm`, which
+runs it through the hardened parser and hands Saxon the re-serialized text. The only file Saxon reads by
+path is the pinned stylesheet itself, from a cache entry whose recipe fingerprint
+:func:`~euinvoice.validate.artifacts.source_dir` has just checked (that catches a stale cache, not
+tampering).
+
+Run-time errors (D9): a well-formed document can still make an official stylesheet fail while it runs,
+e.g. ``cbc:PayableAmount`` = ``abc`` raises ``FORG0001`` inside an ``xs:decimal`` cast of CEN's BR-CO
+rules. That is a property of the document, so it becomes one blocking finding
+(:data:`RUNTIME_ERROR_RULE_ID`, ``fatal``) rather than an exception. Saxon also prints that error's
+stack trace to the process's standard error from native code. saxonche 13.0.0 does not route it through
+its Python API, and its ``standardErrorOutputFile`` configuration property does not redirect it.
+Silencing it would mean redirecting file descriptor 2 for the whole process, so it is left alone.
 
 Caching and threads: one :class:`saxonche.PySaxonProcessor` per process, created on first use, and one
 compiled executable per ``(stylesheet path, cache-entry fingerprint)``, so a re-fetched or re-pinned
@@ -33,6 +42,20 @@ from euinvoice import _xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
 from euinvoice.validate import artifacts
 from euinvoice.validate.report import Finding, Severity
+
+__all__ = [
+    "CEN_CII",
+    "CEN_UBL",
+    "PEPPOL_CII",
+    "PEPPOL_UBL",
+    "RULE_SETS",
+    "RUNTIME_ERROR_RULE_ID",
+    "XRECHNUNG_CII",
+    "XRECHNUNG_UBL",
+    "RuleSet",
+    "run",
+    "svrl_findings",
+]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -60,11 +83,21 @@ PEPPOL_UBL: t.Final = RuleSet("peppol-bis", "rules/sch/PEPPOL-EN16931-UBL.xslt")
 PEPPOL_CII: t.Final = RuleSet("peppol-bis", "rules/sch/PEPPOL-EN16931-CII.xslt")
 """Peppol BIS Billing 3.0 rules for CII (used by the Peppol vefa unit tests ``rules/unit-CII-*``)."""
 XRECHNUNG_UBL: t.Final = RuleSet("xrechnung-schematron", "schematron/ubl/XRechnung-UBL-validation.xsl")
-"""XRechnung 3.0.2 rules (BR-DE-*, BR-DEX-*, BR-TMP-*) for UBL."""
+"""XRechnung 3.0.2 rules for UBL: BR-DE-*, BR-DE-CVD-*, BR-DEX-*, BR-TMP-*, BR-DE-TMP-32, BR-TMP-CVD-01.
+
+The stylesheet also re-asserts a subset of 21 PEPPOL-EN16931-R* rules, so do not run
+:data:`PEPPOL_UBL` alongside it, or those findings are counted twice.
+"""
 XRECHNUNG_CII: t.Final = RuleSet("xrechnung-schematron", "schematron/cii/XRechnung-CII-validation.xsl")
-"""XRechnung 3.0.2 rules (BR-DE-*, BR-DEX-*, BR-TMP-*) for CII."""
+"""XRechnung 3.0.2 rules for CII: BR-DE-*, BR-DE-CVD-*, BR-DEX-*, BR-TMP-*, BR-DE-TMP-32, BR-TMP-CVD-01.
+
+The stylesheet also re-asserts a subset of 22 PEPPOL-EN16931-R* rules, so do not run
+:data:`PEPPOL_CII` alongside it, or those findings are counted twice.
+"""
 RULE_SETS: t.Final = (CEN_UBL, CEN_CII, PEPPOL_UBL, PEPPOL_CII, XRECHNUNG_UBL, XRECHNUNG_CII)
 """Every rule set above; which ones apply to a document is the orchestrator's decision."""
+RUNTIME_ERROR_RULE_ID: t.Final = "SCHEMATRON-RUNTIME"
+"""Rule id of the fatal finding reported when a stylesheet cannot evaluate a document (see module docs)."""
 
 _SVRL_ROOT: t.Final = f"{{{_xml.SVRL}}}schematron-output"
 _SVRL_RESULTS: t.Final = (f"{{{_xml.SVRL}}}failed-assert", f"{{{_xml.SVRL}}}successful-report")
@@ -90,34 +123,35 @@ def run(
 
     Args:
         rule_set: The compiled rule set to run, e.g. :data:`CEN_UBL`.
-        document: The XML as bytes (parsed with :func:`euinvoice._xml.parse`) or an element (serialized
-            and parsed the same way, so Saxon never sees anything the hardened parser did not accept).
+        document: The XML as bytes or an element; either way it goes through :func:`euinvoice._xml.to_xdm`.
         root: Artifact cache root; defaults to :func:`~euinvoice.validate.artifacts.cache_dir`.
         sources: Manifest; defaults to the packaged one.
 
     Returns:
         One finding per failed assert or successful report, in SVRL document order, each with
-        ``source`` set to ``rule_set.source``. Empty when the document passes the rule set.
+        ``source`` set to ``rule_set.source``. Empty when the document passes the rule set. If the
+        stylesheet fails while evaluating the document, a single fatal
+        :data:`RUNTIME_ERROR_RULE_ID` finding with Saxon's message.
 
     Raises:
         TypeError: ``document`` is neither bytes nor an element.
         ParseError: The document is malformed or has a DOCTYPE (D10).
         ArtifactsNotAvailableError: The source is not in the cache (names the fetch command), or
             ``saxonche`` is missing (names the ``euinvoice[validate]`` extra).
-        ArtifactIntegrityError: The stylesheet does not compile, fails at run time or produces no SVRL.
+        ArtifactIntegrityError: The stylesheet does not compile, or produces empty or non-SVRL output.
     """
-    text = _instance_text(document)
     saxonche = _saxonche()
     directory = artifacts.source_dir(rule_set.source, root=root, sources=sources)
     stylesheet = (directory / rule_set.stylesheet).resolve()
     fingerprint = (directory / artifacts.MARKER).read_text(encoding="ascii").strip()
     with _lock:
         executable = _executable(saxonche, stylesheet, fingerprint, rule_set)
+        node = _xml.to_xdm(_processor, document)
         try:
-            node = _processor.parse_xml(xml_text=text, encoding="UTF-8")  # text from _xml.parse, see above
             output = executable.transform_to_string(xdm_node=node)
         except saxonche.PySaxonApiError as exc:
-            raise ArtifactIntegrityError(f"{rule_set.source}: {rule_set.stylesheet} failed: {exc}") from exc
+            message = f"{rule_set.stylesheet} could not evaluate the document: {str(exc).strip()}"
+            return (Finding(RUNTIME_ERROR_RULE_ID, Severity.FATAL, None, message, rule_set.source),)
     try:
         # The pinned stylesheets' xsl:output leaves the encoding at its UTF-8 default, so the declaration
         # in ``output`` says UTF-8.
@@ -172,12 +206,6 @@ def _message(result: etree._Element) -> str:
     return " ".join(etree.tostring(text, method="text", encoding="unicode", with_tail=False).split())
 
 
-def _instance_text(document: bytes | etree._Element) -> str:
-    """Pass the document through the hardened parser and return its lxml serialization (D10)."""
-    data = etree.tostring(document) if isinstance(document, etree._Element) else document
-    return etree.tostring(_xml.parse(data).getroottree(), encoding="unicode")
-
-
 def _saxonche() -> t.Any:  # saxonche ships no type information
     try:
         import saxonche
@@ -196,7 +224,8 @@ def _executable(saxonche: t.Any, stylesheet: Path, fingerprint: str, rule_set: R
         if _processor is None:
             _processor = saxonche.PySaxonProcessor(license=False)
         try:
-            # The one load by path: a pinned, fingerprint-checked artifact (xsl:include needs a base URI).
+            # The one load by path: a pinned artifact from a recipe-fingerprint-checked cache entry (catches
+            # a stale cache, not tampering); by path because xsl:include / xsl:import need a base URI.
             _executables[key] = _processor.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(stylesheet))
         except saxonche.PySaxonApiError as exc:
             raise ArtifactIntegrityError(f"{rule_set.source}: cannot compile {rule_set.stylesheet}: {exc}") from exc

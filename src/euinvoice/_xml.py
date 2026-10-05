@@ -12,6 +12,8 @@ attack class is blocked:
 * **Trusted schemas**: :func:`load_trusted_schema` is the one place that reads files. It is for the
   pinned, sha256-verified XSDs only, and a confining resolver keeps every load local and inside the
   schema package.
+* **Saxon**: :func:`to_xdm` is the only way a document reaches saxonche, as text re-serialized from a
+  tree this module parsed. Only pinned stylesheets are ever loaded by path, outside this module.
 * **Oversized input**: ``huge_tree=False`` keeps libxml2's safety limits (nesting depth, text node
   and attribute size).
 
@@ -58,6 +60,12 @@ Verified as the ``svrl`` namespace of the pinned CEN ``EN16931-UBL-validation.xs
 ``EN16931-CII-validation.xslt`` (1.3.16), the SchXslt-compiled Peppol 3.0.21 stylesheets and the
 XRechnung 2.6.0 ``XRechnung-*-validation.xsl``.
 """
+SCHEMATRON: t.Final = "http://purl.oclc.org/dsdl/schematron"
+"""ISO Schematron (ISO/IEC 19757-3), the default namespace of the pinned Peppol 3.0.21 ``rules/sch/*.sch``."""
+XSLT: t.Final = "http://www.w3.org/1999/XSL/Transform"
+"""XSLT, the namespace of every compiled rule set."""
+VEFA: t.Final = "http://difi.no/xsd/vefa/validator/1.0"
+"""vefa-validator test sets: the format of the Peppol rules' unit tests (``rules/unit-*/*.xml``, ``testSet``)."""
 
 # Plain dicts because lxml's ``xpath(namespaces=…)`` rejects read-only mappings. Do not mutate.
 UBL_NSMAP: t.Final[dict[str, str]] = {"cac": UBL_CAC, "cbc": UBL_CBC, "ext": UBL_EXT}
@@ -161,6 +169,29 @@ def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None)
     if error is not None:
         raise ParseError(f"invalid XML Schema {path.name}: {error}") from error
     return schema
+
+
+def to_xdm(processor: t.Any, document: bytes | etree._Element) -> t.Any:
+    """Hand a document to Saxon the D10 way: the one bridge from euinvoice to ``saxonche``.
+
+    The document passes :func:`parse` first, also when it is an element (it is serialized without its
+    tail and parsed again). Saxon then gets the lxml serialization of that tree as text, never a file
+    name or URI, so it only ever sees XML the hardened parser accepted.
+
+    Args:
+        processor: A ``saxonche.PySaxonProcessor`` (``Any``: saxonche ships no type information).
+        document: XML bytes, or an element.
+
+    Returns:
+        The ``saxonche.PyXdmNode`` of the document.
+
+    Raises:
+        TypeError: ``document`` is neither bytes nor an element.
+        ParseError: The document is malformed or has a DOCTYPE.
+    """
+    data = etree.tostring(document, with_tail=False) if isinstance(document, etree._Element) else document
+    text = etree.tostring(parse(data).getroottree(), encoding="unicode")
+    return processor.parse_xml(xml_text=text, encoding="UTF-8")
 
 
 class _ConfiningResolver(etree.Resolver):

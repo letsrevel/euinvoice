@@ -383,10 +383,10 @@ def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
     """Compile each ``precompile`` Schematron to a sibling ``.xslt`` with SchXslt on Saxon.
 
     Only the pinned SchXslt pipeline is loaded by path (it includes its sibling stylesheets). Each
-    ``.sch`` goes through :func:`euinvoice._xml.parse` and reaches Saxon as an XDM node built from its
-    serialization (D10). That is equivalent for these inputs because the Peppol ``.sch`` files have no
-    ``sch:include``: the output differs from a by-path compile only in SchXslt's ``dct:created``
-    timestamp and generated ids (checked on Peppol 3.0.21).
+    ``.sch`` reaches Saxon through :func:`euinvoice._xml.to_xdm` (D10), so it has no base URI and a
+    schema with ``sch:include`` or ``sch:extends[@href]`` is refused. For the Peppol ``.sch`` files, which
+    use neither, the output differs from a by-path compile only in SchXslt's ``dct:created`` timestamp
+    and generated ids (checked on Peppol 3.0.21).
     """
     if compiler is None or not (compiler / SCHXSLT_PIPELINE).is_file():
         raise ArtifactsNotAvailableError(
@@ -411,11 +411,29 @@ def _precompile(source: Source, content: Path, compiler: Path | None) -> None:
             if not sch.is_file():
                 raise ArtifactIntegrityError(f"{source.name}: precompile entry {rel!r} is not in the archive")
             try:
-                text = etree.tostring(_xml.parse(sch.read_bytes()).getroottree(), encoding="unicode")
-                node = proc.parse_xml(xml_text=text, encoding="UTF-8")  # text from _xml.parse, see above
+                node = _xml.to_xdm(proc, _standalone_schematron(source, rel, sch.read_bytes()))
                 xslt = executable.transform_to_string(xdm_node=node)
             except (ParseError, saxonche.PySaxonApiError) as exc:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt failed on {rel}: {exc}") from exc
             if xslt is None:
                 raise ArtifactIntegrityError(f"{source.name}: SchXslt produced no output for {rel}")
             sch.with_suffix(".xslt").write_text(xslt, encoding="utf-8")
+
+
+def _standalone_schematron(source: Source, rel: str, data: bytes) -> etree._Element:
+    """Parse a ``.sch`` and refuse it if it pulls in other files.
+
+    The schema reaches SchXslt as text without a base URI, so a reference to another file would be
+    resolved against the current directory instead of the artifact. The elements SchXslt loads files
+    for are ``sch:include`` and ``sch:extends[@href]`` (SchXslt 1.10.1 ``2.0/include.xsl``, template
+    ``match="sch:include | sch:extends[@href]"``); ``sch:extends[@rule]`` is an in-schema reference.
+    """
+    root = _xml.parse(data)
+    sch = f"{{{_xml.SCHEMATRON}}}"
+    for element in root.iter(f"{sch}include", f"{sch}extends"):
+        if element.tag == f"{sch}include" or element.get("href") is not None:
+            raise ArtifactIntegrityError(
+                f"{source.name}: {rel} pulls in another file ({etree.QName(element).localname}"
+                f" href={element.get('href')!r}), which the precompile cannot resolve without a base URI"
+            )
+    return root

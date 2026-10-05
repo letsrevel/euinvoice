@@ -110,7 +110,7 @@ def test_malformed_svrl_is_a_parse_error() -> None:
 # --- run() against a fake cache --------------------------------------------------------------------
 
 # Synthetic stand-in for a compiled rule set: one fatal assert "the root has an ID child".
-STYLESHEET = f"""<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+STYLESHEET = f"""<xsl:stylesheet version="3.0" xmlns:xsl="{_xml.XSLT}"
     xmlns:svrl="{SVRL_NS}">
   <xsl:template match="/">
     <svrl:schematron-output>
@@ -162,6 +162,12 @@ def test_run_accepts_an_element(tmp_path: Path, cache: dict[str, Source]) -> Non
     assert [f.rule_id for f in run(wrapper[0], tmp_path, cache)] == ["T-01"]
 
 
+def test_element_tail_text_is_not_part_of_the_document(tmp_path: Path, cache: dict[str, Source]) -> None:
+    # Regression: serializing with the tail made the hardened parser reject a valid invoice.
+    wrapper = _xml.parse(b"<wrapper><Invoice><ID>1</ID></Invoice>trailing</wrapper>")
+    assert run(wrapper[0], tmp_path, cache) == ()
+
+
 def test_run_rejects_unsafe_or_wrong_input_before_saxon(tmp_path: Path, cache: dict[str, Source]) -> None:
     with pytest.raises(ParseError, match="DOCTYPE"):
         run(b'<!DOCTYPE x [<!ENTITY e "boom">]><Invoice>&e;</Invoice>', tmp_path, cache)
@@ -197,17 +203,26 @@ def test_stylesheet_that_does_not_compile_is_an_integrity_error(tmp_path: Path) 
         run(VALID, tmp_path, sources)
 
 
-def test_dynamic_error_in_the_stylesheet_is_an_integrity_error(tmp_path: Path) -> None:
-    failing = STYLESHEET.replace("<svrl:schematron-output>", "<svrl:schematron-output>{error()}", 1).replace(
-        '<xsl:template match="/">', '<xsl:template match="/" expand-text="yes">', 1
+def test_document_the_stylesheet_cannot_evaluate_is_a_fatal_finding(tmp_path: Path) -> None:
+    # D9: like CEN's BR-CO rules on a non-numeric amount, abs() casts the ID to a number: FORG0001 on "abc".
+    casting = STYLESHEET.replace('test="not(/*/*:ID)"', 'test="abs(/*/*:ID) lt 0"')
+    sources = install(tmp_path, casting, sha="3" * 64)
+
+    (finding,) = run(b"<Invoice><ID>abc</ID></Invoice>", tmp_path, sources)
+
+    assert (finding.rule_id, finding.severity, finding.location, finding.source) == (
+        schematron.RUNTIME_ERROR_RULE_ID,
+        Severity.FATAL,
+        None,
+        NAME,
     )
-    sources = install(tmp_path, failing, sha="3" * 64)
-    with pytest.raises(ArtifactIntegrityError, match=r"xslt/rules\.xslt failed"):
-        run(VALID, tmp_path, sources)
+    assert finding.message.startswith("xslt/rules.xslt could not evaluate the document: ")
+    assert '"abc"' in finding.message
+    assert run(b"<Invoice><ID>1.5</ID></Invoice>", tmp_path, sources) == ()
 
 
 def test_stylesheet_without_output_is_an_integrity_error(tmp_path: Path) -> None:
-    empty = '<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"/>'
+    empty = f'<xsl:stylesheet version="3.0" xmlns:xsl="{_xml.XSLT}"/>'
     sources = install(tmp_path, empty.replace("/>", '><xsl:template match="/"/></xsl:stylesheet>'), sha="4" * 64)
     with pytest.raises(ArtifactIntegrityError, match="produced no SVRL"):
         run(VALID, tmp_path, sources)
@@ -219,6 +234,22 @@ def test_missing_saxonche_names_the_validate_extra(
     monkeypatch.setitem(sys.modules, "saxonche", None)  # makes `import saxonche` raise ImportError
     with pytest.raises(ArtifactsNotAvailableError, match=r"euinvoice\[validate\]"):
         run(VALID, tmp_path, cache)
+
+
+def test_public_surface() -> None:
+    assert set(schematron.__all__) == {
+        "CEN_CII",
+        "CEN_UBL",
+        "PEPPOL_CII",
+        "PEPPOL_UBL",
+        "RULE_SETS",
+        "RUNTIME_ERROR_RULE_ID",
+        "XRECHNUNG_CII",
+        "XRECHNUNG_UBL",
+        "RuleSet",
+        "run",
+        "svrl_findings",
+    }
 
 
 # --- rule-set catalogue ----------------------------------------------------------------------------
