@@ -233,6 +233,27 @@ def test_source_without_check_is_an_error(capsys: pytest.CaptureFixture[str]) ->
     assert "ERROR      new-thing: no upstream check defined" in capsys.readouterr().out
 
 
+def test_crash_exits_2_not_drift(capsys: pytest.CaptureFixture[str]) -> None:
+    # Exit 1 means drift to the nightly workflow; a bug in the script must not look like drift.
+    def boom(url: str) -> bytes:
+        raise RuntimeError("bug")
+
+    assert cu.main(boom) == 2
+    captured = capsys.readouterr()
+    assert "ERROR      check_upstream crashed: RuntimeError: bug" in captured.out
+    assert "Traceback" in captured.err
+
+
+def test_main_passes_through_the_run_exit_code(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cu.main(fake(CURRENT)) == 0
+    assert "0 source(s) behind upstream, 0 source(s) could not be checked." in capsys.readouterr().out
+
+
+def test_findings_for_static_is_empty() -> None:
+    source = load_manifest()["ubl-2_1"]
+    assert cu.findings(source, cu.Check("static"), fake({})) == []
+
+
 class _Response(io.BytesIO):
     def __enter__(self) -> "_Response":
         return self
