@@ -196,3 +196,36 @@ def test_namespace_maps() -> None:
     assert _xml.UBL_INVOICE == "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
     assert _xml.UBL_CREDIT_NOTE == "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"
     assert _xml.CII_RSM == "urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
+
+
+class RecordingProcessor:
+    """Stands in for saxonche.PySaxonProcessor: records what to_xdm hands to Saxon."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def parse_xml(self, xml_text: str, encoding: str) -> str:
+        self.calls.append((xml_text, encoding))
+        return "node"
+
+
+def test_to_xdm_hands_saxon_the_reserialized_text_only() -> None:
+    processor = RecordingProcessor()
+    assert _xml.to_xdm(processor, b'<?xml version="1.0" encoding="ISO-8859-1"?><a>\xe4</a>') == "node"
+    assert processor.calls == [("<a>ä</a>", "UTF-8")]
+
+
+def test_to_xdm_takes_an_element_without_its_tail() -> None:
+    processor = RecordingProcessor()
+    wrapper = _xml.parse(b"<w><a x='1'/>tail</w>")
+    _xml.to_xdm(processor, wrapper[0])
+    assert processor.calls == [('<a x="1"/>', "UTF-8")]
+
+
+def test_to_xdm_rejects_unsafe_or_wrong_input_before_saxon() -> None:
+    processor = RecordingProcessor()
+    with pytest.raises(ParseError, match="DOCTYPE"):
+        _xml.to_xdm(processor, b'<!DOCTYPE a [<!ENTITY e "x">]><a>&e;</a>')
+    with pytest.raises(TypeError):
+        _xml.to_xdm(processor, "<a/>")  # type: ignore[arg-type]  # asserting the runtime type check
+    assert processor.calls == []

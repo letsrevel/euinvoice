@@ -228,6 +228,22 @@ def test_stylesheet_without_output_is_an_integrity_error(tmp_path: Path) -> None
         run(VALID, tmp_path, sources)
 
 
+def test_saxon_rejecting_what_lxml_accepted_is_a_parse_error(
+    tmp_path: Path, cache: dict[str, Source], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import saxonche
+
+    run(VALID, tmp_path, cache)  # compiles the stylesheet and creates the shared processor
+
+    class Rejecting:
+        def parse_xml(self, xml_text: str, encoding: str) -> object:
+            raise saxonche.PySaxonApiError("SXXP0003 rejected")
+
+    monkeypatch.setattr(schematron, "_processor", Rejecting())
+    with pytest.raises(ParseError, match="Saxon rejected XML the hardened parser accepted: SXXP0003"):
+        run(VALID, tmp_path, cache)
+
+
 def test_missing_saxonche_names_the_validate_extra(
     tmp_path: Path, cache: dict[str, Source], monkeypatch: pytest.MonkeyPatch
 ) -> None:

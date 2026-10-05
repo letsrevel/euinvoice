@@ -135,7 +135,8 @@ def run(
 
     Raises:
         TypeError: ``document`` is neither bytes nor an element.
-        ParseError: The document is malformed or has a DOCTYPE (D10).
+        ParseError: The document is malformed or has a DOCTYPE (D10), or Saxon rejects the text the
+            hardened parser accepted.
         ArtifactsNotAvailableError: The source is not in the cache (names the fetch command), or
             ``saxonche`` is missing (names the ``euinvoice[validate]`` extra).
         ArtifactIntegrityError: The stylesheet does not compile, or produces empty or non-SVRL output.
@@ -146,7 +147,10 @@ def run(
     fingerprint = (directory / artifacts.MARKER).read_text(encoding="ascii").strip()
     with _lock:
         executable = _executable(saxonche, stylesheet, fingerprint, rule_set)
-        node = _xml.to_xdm(_processor, document)
+        try:
+            node = _xml.to_xdm(_processor, document)
+        except saxonche.PySaxonApiError as exc:
+            raise ParseError(f"Saxon rejected XML the hardened parser accepted: {exc}") from exc
         try:
             output = executable.transform_to_string(xdm_node=node)
         except saxonche.PySaxonApiError as exc:
