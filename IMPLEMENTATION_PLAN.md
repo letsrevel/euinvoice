@@ -30,8 +30,8 @@ only with an ADR in `docs/adr/` and a `needs-human` issue.
 | XRechnung 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: EN16931 (COMFORT) | CII in PDF/A-3 | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ✅ |
-| Factur-X / ZUGFeRD: BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ (EN 16931 subset; out-of-model content reported, never silently dropped) | ✅ |
-| Factur-X / ZUGFeRD: MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | detect + extract only in v0.1.0: they carry no lines (and MINIMUM no VAT breakdown), which the canonical model requires (D1); `parse` raises `ParseError` ([#69](https://github.com/letsrevel/euinvoice/issues/69)) | ✅ |
+| Factur-X / ZUGFeRD: BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ (EN 16931 subset; out-of-model content reported, never silently dropped) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
+| Factur-X / ZUGFeRD: MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | detect + extract only in v0.1.0: they carry no lines (and MINIMUM no VAT breakdown), which the canonical model requires (D1); `parse` raises `ParseError` ([#69](https://github.com/letsrevel/euinvoice/issues/69)) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
 
 ### Non-goals for v0.1.0 (later waves, each a separate spec)
 
