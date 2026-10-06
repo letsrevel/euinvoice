@@ -53,6 +53,11 @@ codelists: ## Regenerate the EN 16931 code lists (needs `make artifacts`)
 bt-coverage: ## Regenerate docs/reference/bt-coverage.md
 	EUINVOICE_REGEN_DOCS=1 uv run pytest -q tests/syntax/test_bt_coverage.py
 
+# Builds the documentation site (mkdocs-material, docs/ + mkdocs.yml) the way .github/workflows/docs.yaml does.
+.PHONY: docs
+docs: ## Build the docs site with --strict into site/
+	uv run mkdocs build --strict
+
 .PHONY: conformance
 conformance: ## Conformance suite against official Schematron + upstream corpora
 	uv run pytest -n auto -m conformance

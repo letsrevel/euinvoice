@@ -1,27 +1,23 @@
 """Runs the ``python`` code blocks of README.md as doctests, with a synthetic setup the README does not show.
 
-Every block is a doctest; the blocks share one namespace, in README order. A block right after the HTML comment
-``<!-- readme-doctest: needs-artifacts -->`` needs the official artifacts (``validate``): the unit run
-(``tests/test_readme.py``) skips it, the conformance run (``tests/conformance/test_readme_examples.py``) runs every
-block.
+Every block is a doctest; the blocks share one namespace, in README order (``tests/_markdown_doctest.py``). A block
+right after the HTML comment ``<!-- readme-doctest: needs-artifacts -->`` needs the official artifacts
+(``validate``): the unit run (``tests/test_readme.py``) skips it, the conformance run
+(``tests/conformance/test_readme_examples.py``) runs every block.
 """
 
 import datetime
-import doctest
 import pathlib
-import re
 import typing as t
 
+import _markdown_doctest
 from _calc_drafts import draft
 from _pdfa import pdf
 from _xrechnung_cases import PEPPOL_BILLING_01, buyer, payment, seller
 from euinvoice.model import DeliveryInformation, InvoiceDraft, ProcessControl
 
 README: t.Final = pathlib.Path(__file__).resolve().parents[1] / "README.md"
-NEEDS_ARTIFACTS: t.Final = "<!-- readme-doctest: needs-artifacts -->"
-_BLOCK: t.Final = re.compile(
-    r"(?P<marker>" + re.escape(NEEDS_ARTIFACTS) + r"\n)?```python\n(?P<body>.*?)^```", re.M | re.S
-)
+PREFIX: t.Final = "readme-doctest"
 
 
 def readme_draft() -> InvoiceDraft:
@@ -45,21 +41,9 @@ def readme_draft() -> InvoiceDraft:
     )
 
 
-def blocks() -> list[tuple[bool, doctest.DocTest]]:
-    """``(needs_artifacts, doctest)`` per ``python`` block of the README, all with one namespace.
-
-    ``DocTest`` copies the globals it is given, so the shared namespace is set on each test afterwards.
-    """
-    text = README.read_text(encoding="utf-8")
-    globs: dict[str, t.Any] = {"draft": readme_draft(), "rendered_pdf": pdf()}
-    parser = doctest.DocTestParser()
-    found = []
-    for match in _BLOCK.finditer(text):
-        line = text.count("\n", 0, match.start("body"))
-        test = parser.get_doctest(match["body"], globs, f"README.md:{line + 1}", str(README), line)
-        test.globs = globs
-        found.append((match["marker"] is not None, test))
-    return found
+def blocks() -> list[_markdown_doctest.Block]:
+    """The ``python`` blocks of the README."""
+    return _markdown_doctest.blocks(README, prefix=PREFIX)
 
 
 def run(*, with_artifacts: bool) -> int:
@@ -71,13 +55,6 @@ def run(*, with_artifacts: bool) -> int:
     Raises:
         AssertionError: An example failed; the message is doctest's report.
     """
-    runner = doctest.DocTestRunner(optionflags=doctest.ELLIPSIS)
-    report: list[str] = []
-    ran = 0
-    for needs_artifacts, test in blocks():
-        if needs_artifacts and not with_artifacts:
-            continue
-        result = runner.run(test, out=report.append, clear_globs=False)
-        assert result.failed == 0, "".join(report)
-        ran += result.attempted
+    globs: dict[str, t.Any] = {"draft": readme_draft(), "rendered_pdf": pdf()}
+    ran, _ = _markdown_doctest.run(README, globs, prefix=PREFIX, with_artifacts=with_artifacts)
     return ran
