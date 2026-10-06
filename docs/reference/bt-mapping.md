@@ -436,7 +436,8 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
   BT-18 documents, empty `ram:IncludedNote` elements (no child, no text), and `@format='102'` of dates.
 * Content the model cannot hold (e.g. a line-level `ram:ExemptionReason`, Factur-X EXTENDED elements, a second card)
   is unmapped. A model that cannot be built (a missing required term, a code outside its list) is a `ParseError`
-  naming the BT/BG and located at the element being read; Factur-X MINIMUM / BASIC WL subsets are #22's job.
+  naming the BT/BG and located at the element being read. Factur-X MINIMUM / BASIC WL documents raise it too: they
+  carry no lines (BR-16), so in v0.1.0 they are detected and extracted but not parsed (#69).
 
 
 ### The UBL reader (#11)

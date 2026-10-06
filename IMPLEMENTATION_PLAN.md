@@ -30,7 +30,8 @@ only with an ADR in `docs/adr/` and a `needs-human` issue.
 | XRechnung 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: EN16931 (COMFORT) | CII in PDF/A-3 | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ✅ |
-| Factur-X / ZUGFeRD: MINIMUM, BASIC WL, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ (EN 16931 subset; out-of-model content reported, never silently dropped) | ✅ |
+| Factur-X / ZUGFeRD: BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ (EN 16931 subset; out-of-model content reported, never silently dropped) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
+| Factur-X / ZUGFeRD: MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | detect + extract only in v0.1.0: they carry no lines (and MINIMUM no VAT breakdown), which the canonical model requires (D1); `parse` raises `ParseError` ([#69](https://github.com/letsrevel/euinvoice/issues/69)) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
 
 ### Non-goals for v0.1.0 (later waves, each a separate spec)
 
@@ -347,7 +348,8 @@ parallel. Each touches a disjoint set of files.
   the XRechnung test suite's valid instances pass, and invalid ones fail with the expected ids.
 - **6.4 · Factur-X / ZUGFeRD levels.** *deps: 6.1, 4.1, 4.2, 5.1.* Generate EN16931 + XRECHNUNG, parse
   all levels (EXTENDED/BASIC/WL/MINIMUM → model subset + `unmapped`). *AC:* ZUGFeRD corpus round-trip for
-  supported levels.
+  supported levels. *Decided for v0.1.0 (#69):* MINIMUM and BASIC WL are detected and extracted but not parsed
+  (`ParseError`), since they lack terms D1's model requires; a separate subset reader can be added later.
 
 ### M7 · Factur-X PDF
 - **7.1 · `facturx.embed`.** *deps: 4.1, 6.4.* pypdf implementation per §5. *AC:* veraPDF PDF/A-3B passes
