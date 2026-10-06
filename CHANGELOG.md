@@ -105,7 +105,7 @@ generated, parsed and validated per profile is in the README table; the open que
   Schematron rule set of the profile in order, with the raw official severities. Without a profile it is picked
   by BT-24; an unregistered or missing BT-24 falls back to EN 16931 core with an `information` finding
   `EUINVOICE-PROFILE-FALLBACK`. Factur-X MINIMUM, BASIC WL, BASIC and EXTENDED documents raise
-  `ArtifactsNotAvailableError` instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)); pass
+  `ArtifactsNotAvailableError` (Factur-X 1.0 / ZUGFeRD 2.1+ BT-24s; see [#98](https://github.com/letsrevel/euinvoice/issues/98)) instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)); pass
   `profile=profiles.EN16931` to run the core rules. It takes XML (for a PDF, pass `facturx.extract(pdf).xml`),
   returns a `ValidationReport` and never raises on rule failures.
 - XSD validation (`euinvoice.validate.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B
@@ -150,7 +150,7 @@ generated, parsed and validated per profile is in the README table; the open que
   profile (default: the one registered for its BT-24), runs the profile's pre-flight and `calc.check`, and raises
   `PreflightError` (with the findings, the profile id and the syntax; picklable) on any `fatal` / `error`
   finding before writing UBL or CII. It refuses the Factur-X levels that are not generated. `euinvoice.parse()` /
-  `parse_detailed()` read UBL, CII and Factur-X 1.0 / ZUGFeRD 2.1+ PDFs (ZUGFeRD 2.0 BT-24s are not registered, [#98](https://github.com/letsrevel/euinvoice/issues/98); ZUGFeRD 1.0 PDFs are
+  `parse_detailed()` read UBL, CII and Factur-X / ZUGFeRD 2.x PDFs (for ZUGFeRD 2.0 BT-24s no Factur-X profile is registered, [#98](https://github.com/letsrevel/euinvoice/issues/98); ZUGFeRD 1.0 PDFs are
   extract-only: `parse()` raises `UnsupportedDocumentError`); `parse()` discards `unmapped`.
 - `euinvoice` re-exports `to_xml`, `parse`, `parse_detailed`, `validate`, `detect`, `Invoice`, `InvoiceDraft`,
   `ParseResult`, `Syntax`, `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx`; `import

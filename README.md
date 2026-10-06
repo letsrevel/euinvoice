@@ -145,7 +145,7 @@ once the maintainer enables Pages for the repository and sets the repository var
 
 ## Known limitations
 
-Open questions waiting for a maintainer decision (`needs-human`), and one parked enhancement:
+Open questions waiting for a maintainer decision (`needs-human`), one open bug ([#98](https://github.com/letsrevel/euinvoice/issues/98)) and one parked enhancement:
 
 - [#42](https://github.com/letsrevel/euinvoice/issues/42): the Factur-X / ZUGFeRD XSD and Schematron have no
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
