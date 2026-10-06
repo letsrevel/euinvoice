@@ -21,10 +21,11 @@ from euinvoice.model import (
     PrecedingInvoiceReference,
     VatBreakdown,
 )
+from euinvoice.syntax._marks import XML_SPACE, normalize_space
 from euinvoice.syntax.cii._build import VAT, VAT_POINT_DATE_CODES_FROM_CII
 from euinvoice.syntax.cii._read_common import allowance_charge_values, period_dates, vat_category
 from euinvoice.syntax.cii._read_parties import payee
-from euinvoice.syntax.cii._reader import XML_SPACE, Reader, content, normalize_space
+from euinvoice.syntax.cii._reader import Reader, content
 
 
 def settlement(reader: Reader, transaction: etree._Element | None) -> tuple[dict[str, object], InvoicingPeriod | None]:

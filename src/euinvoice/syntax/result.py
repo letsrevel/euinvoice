@@ -16,7 +16,9 @@ class ParseResult:
     Attributes:
         invoice: The invoice built from the mapped business terms.
         unmapped: The location (an XPath as produced by ``lxml``'s ``getpath``) of each element or attribute
-            in the input that the reader did not map to a business term, in document order.
+            in the input that the reader did not map to a business term, in document order. An attribute is
+            ``<element path>/@prefix:name``; ``<element path>/text()`` means that only part of the element's text
+            was mapped (e.g. the time zone of a UBL ``xs:date``, which the model's calendar date cannot hold).
     """
 
     invoice: Invoice

@@ -15,12 +15,10 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.errors import ParseError
 from euinvoice.model import Identifier
+from euinvoice.syntax._marks import XML_SPACE, Marks, normalize_space
 from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.cii._build import DATE_FORMAT
 
-XML_SPACE: t.Final = " \t\r\n"
-"""The characters XPath ``normalize-space`` treats as whitespace (#x20, #x9, #xD, #xA)."""
-_XML_SPACE_RUN: t.Final = re.compile(r"[ \t\r\n]+")
 _DATE_102: t.Final = re.compile(r"[0-9]{8}")
 _TRUE: t.Final = frozenset({"true", "1"})
 _FALSE: t.Final = frozenset({"false", "0"})
@@ -37,23 +35,19 @@ class Reader:
             root: The ``rsm:CrossIndustryInvoice`` element.
         """
         self.root = root
-        self._tree = root.getroottree()
-        # lxml keeps one proxy per node while it is referenced, and the set holds the references.
-        self._elements: set[etree._Element] = {root}
-        self._attributes: set[tuple[etree._Element, str]] = set()
+        self._marks = Marks(root)
 
     def path(self, element: etree._Element) -> str:
         """The XPath of ``element`` (``ElementTree.getpath``)."""
-        return self._tree.getpath(element)
+        return self._marks.path(element)
 
     def use(self, element: etree._Element) -> etree._Element:
         """Mark ``element`` as mapped and return it."""
-        self._elements.add(element)
-        return element
+        return self._marks.mark(element)
 
     def discard(self, element: etree._Element) -> None:
         """Unmark ``element``: it was read, but its value is not the one the model kept."""
-        self._elements.discard(element)
+        self._marks.unmark(element)
 
     def children(self, parent: etree._Element | None, name: str, namespace: str = _xml.CII_RAM) -> list[etree._Element]:
         """The child elements called ``name``, without marking them (``[]`` without a parent)."""
@@ -87,7 +81,7 @@ class Reader:
         """The unqualified attribute ``name`` of ``element``, marked."""
         value = element.get(name)
         if value is not None:
-            self._attributes.add((element, name))
+            self._marks.mark_attribute(element, name)
         return value
 
     def identifier(self, element: etree._Element) -> Identifier:
@@ -168,47 +162,10 @@ class Reader:
         return build(cls, self.path(element), values, term)
 
     def unmapped(self) -> tuple[str, ...]:
-        """The XPaths of the input no business term took (``ParseResult.unmapped``), in document order.
-
-        Every element below a marked parent that is not marked itself is listed (its descendants are not listed
-        separately), and so is every attribute of a marked element that is not marked (``.../@name``; a
-        namespaced one as ``prefix:name``, e.g. ``@xsi:schemaLocation``). Comments and processing instructions
-        carry no data and are skipped.
-        """
-        found: list[str] = []
-        self._collect(self.root, found)
-        return tuple(found)
-
-    def _collect(self, element: etree._Element, found: list[str]) -> None:
-        path = self.path(element)
-        for key in element.attrib:
-            name = key if isinstance(key, str) else key.decode()
-            if (element, name) not in self._attributes:
-                found.append(f"{path}/@{_attribute_name(element, name)}")
-        for child in element:
-            if isinstance(child, etree._Comment | etree._ProcessingInstruction):  # they carry no data
-                continue
-            if child in self._elements:
-                self._collect(child, found)
-            else:
-                found.append(self.path(child))
-
-
-def normalize_space(text: str) -> str:
-    """XPath ``normalize-space``: XML whitespace stripped and inner runs collapsed to one space."""
-    return " ".join(_XML_SPACE_RUN.split(text.strip(XML_SPACE)))
+        """The XPaths of the input no business term took (``ParseResult.unmapped``; see ``syntax._marks.Marks``)."""
+        return self._marks.unmapped()
 
 
 def content(element: etree._Element) -> str:
     """The text of a leaf element (``""`` when empty)."""
     return element.text or ""
-
-
-def _attribute_name(element: etree._Element, name: str) -> str:
-    """``prefix:local`` for a namespaced attribute (Clark notation when the namespace has no prefix)."""
-    qname = etree.QName(name)
-    if not qname.namespace:
-        return name
-    prefixes = {uri: prefix for prefix, uri in element.nsmap.items() if prefix is not None}
-    prefix = prefixes.get(qname.namespace)
-    return name if prefix is None else f"{prefix}:{qname.localname}"

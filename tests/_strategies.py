@@ -1,8 +1,9 @@
 """Hypothesis strategies of random model invoices, shared by the writer and reader tests.
 
-:data:`cii_invoices` covers every combination the CII writer must handle: it is the input of the writer's XSD
-property test and of the reader's round-trip property test. The invoices are structurally valid models, not
-arithmetically consistent ones (``calc`` is not involved).
+:data:`invoices` are random, structurally valid models, not arithmetically consistent ones (``calc`` is not
+involved). They may hold what a syntax cannot express; each syntax maps them onto what its writer accepts before
+use: :func:`cii_expressible` here, ``ubl_expressible`` in ``tests/syntax/_ubl_strategies.py``. The results feed the
+writers' XSD property tests and the readers' round-trip property tests.
 """
 
 import datetime
@@ -31,6 +32,7 @@ from euinvoice.model import (
     InvoicingPeriod,
     ItemInformation,
     LineVatInformation,
+    Payee,
     PaymentCardInformation,
     PaymentInstructions,
     PrecedingInvoiceReference,
@@ -38,6 +40,8 @@ from euinvoice.model import (
     ProcessControl,
     Seller,
     SellerPostalAddress,
+    SellerTaxRepresentative,
+    TaxRepresentativePostalAddress,
     VatBreakdown,
 )
 
@@ -123,17 +127,24 @@ _delivery = st.builds(
     deliver_to_address=st.none() | st.builds(DeliverToAddress, city=st.none() | _text, country_code=st.just("NL")),
 )
 
-cii_invoices: t.Final = st.builds(
+invoices: t.Final = st.builds(
     Invoice,
     number=_text,
     issue_date=_date,
     type_code=st.sampled_from(["380", "381", "384", "389", "751"]),
     currency_code=st.sampled_from(["EUR", "SEK", "CHF"]),
+    # BT-6 may equal BT-5 (UBL refuses that together with BT-111) and BT-111 may come without BT-6 (both refuse).
+    vat_accounting_currency_code=st.none() | st.sampled_from(["EUR", "SEK", "NOK"]),
     vat_point_date=st.none() | _date,
     payment_due_date=st.none() | _date,
     vat_point_date_code=st.none() | st.sampled_from(["3", "35", "432"]),
     payment_terms=st.none() | _text,
-    notes=st.lists(st.builds(InvoiceNote, note=st.none() | _text), max_size=2).map(tuple),
+    notes=st.lists(
+        st.builds(InvoiceNote, subject_code=st.none() | st.sampled_from(["AAI", "SUR"]), note=st.none() | _text),
+        max_size=2,
+    ).map(tuple),
+    purchase_order_reference=st.none() | _text | st.just("NA"),
+    sales_order_reference=st.none() | _text,
     process_control=st.builds(ProcessControl, specification_identifier=_text),
     preceding_invoice_references=st.lists(
         st.builds(PrecedingInvoiceReference, reference=_text, issue_date=st.none() | _date), max_size=1
@@ -143,7 +154,16 @@ cii_invoices: t.Final = st.builds(
         name=_text,
         identifiers=st.lists(_identifier, max_size=2).map(tuple),
         vat_identifier=st.none() | _text,
+        tax_registration_identifier=st.none() | _text,
         postal_address=st.builds(SellerPostalAddress, city=st.none() | _text, country_code=st.just("DE")),
+    ),
+    payee=st.none() | st.builds(Payee, name=_text, identifier=st.none() | _identifier),
+    seller_tax_representative=st.none()
+    | st.builds(
+        SellerTaxRepresentative,
+        name=_text,
+        vat_identifier=_text,
+        postal_address=st.builds(TaxRepresentativePostalAddress, country_code=st.just("AT")),
     ),
     buyer=st.builds(
         Buyer,
@@ -165,6 +185,7 @@ cii_invoices: t.Final = st.builds(
         sum_of_line_net_amounts=_amount,
         total_without_vat=_amount,
         total_vat=st.none() | _amount,
+        total_vat_in_accounting_currency=st.none() | _amount,
         total_with_vat=_amount,
         amount_due=_amount,
     ),
@@ -175,3 +196,23 @@ cii_invoices: t.Final = st.builds(
     ).map(tuple),
     lines=st.lists(_line, min_size=1, max_size=3).map(tuple),
 )
+"""Random invoices and credit notes (see the module docstring)."""
+
+
+def cii_expressible(invoice: Invoice) -> Invoice:
+    """``invoice`` without BT-111 where CII cannot carry it unambiguously.
+
+    The CII writer refuses BT-111 without BT-6 (bt-mapping.md, "CII gap"). With BT-6 equal to BT-5 it writes two
+    ``ram:TaxTotalAmount`` with the same ``@currencyID``, which the reader cannot tell apart (BT-110 and BT-111
+    are bound by ``@currencyID``): not invertible, so left out here (the UBL writer refuses that case).
+
+    Args:
+        invoice: A random invoice.
+
+    Returns:
+        The invoice the CII writer accepts.
+    """
+    totals = invoice.totals
+    if invoice.vat_accounting_currency_code in (None, invoice.currency_code):
+        totals = totals.model_validate({**dict(totals), "total_vat_in_accounting_currency": None})
+    return Invoice.model_validate({**dict(invoice), "totals": totals})
