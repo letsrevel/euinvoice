@@ -295,6 +295,10 @@ is unbounded.
   `NA` there (Peppol upstream structure docs, commit 806866b, `ubl-invoice.xml`, BT-13). BT-32 is written
   with `cac:TaxScheme/cbc:ID` `FC`, as in the XRechnung test suite (CEN only requires a value other than
   `VAT`, UBL-SR-13). BT-90 is written under `cac:PayeeParty` when BG-10 is present, else under the Seller.
+* **N5 · Peppol P0100 cannot fire on CII.** `PEPPOL-EN16931-CII.sch:601-604` (peppol-bis 3.0.21) checks BT-3
+  against the profile in the context `ram:ExchangedDocument/ram:TypeCode`, but `ExchangedDocument` is in the
+  `rsm` namespace (`rsm:ExchangedDocument`), so the context never matches and the rule is dead upstream. A BT-3
+  that the UBL rule (`PEPPOL-EN16931-UBL.sch`) rejects passes the Peppol CII rules.
 
 ## Library conventions
 
@@ -337,6 +341,10 @@ syntax's writer reports the gap.
 * **CII gap · BT-111 without BT-6.** BT-111's only binding is
   `ram:TaxTotalAmount[@currencyID = ../../ram:TaxCurrencyCode]` (KoSIT binding, BR-53, BR-DEC-15); without
   BT-6 the amount has no currency to carry. The CII writer raises `ModelError`.
+* **UBL gap · no BT-110.** CEN UBL BR-CO-15 requires exactly one `cac:TaxTotal/cbc:TaxAmount` in the invoice
+  currency (`UBL/EN16931-UBL-model.sch`), and BG-23 sits in that `cac:TaxTotal`, whose `cbc:TaxAmount` the UBL 2.1
+  XSD requires (`TaxTotalType`, minOccurs 1). CII can omit it (CEN `CII_example7.xml`, `XRechnung-O.xml`). The UBL
+  writer raises `ModelError`.
 * **Gap in both syntaxes · BT-6 = BT-5 with BT-111.** BT-110 and BT-111 are told apart only by `@currencyID`, so
   equal currencies give two amounts in BT-5 that no reader can tell apart, and the CEN Schematron rejects every
   such document: CII BR-53 requires `ram:TaxCurrencyCode` to differ from `ram:InvoiceCurrencyCode`, UBL BR-CO-15

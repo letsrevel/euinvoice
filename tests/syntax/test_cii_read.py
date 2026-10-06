@@ -15,10 +15,10 @@ from hypothesis import given, settings
 from lxml import etree
 
 from _invoices import TEST_IBAN, full_invoice, minimal_invoice, payment, price, rebuild
-from _strategies import cii_expressible, invoices
+from _strategies import cii_expressible, cii_normalized, invoices
 from euinvoice import _xml
 from euinvoice.errors import ParseError
-from euinvoice.model import CreditTransfer, Identifier, Invoice, InvoiceLine, PriceDetails
+from euinvoice.model import CreditTransfer, Identifier, Invoice
 from euinvoice.syntax import cii
 from euinvoice.syntax.result import ParseResult
 
@@ -78,45 +78,11 @@ def test_derived_gross_price_is_read_as_bt_148() -> None:
     assert read.lines[0].price_details == price(item_gross_price=Decimal("50.5"))
 
 
-def _as_written(invoice: Invoice) -> Invoice:
-    """What a CII round trip of ``invoice`` returns: the model with the writer's normalizations applied.
-
-    See ``docs/reference/bt-mapping.md`` "Normalizations": empty BG-1, BG-13 and BG-19 are not written; BT-29
-    identifiers without a scheme come first (``ram:ID`` precedes ``ram:GlobalID`` in the XSD); a BT-147 without
-    BT-148 gains BT-148 = BT-146 + BT-147.
-    """
-    delivery = invoice.delivery
-    if delivery is not None and all(v is None for v in dict(delivery).values()):
-        delivery = None
-    payment_instructions = invoice.payment_instructions
-    debit = None if payment_instructions is None else payment_instructions.direct_debit
-    if payment_instructions is not None and debit is not None and all(v is None for v in dict(debit).values()):
-        payment_instructions = payment_instructions.model_copy(update={"direct_debit": None})
-    lines: list[InvoiceLine] = []
-    for item in invoice.lines:
-        prices = item.price_details
-        if prices.item_gross_price is None and prices.item_price_discount is not None:
-            gross = prices.item_net_price + prices.item_price_discount
-            prices = PriceDetails.model_validate({**dict(prices), "item_gross_price": gross})
-        lines.append(rebuild(item, price_details=prices))
-    seller = invoice.seller.model_copy(
-        update={"identifiers": tuple(sorted(invoice.seller.identifiers, key=lambda i: i.scheme_id is not None))}
-    )
-    return rebuild(
-        invoice,
-        notes=tuple(n for n in invoice.notes if (n.note, n.subject_code) != (None, None)),
-        delivery=delivery,
-        payment_instructions=payment_instructions,
-        lines=tuple(lines),
-        seller=seller,
-    )
-
-
 @settings(max_examples=60)
 @given(invoices.map(cii_expressible))
 def test_random_invoices_round_trip(invoice: Invoice) -> None:
     result = cii.read(tree(invoice))
-    assert result.invoice == _as_written(invoice)
+    assert result.invoice == cii_normalized(invoice)
     assert result.unmapped == ()
 
 
