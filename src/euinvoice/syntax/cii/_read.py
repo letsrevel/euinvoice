@@ -20,12 +20,13 @@ from euinvoice.model import (
     InvoicingPeriod,
     ProcessControl,
 )
+from euinvoice.syntax._marks import XML_SPACE
 from euinvoice.syntax.cii._build import PROJECT_NAME, SUPPORTING_DOCUMENT_TYPE_CODE, TENDER_TYPE_CODE
 from euinvoice.syntax.cii._read_common import object_identifier
 from euinvoice.syntax.cii._read_lines import line
 from euinvoice.syntax.cii._read_parties import address, buyer, seller, single_id, tax_representative
 from euinvoice.syntax.cii._read_settlement import settlement
-from euinvoice.syntax.cii._reader import XML_SPACE, Reader, content
+from euinvoice.syntax.cii._reader import Reader, content
 from euinvoice.syntax.result import ParseResult
 
 _ROOT = f"{{{_xml.CII_RSM}}}CrossIndustryInvoice"

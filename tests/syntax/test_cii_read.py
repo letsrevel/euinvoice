@@ -15,7 +15,7 @@ from hypothesis import HealthCheck, given, settings
 from lxml import etree
 
 from _invoices import TEST_IBAN, full_invoice, minimal_invoice, payment, price, rebuild
-from _strategies import cii_invoices
+from _strategies import cii_expressible, invoices
 from euinvoice import _xml
 from euinvoice.errors import ParseError
 from euinvoice.model import CreditTransfer, Identifier, Invoice, InvoiceLine, PriceDetails
@@ -113,7 +113,7 @@ def _as_written(invoice: Invoice) -> Invoice:
 
 
 @settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(cii_invoices)
+@given(invoices.map(cii_expressible))
 def test_random_invoices_round_trip(invoice: Invoice) -> None:
     result = cii.read(tree(invoice))
     assert result.invoice == _as_written(invoice)
