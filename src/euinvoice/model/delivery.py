@@ -17,8 +17,8 @@ __all__ = ["DeliverToAddress", "DeliveryInformation", "InvoicingPeriod"]
 class InvoicingPeriod(EuInvoiceModel):
     """INVOICING PERIOD (BG-14).
 
-    BR-29 (end not before start) and BR-CO-19 (start or end present) are business rules left to the
-    official Schematron (D8), not checked here.
+    BR-29 (end not before start) and BR-CO-19 (start or end present) are business rules, not checked
+    by the model: :func:`euinvoice.calc.check` reports them, the official Schematron decides (D8).
     """
 
     start_date: t.Annotated[Date | None, bt("BT-73")] = None

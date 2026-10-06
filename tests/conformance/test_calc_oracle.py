@@ -14,6 +14,7 @@ The UBL writer refuses an invoice without BT-110 or with BT-6 = BT-5 (UBL cannot
 ``check(invoice, syntax=Syntax.UBL)`` must report the rejection instead.
 """
 
+import datetime
 import re
 import typing as t
 from collections.abc import Callable
@@ -24,7 +25,14 @@ import pytest
 from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
 from euinvoice import calc
 from euinvoice.errors import ModelError
-from euinvoice.model import Invoice, VatBreakdown
+from euinvoice.model import (
+    DeliveryInformation,
+    Invoice,
+    InvoiceLine,
+    InvoiceLinePeriod,
+    InvoicingPeriod,
+    VatBreakdown,
+)
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax, cii, ubl
 from euinvoice.validate import schematron
@@ -74,6 +82,24 @@ def extra(*groups: VatBreakdown, invoice: Invoice | None = None) -> Invoice:
 def single(category: str, rate: str | None, **kw: t.Any) -> Invoice:
     reasons = {category: calc.ExemptionReason(text="Exemption text")} if category in {"E", "AE", "K", "G", "O"} else {}
     return calc.complete(draft(line("1", "100", category, rate), **kw), exemption_reasons=reasons)
+
+
+JAN, FEB = datetime.date(2026, 1, 1), datetime.date(2026, 2, 1)
+
+
+def invoicing_period(start: datetime.date | None, end: datetime.date | None, **changes: t.Any) -> Invoice:
+    """:func:`base` with an INVOICING PERIOD (BG-14)."""
+    period = InvoicingPeriod(start_date=start, end_date=end)
+    return replace(base(), delivery=DeliveryInformation(invoicing_period=period), **changes)
+
+
+def line_period(start: datetime.date | None, end: datetime.date | None) -> Invoice:
+    """:func:`base` with an INVOICE LINE PERIOD (BG-26) on its first line."""
+    invoice = base()
+    first = InvoiceLine.model_validate(
+        {**dict(invoice.lines[0]), "period": InvoiceLinePeriod(start_date=start, end_date=end)}
+    )
+    return replace(invoice, lines=(first, *invoice.lines[1:]))
 
 
 CASES: dict[str, Callable[[], Invoice]] = {
@@ -168,6 +194,13 @@ CASES: dict[str, Callable[[], Invoice]] = {
         single("L", "7")
     ),
     "BR-AG-08 unused rate": lambda: extra(bd("M", "3"), invoice=single("M", "7")),
+    "BR-29": lambda: invoicing_period(FEB, JAN),
+    "BR-29 one day": lambda: invoicing_period(JAN, JAN),
+    "BR-CO-19": lambda: invoicing_period(None, None),
+    "BR-CO-19 with BT-8": lambda: invoicing_period(None, None, vat_point_date_code="3"),
+    "BR-30": lambda: line_period(FEB, JAN),
+    "BR-30 one day": lambda: line_period(FEB, FEB),
+    "BR-CO-20": lambda: line_period(None, None),
 }
 
 
@@ -175,9 +208,9 @@ RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] =
     Syntax.CII: (cii.write, schematron.CEN_CII),
     Syntax.UBL: (ubl.write, schematron.CEN_UBL),
 }
-IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-7]|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
+IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-79]|CO-20|29|30|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
 """The official rules ``calc.check`` covers (BR-x-02..04 are about party identifiers, not amounts)."""
-CLEAN: t.Final = {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate"}
+CLEAN: t.Final = {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate", "BR-29 one day", "BR-30 one day"}
 
 
 @pytest.mark.parametrize("syntax", list(Syntax))
