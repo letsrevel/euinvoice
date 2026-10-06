@@ -41,7 +41,7 @@ def test_xml_lang_is_reported_with_the_xml_prefix(syntax: str) -> None:
     write, read = READERS[syntax]
     root = _xml.parse(write())
     root.set(_XML_LANG, "en")
-    result = read(_xml.parse(etree.tostring(root, encoding="utf-8")))
+    result = read(_xml.parse(etree.tostring(root)))
     path = root.getroottree().getpath(root)
     assert result.unmapped == (f"{path}/@xml:lang",)
 
@@ -73,7 +73,7 @@ _LOCAL_NAMES: t.Final = (
     "x" * 97,
     "x" + "é" * 48,
     "é" * 49,
-    "€" * 33,
+    "x" + "€" * 33,
     "é" * 260,
     "x" + "é" * 260,
     "q" * 520,
@@ -154,7 +154,7 @@ def test_reading_does_not_compute_an_xpath_per_element(syntax: str, monkeypatch:
     etree.SubElement(line, f"{{{_URI_A}}}Unmapped", nsmap={"x": _URI_A})
     for _ in range(30):
         line.addnext(copy.deepcopy(line))
-    root = _xml.parse(etree.tostring(root, encoding="utf-8"))
+    root = _xml.parse(etree.tostring(root))
     calls: list[etree._Element] = []
     marks_path, cursor_path = Marks.path, ubl_cursor._path
 
@@ -186,7 +186,7 @@ def test_build_computes_the_error_location_only_on_failure() -> None:
         "x" * 97,  # 99 bytes, truncated by libxml2
         "é" * 47 + "x",  # multibyte, 97 bytes
         "x" + "é" * 48,  # 99 bytes, cut inside an "é"
-        "€" * 33,  # 101 bytes, cut inside a "€"
+        "x" + "€" * 33,  # 102 bytes, cut inside a "€"
     ],
 )
 def test_steps_at_the_libxml2_name_buffer_edge(local: str) -> None:
@@ -259,6 +259,43 @@ def test_a_wrong_root_libxml2_cuts_inside_a_character_is_a_parse_error(syntax: s
     with pytest.raises(ParseError, match="expected the") as caught:
         read(root)
     assert caught.value.location == f"/{_HOSTILE[:49]}\ufffd"
+
+
+_DATES: t.Final = {"ubl": f"{{{_xml.UBL_CBC}}}IssueDate", "cii": f"{{{_xml.CII_UDT}}}DateTimeString"}
+
+
+def _enveloped(syntax: str) -> etree._Element:
+    """The ``syntax`` invoice as the second child of an ``env:Envelope``, with an unmapped attribute and child."""
+    write, _ = READERS[syntax]
+    envelope = etree.Element(f"{{{_URI_B}}}Envelope", nsmap={"env": _URI_B})
+    etree.SubElement(envelope, f"{{{_URI_B}}}Header")
+    invoice = _xml.parse(write())
+    invoice.set("k", "v")
+    etree.SubElement(invoice, f"{{{_URI_A}}}Unmapped", nsmap={"a": _URI_A})
+    envelope.append(invoice)
+    return _xml.parse(etree.tostring(envelope))[1]
+
+
+@pytest.mark.parametrize("syntax", list(READERS))
+def test_an_enveloped_invoice_lists_paths_from_the_document_element(syntax: str) -> None:
+    # A reader may be given an element below the document element: its paths still start there, as getpath's do.
+    invoice = _enveloped(syntax)
+    _, read = READERS[syntax]
+    unmapped = read(invoice).unmapped
+    assert unmapped == (f"{path(invoice)}/@k", path(invoice[-1]))
+    assert unmapped[0].startswith("/env:Envelope/")
+
+
+@pytest.mark.parametrize("syntax", list(READERS))
+def test_an_enveloped_invoice_locates_errors_from_the_document_element(syntax: str) -> None:
+    invoice = _enveloped(syntax)
+    _, read = READERS[syntax]
+    date = next(invoice.iter(_DATES[syntax]))
+    date.text = "not a date"
+    with pytest.raises(ParseError) as caught:
+        read(invoice)
+    assert caught.value.location == path(date)
+    assert caught.value.location.startswith("/env:Envelope/")
 
 
 def _edge_tree(local: str) -> etree._Element:

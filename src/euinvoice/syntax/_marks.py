@@ -55,7 +55,6 @@ class Marks:
             root: The document's root element.
         """
         self.root = root
-        self._tree = root.getroottree()
         # lxml keeps one proxy per node while it is referenced, and the set holds the references.
         self._elements: set[etree._Element] = {root}
         self._attributes: set[tuple[etree._Element, str]] = set()
@@ -92,7 +91,7 @@ class Marks:
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the input no business term took (``ParseResult.unmapped``), in document order."""
         found: list[str] = []
-        self._collect(self.root, [_step(_name(self.root), 1, 1)], found)
+        self._collect(self.root, _ancestor_steps(self.root), found)
         return tuple(found)
 
     def _collect(self, element: etree._Element, steps: list[bytes], found: list[str]) -> None:
@@ -123,6 +122,20 @@ class Marks:
 _NAME_BYTES: t.Final = 98
 _PATH_BYTES: t.Final = 500
 _ROOM: t.Final = 120
+
+
+def _ancestor_steps(element: etree._Element) -> list[bytes]:
+    """The steps of ``element``'s path, from the document element down (a reader may get an enveloped invoice)."""
+    steps: list[bytes] = []
+    node: etree._Element | None = element
+    while node is not None:
+        parent = node.getparent()
+        if parent is None:
+            steps.append(_step(_name(node), 1, 1))
+        else:
+            steps.append(next(step for child, step in _steps(parent) if child == node))
+        node = parent
+    return steps[::-1]
 
 
 def _name(element: etree._Element) -> bytes | None:

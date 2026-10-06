@@ -164,6 +164,8 @@ def getpath(element: etree._Element) -> str:
     try:
         return element.getroottree().getpath(element)
     except UnicodeDecodeError as exc:
+        # lxml 6.1.3 leaks libxml2's path buffer when this decode raises (etree.pyx:2238-2239, upstream): at most
+        # one path per raised ParseError or listed hostile name.
         return path_text(exc.object)
 
 
