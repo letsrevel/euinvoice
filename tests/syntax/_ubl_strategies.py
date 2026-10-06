@@ -3,11 +3,13 @@
 :func:`ubl_expressible` changes only what the UBL writer refuses or normalizes by design, each documented in
 ``docs/reference/bt-mapping.md`` and covered by its own example test in ``test_ubl_read.py``:
 
-* refused (``ModelError``): BT-110 missing, BT-87 missing, a credit note's BT-9 without BG-16, BT-148 below BT-146,
-  BT-111 without BT-6, BT-111 with BT-6 equal to BT-5 (two ``cac:TaxTotal`` in one currency, BR-CO-15);
+* refused (``ModelError``): BT-110 missing, BT-87 missing (decision M2), a BT-125 without its mime code or filename
+  (decision M3), a credit note's BT-9 without BG-16, BT-148 below BT-146, BT-111 without BT-6, BT-111 with BT-6
+  equal to BT-5 (two ``cac:TaxTotal`` in one currency, BR-CO-15);
 * normalized ("Normalizations", "The UBL reader"): BT-148 without BT-147 (BT-147 derived), groups with no term set
   (BG-1, BG-13, BG-14, BG-19, BG-26 read back as absent), a BT-22 without BT-21 that starts like a ``#CODE#``
-  pair, and a BT-13 "NA" next to a BT-14 (read back as the writer's placeholder, i.e. no BT-13).
+  pair, a BT-21 note whose BT-22 is empty (written ``#CODE#``, read back without BT-22) and a BT-13 "NA" next to a
+  BT-14 (read back as the writer's placeholder, i.e. no BT-13).
 """
 
 import re
@@ -15,11 +17,13 @@ import typing as t
 
 from _strategies import invoices
 from euinvoice.model import (
+    AdditionalSupportingDocument,
     DeliveryInformation,
     DirectDebit,
     Invoice,
     InvoiceLine,
     InvoiceLinePeriod,
+    InvoiceNote,
     InvoicingPeriod,
     PriceDetails,
 )
@@ -51,6 +55,13 @@ def _delivery(delivery: DeliveryInformation | None) -> DeliveryInformation | Non
     return None if delivery == DeliveryInformation() else delivery
 
 
+def _document(document: AdditionalSupportingDocument) -> AdditionalSupportingDocument:
+    attached = document.attached_document
+    if attached is not None and (attached.mime_code is None or attached.filename is None):
+        attached = None  # decision M3: UBL-DT-06 and UBL-DT-07 are fatal, the writer refuses it
+    return AdditionalSupportingDocument.model_validate({**dict(document), "attached_document": attached})
+
+
 def ubl_expressible(invoice: Invoice) -> Invoice:
     """``invoice`` with the UBL writer's refusals and normalizations (module docstring) taken out."""
     instructions = invoice.payment_instructions
@@ -73,7 +84,7 @@ def ubl_expressible(invoice: Invoice) -> Invoice:
     if purchase_order == "NA" and invoice.sales_order_reference is not None:
         purchase_order = None
     notes = tuple(
-        note
+        InvoiceNote.model_validate({**dict(note), "note": note.note or None})
         for note in invoice.notes
         if (note.note or note.subject_code) and not (note.subject_code is None and _LEADING_CODE.match(note.note or ""))
     )
@@ -87,6 +98,7 @@ def ubl_expressible(invoice: Invoice) -> Invoice:
             "purchase_order_reference": purchase_order,
             "delivery": _delivery(invoice.delivery),
             "lines": tuple(_line(line) for line in invoice.lines),
+            "additional_supporting_documents": tuple(_document(d) for d in invoice.additional_supporting_documents),
         }
     )
 
