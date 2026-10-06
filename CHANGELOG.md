@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Documentation site (#33): mkdocs-material in `docs/` (`mkdocs.yml`, `make docs`), built with `--strict` on every
+  PR and on main by `.github/workflows/docs.yaml`. Deploying to GitHub Pages is opt-in: once Pages is enabled
+  (Source: GitHub Actions), setting the repository variable `DOCS_DEPLOY=true` makes pushes to main (and manual
+  runs) deploy. Pages: quickstart, concepts,
+  validation, Factur-X with a WeasyPrint `pdf/a-3b` illustration, a mapping guide with a synthetic freelancer
+  example (domestic `S`, intra-EU reverse charge `AE` with `VATEX-EU-AE`, non-EU `O`) and a synthetic ticketing
+  example (per-line VAT rates, VAT-inclusive prices converted to net, credit note 381 referencing the invoice in
+  BT-25), and a reference (API from the docstrings via mkdocstrings, BT mapping, BT coverage, artifact licences
+  generated from the manifest). Every Python example runs as a test (`tests/test_docs.py`), and the validation
+  examples run against the official rules in `make conformance` (`tests/conformance/test_docs_examples.py`).
+  Dev-group dependencies only: `mkdocs-material`, `mkdocstrings[python]`.
 - Top-level API (#27): `euinvoice.to_xml(invoice, *, profile=None, syntax=None)` prepares the invoice for the
   profile (default: the one registered for its BT-24), runs the profile's pre-flight checks and
   `calc.check(prepared, syntax=...)`, and refuses with the new `euinvoice.errors.PreflightError` (carrying the

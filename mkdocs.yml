@@ -1,0 +1,79 @@
+# Documentation site (issue #33). Build: `uv run mkdocs build --strict`; preview: `uv run mkdocs serve`.
+# Published to GitHub Pages by .github/workflows/docs.yaml. Every Python example in docs/ runs as a test
+# (tests/test_docs.py, tests/conformance/test_docs_examples.py).
+site_name: euinvoice
+site_description: EN 16931 e-invoicing for Python (UBL, CII, Factur-X; Peppol, XRechnung, ZUGFeRD).
+site_url: https://letsrevel.github.io/euinvoice/
+repo_url: https://github.com/letsrevel/euinvoice
+repo_name: letsrevel/euinvoice
+edit_uri: edit/main/docs/
+copyright: MIT licence. Official validation artifacts are third-party works under their own licences.
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
+            merge_init_into_class: true
+            filters: ["!^_"]
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - Validation: validation.md
+  - Factur-X / ZUGFeRD: facturx.md
+  - Mapping guide:
+      - From your billing model to Invoice: mapping/index.md
+      - "Example: freelancer": mapping/freelancer.md
+      - "Example: ticketing": mapping/ticketing.md
+  - Reference:
+      - API: reference/api.md
+      - BT mapping: reference/bt-mapping.md
+      - BT coverage: reference/bt-coverage.md
+      - Artifact licences: reference/artifacts.md

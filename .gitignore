@@ -30,3 +30,6 @@ issues.md
 .vscode/
 .claude/settings.local.json
 .claude/worktrees/
+
+# mkdocs build output (make docs)
+site/

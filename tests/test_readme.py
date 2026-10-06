@@ -4,7 +4,8 @@ import _readme
 
 
 def test_the_readme_has_its_three_example_blocks() -> None:
-    assert [needs_artifacts for needs_artifacts, _ in _readme.blocks()] == [False, True, False]
+    assert [block.kind for block in _readme.blocks()] == ["run", "needs-artifacts", "run"]
+    assert all(block.is_doctest for block in _readme.blocks())
 
 
 def test_the_readme_examples_run_without_artifacts() -> None:
