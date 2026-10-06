@@ -18,10 +18,10 @@ import pytest
 from _corpus import facturx_pdfs
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.report import Finding
 from euinvoice.syntax import cii
-from euinvoice.validate import artifacts, validate
+from euinvoice.validation import artifacts, validate
 
 pytestmark = pytest.mark.conformance
 

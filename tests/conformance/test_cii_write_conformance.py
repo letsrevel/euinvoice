@@ -11,7 +11,7 @@ from _strategies import cii_expressible, invoices
 from euinvoice import _xml
 from euinvoice.model import CreditTransfer, Invoice
 from euinvoice.syntax import cii
-from euinvoice.validate import schematron, xsd
+from euinvoice.validation import schematron, xsd
 
 pytestmark = pytest.mark.conformance
 

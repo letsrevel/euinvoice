@@ -18,10 +18,10 @@ import pytest
 
 from _pdfa import pdf
 from euinvoice import _xml, facturx, parse, parse_detailed, profiles, validate
-from euinvoice.detect import detect, detect_root
+from euinvoice.detection import detect, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.syntax import Syntax
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

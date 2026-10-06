@@ -7,8 +7,8 @@ The public API (plan §4): :func:`to_xml`, :func:`parse`, :func:`parse_detailed`
 works without pypdf. ``import euinvoice`` loads neither pypdf nor saxonche (the ``[validate]`` extra, loaded when
 validating).
 
-``euinvoice.validate`` and ``euinvoice.detect`` name the functions here, not their modules; import from the
-modules with ``from euinvoice.validate import artifacts`` or ``from euinvoice.detect import Detection``.
+The functions :func:`detect` and :func:`validate` live in the modules ``euinvoice.detection`` and
+``euinvoice.validation`` (renamed in #93 so the functions shadow no module).
 """
 
 import importlib
@@ -17,12 +17,12 @@ from importlib.metadata import version
 
 from euinvoice import calc, profiles
 from euinvoice._api import parse, parse_detailed, to_xml
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.model import Invoice, InvoiceDraft
 from euinvoice.report import ValidationReport
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.result import ParseResult
-from euinvoice.validate import validate
+from euinvoice.validation import validate
 
 if t.TYPE_CHECKING:
     # The redundant alias marks an explicit re-export, so ruff does not add ``facturx`` to ``__all__`` (which would

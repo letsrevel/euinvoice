@@ -2,7 +2,7 @@
 
 Element names and nesting follow the D16B SCRDM subset schema the CEN CII artifacts are written for
 (``resources/cii/16b/xsd/CrossIndustryInvoice_*_100pD16B.xsd`` of the pinned
-``xrechnung-validator-configuration`` source, the same schema ``euinvoice.validate.xsd`` uses).
+``xrechnung-validator-configuration`` source, the same schema ``euinvoice.validation.xsd`` uses).
 """
 
 import datetime

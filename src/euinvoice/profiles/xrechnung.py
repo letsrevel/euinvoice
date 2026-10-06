@@ -346,7 +346,7 @@ def _preflight(invoice: Invoice, syntax: Syntax) -> tuple[Finding, ...]:
     """Pre-flight of the XRechnung CIUS and Extension profiles (the BR-DE rules apply to both).
 
     Call contract: run it on the result of :meth:`~euinvoice.profiles.Profile.prepare`; ``to_xml`` (#27)
-    calls it before writing; :func:`euinvoice.validate.validate` never does (the Schematron is the oracle
+    calls it before writing; :func:`euinvoice.validation.validate` never does (the Schematron is the oracle
     there, D8). ``syntax`` selects the binding where the UBL and CII rules differ (BR-DE-16, the
     payment rules), so each finding matches what the official rule reports on that writer's output.
 

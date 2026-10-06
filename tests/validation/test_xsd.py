@@ -1,4 +1,4 @@
-"""Unit tests of euinvoice.validate.xsd against tiny synthetic schemas in a fake artifact cache."""
+"""Unit tests of euinvoice.validation.xsd against tiny synthetic schemas in a fake artifact cache."""
 
 import concurrent.futures
 import dataclasses
@@ -10,7 +10,7 @@ import pytest
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.report import Finding, Severity
-from euinvoice.validate import artifacts, xsd
+from euinvoice.validation import artifacts, xsd
 
 # Synthetic stand-ins for the UBL 2.1 maindoc schemas. Like the real ones, they import a sibling
 # directory (../common), so the confinement root must be the whole xsd/ directory.

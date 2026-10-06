@@ -67,6 +67,6 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ## Artifacts
 
-::: euinvoice.validate.artifacts.fetch
+::: euinvoice.validation.artifacts.fetch
 
-::: euinvoice.validate.artifacts.cache_dir
+::: euinvoice.validation.artifacts.cache_dir

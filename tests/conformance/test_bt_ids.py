@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from euinvoice.model import BT_INDEX
-from euinvoice.validate.artifacts import source_dir
+from euinvoice.validation.artifacts import source_dir
 
 pytestmark = pytest.mark.conformance
 

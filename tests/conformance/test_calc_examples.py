@@ -29,7 +29,7 @@ from lxml import etree
 from euinvoice import _xml, calc
 from euinvoice.errors import ArtifactsNotAvailableError
 from euinvoice.model import VatBreakdown
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

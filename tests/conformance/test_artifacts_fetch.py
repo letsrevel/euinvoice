@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

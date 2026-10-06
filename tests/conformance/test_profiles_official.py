@@ -5,7 +5,7 @@ import collections
 import pytest
 
 from euinvoice import _xml, profiles
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

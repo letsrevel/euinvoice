@@ -20,8 +20,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError
-from euinvoice.validate import artifacts
-from euinvoice.validate.artifacts import Source
+from euinvoice.validation import artifacts
+from euinvoice.validation.artifacts import Source
 
 # A stand-in for SchXslt's pipeline-for-svrl.xsl: "compiles" a schema by wrapping its title.
 FAKE_PIPELINE = b"""<xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"

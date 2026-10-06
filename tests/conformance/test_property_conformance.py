@@ -2,7 +2,7 @@
 
 Each invoice drawn by :func:`_property_drafts.invoices` for a profile is prepared with
 :meth:`~euinvoice.profiles.Profile.prepare` (BT-24, BT-23, BT-119 = 0 on O breakdowns where required), written
-in UBL and in CII and validated with :func:`euinvoice.validate.validate` against the pinned XSD and the
+in UBL and in CII and validated with :func:`euinvoice.validation.validate` against the pinned XSD and the
 profile's Schematron rule sets (EN 16931: CEN; Peppol BIS: CEN, Peppol; XRechnung: CEN, XRechnung): no
 ``fatal`` or ``error`` finding is allowed (``ValidationReport.ok``), and neither from the profile's pre-flight
 checks. The round trip half of the
@@ -27,7 +27,7 @@ from euinvoice import profiles
 from euinvoice.model import Invoice
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax, cii, ubl
-from euinvoice.validate import validate
+from euinvoice.validation import validate
 
 pytestmark = pytest.mark.conformance
 

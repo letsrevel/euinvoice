@@ -21,7 +21,7 @@ from euinvoice.model import Invoice, ProcessControl
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.syntax import Syntax, cii, ubl
 from euinvoice.syntax.result import ParseResult
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 
 def test_artifacts_fetch_passes_only_and_prints_paths(

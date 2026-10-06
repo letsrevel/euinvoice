@@ -30,7 +30,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime
 
-from euinvoice.validate.artifacts import Source, load_manifest
+from euinvoice.validation.artifacts import Source, load_manifest
 
 GITHUB_API = "https://api.github.com"
 CODEBERG_API = "https://codeberg.org/api/v1"

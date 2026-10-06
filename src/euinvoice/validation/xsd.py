@@ -38,7 +38,7 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.report import Finding, Severity
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 RULE_ID: t.Final = "XSD"
 """The ``rule_id`` of every XSD finding."""

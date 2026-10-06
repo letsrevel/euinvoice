@@ -58,10 +58,10 @@ class Profile:
         specification_identifier: The BT-24 value the profile writes and is looked up by.
         syntaxes: Supported syntaxes, a subset of :data:`SYNTAXES`.
         rule_sets: Names of the official Schematron rule sets to run after the XSD, in order. A name
-            and a syntax select one ``euinvoice.validate.schematron`` constant: ``"cen"`` →
+            and a syntax select one ``euinvoice.validation.schematron`` constant: ``"cen"`` →
             ``CEN_UBL`` / ``CEN_CII``, ``"peppol"`` → ``PEPPOL_UBL`` / ``PEPPOL_CII``, ``"xrechnung"`` →
             ``XRECHNUNG_UBL`` / ``XRECHNUNG_CII``; ``"facturx"`` has no pinned artifact yet (#42). Profiles do
-            not import ``euinvoice.validate`` (dependency direction, plan §4), so the validator owns that
+            not import ``euinvoice.validation`` (dependency direction, plan §4), so the validator owns that
             mapping. Names come from :data:`RULE_SETS`; ``"cen"`` is not required (Factur-X MINIMUM and BASIC WL
             are not EN 16931).
         business_process_type: BT-23 default written when the invoice has none, or ``None``.

@@ -21,7 +21,7 @@ from _invoices import minimal_invoice
 from _pdfa import PDFA_ID, PRODUCER, pdf, xmp
 from _xrechnung_cases import xrechnung_invoice
 from euinvoice import _xml, facturx, profiles
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.model import ProcessControl
 from euinvoice.profiles import Profile

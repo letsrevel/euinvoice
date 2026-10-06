@@ -62,13 +62,13 @@ src/euinvoice/
   _syntax.py  the Syntax enum (leaf; calc uses it, euinvoice.syntax re-exports it)
   syntax/     ubl.py, cii.py: bidirectional mappers (write: Invoice → bytes, read: root → Invoice)
   profiles/   en16931, peppol, xrechnung, facturx: BT-24 ids, defaults, pre-flight checks, rule sets
-  validate/   manifest.toml (pinned artifacts), artifacts.py (fetch), xsd.py, schematron.py
+  validation/ manifest.toml (pinned artifacts), artifacts.py (fetch), xsd.py, schematron.py
   facturx/    PDF/A-3 embed/extract on pypdf
-  detect.py   bytes → syntax + profile
+  detection.py bytes → syntax + profile (the module behind `detect()`; `validation/` is behind `validate()`)
   _xml.py     THE hardened XML parser factory (D10)
 ```
 
-Dependency direction: `model` ← `calc` ← `syntax` ← `profiles` ← `validate` / `facturx` ← top-level API.
+Dependency direction: `model` ← `calc` ← `syntax` ← `profiles` ← `validation` / `facturx` ← top-level API.
 `model` imports nothing from the other packages, and nothing in the core does I/O or network access
 (D2). The artifact fetcher is the one explicit exception.
 

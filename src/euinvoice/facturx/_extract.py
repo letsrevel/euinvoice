@@ -44,7 +44,7 @@ import pypdf
 from lxml import etree
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.facturx import xmp
 from euinvoice.facturx._pypdf import PYPDF_FAILURES, metadata_bytes
@@ -80,7 +80,7 @@ class Extracted:
         container: The XMP invoice schema.
         conformance_level: The XMP ``ConformanceLevel`` as written (``"EN 16931"``, ``"COMFORT"``…), or ``None``.
         profile: For Factur-X, the level's profile when the XML is CII with that level's BT-24 (the pairing
-            ``embed`` enforces); otherwise the profile :func:`euinvoice.detect.detect` finds from the XML alone
+            ``embed`` enforces); otherwise the profile :func:`euinvoice.detection.detect` finds from the XML alone
             (a ZUGFeRD 2.0 ``EN 16931`` invoice is the core profile), or ``None`` (no registered BT-24, not a
             supported invoice, not well-formed).
     """

@@ -13,9 +13,9 @@ import typing as t
 import pytest
 
 from euinvoice import _xml
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.errors import ParseError, UnsupportedDocumentError
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

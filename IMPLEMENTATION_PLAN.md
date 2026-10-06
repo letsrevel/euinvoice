@@ -73,7 +73,7 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   (maintainer decision). New runtime dependencies need a `needs-human` issue.
 - **D7 · Official artifacts are fetched, never vendored.** CEN artifacts are EUPL-1.2, the Peppol rules
   repo carries no licence file, and others vary. So the library ships a **manifest**
-  (`src/euinvoice/validate/manifest.toml`) of pinned sources (URL, version, sha256, member paths, licence).
+  (`src/euinvoice/validation/manifest.toml`) of pinned sources (URL, version, sha256, member paths, licence).
   `euinvoice artifacts fetch` downloads them into `$EUINVOICE_ARTIFACTS_DIR` (default
   `~/.cache/euinvoice`), verifies them and precompiles Schematron → XSLT where needed. `validate()` never
   downloads implicitly. It raises `ArtifactsNotAvailableError` with the exact command to run. Test
@@ -175,8 +175,8 @@ src/euinvoice/
     peppol.py
     xrechnung.py
     facturx.py       # MINIMUM, BASIC_WL, BASIC, EN16931, EXTENDED, XRECHNUNG levels
-  detect.py          # bytes → (syntax, document kind, profile) from root element + BT-24
-  validate/
+  detection.py       # bytes → (syntax, document kind, profile) from root element + BT-24
+  validation/        # was validate/ (and detect.py) until #93: the functions shadow no module
     __init__.py      # validate(xml_bytes, profile=None) -> ValidationReport
     manifest.toml    # D7 pinned artifact sources
     artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip + SchXslt precompile
@@ -280,8 +280,8 @@ parallel. Each touches a disjoint set of files.
   *AC:* `gh api` shows the protection; a test PR cannot merge red.
 
 ### M1 · Foundations
-- **1.1 · Artifact manifest + fetcher + CLI stub.** *deps: none.* `validate/manifest.toml` with every
-  §3 source (URL, version, sha256, licence, member globs), `validate/artifacts.py`
+- **1.1 · Artifact manifest + fetcher + CLI stub.** *deps: none.* `validation/manifest.toml` with every
+  §3 source (URL, version, sha256, licence, member globs), `validation/artifacts.py`
   (stdlib `urllib` only, atomic write, sha256 verify, zip-slip-safe extraction, cache layout
   `<dir>/<source>/<version>/`), `python -m euinvoice artifacts fetch [--only NAME]`, `make artifacts`.
   SchXslt precompile step for `.sch`-only sources, cached as `.xslt` next to the source. *AC:* fetch is
@@ -316,7 +316,7 @@ parallel. Each touches a disjoint set of files.
   every BT. *AC:* per-BT write tests, and output passes the UBL 2.1 XSD (3.3) once available.
 - **3.2 · UBL reader.** *deps: 3.1.* *AC:* per-BT read tests, `unmapped` reporting, and round-trip of every
   CEN UBL example (conformance-marked).
-- **3.3 · UBL XSD validation.** *deps: 1.1, 1.3.* `validate/xsd.py` for UBL. *AC:* official examples pass,
+- **3.3 · UBL XSD validation.** *deps: 1.1, 1.3.* `validation/xsd.py` for UBL. *AC:* official examples pass,
   and a mutated example fails with a located error.
 
 ### M4 · UN/CEFACT CII (parallel with M3)
@@ -326,7 +326,7 @@ parallel. Each touches a disjoint set of files.
 - **4.3 · CII XSD validation.** *deps: 1.1, 1.3.* *AC:* as 3.3.
 
 ### M5 · Schematron validation
-- **5.1 · Schematron runner + report.** *deps: 1.1, 1.3.* `validate/schematron.py`, `report.py`.
+- **5.1 · Schematron runner + report.** *deps: 1.1, 1.3.* `validation/schematron.py`, `report.py`.
   Compiled executables cached per process (keyed by artifact path + version), thread safety documented,
   SVRL → `Finding`. *AC:* reproduces the scoping facts (example1 → 0 findings; drop `cbc:ID` → `BR-02`
   fatal).

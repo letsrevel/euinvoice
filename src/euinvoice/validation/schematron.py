@@ -2,7 +2,7 @@
 
 Every rule set runs as a compiled XSLT stylesheet from the artifact cache (D7, D8): CEN ships its
 compiled XSLT, XRechnung ships compiled ``.xsl``, and the Peppol ``.sch`` files are compiled with SchXslt
-at fetch time (:mod:`euinvoice.validate.artifacts`). The stylesheet writes an SVRL report (ISO/IEC
+at fetch time (:mod:`euinvoice.validation.artifacts`). The stylesheet writes an SVRL report (ISO/IEC
 19757-3 Annex D, namespace :data:`euinvoice._xml.SVRL`), and every ``svrl:failed-assert`` and
 ``svrl:successful-report`` in it becomes a :class:`~euinvoice.report.Finding`. Nothing is
 filtered or downgraded.
@@ -10,7 +10,7 @@ filtered or downgraded.
 Input hardening (D10): the document reaches Saxon only through :func:`euinvoice._xml.to_xdm`, which
 runs it through the hardened parser and hands Saxon the re-serialized text. The only file Saxon reads by
 path is the pinned stylesheet itself, from a cache entry whose recipe fingerprint
-:func:`~euinvoice.validate.artifacts.source_dir` has just checked (that catches a stale cache, not
+:func:`~euinvoice.validation.artifacts.source_dir` has just checked (that catches a stale cache, not
 tampering).
 
 Run-time errors (D9): a well-formed document can still make an official stylesheet fail while it runs,
@@ -41,7 +41,7 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
 from euinvoice.report import Finding, Severity
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 __all__ = [
     "CEN_CII",
@@ -124,7 +124,7 @@ def run(
     Args:
         rule_set: The compiled rule set to run, e.g. :data:`CEN_UBL`.
         document: The XML as bytes or an element; either way it goes through :func:`euinvoice._xml.to_xdm`.
-        root: Artifact cache root; defaults to :func:`~euinvoice.validate.artifacts.cache_dir`.
+        root: Artifact cache root; defaults to :func:`~euinvoice.validation.artifacts.cache_dir`.
         sources: Manifest; defaults to the packaged one.
 
     Returns:

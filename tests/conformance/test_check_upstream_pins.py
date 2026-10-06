@@ -5,7 +5,7 @@ import hashlib
 import pytest
 
 import check_upstream as cu
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

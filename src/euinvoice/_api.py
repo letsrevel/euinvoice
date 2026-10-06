@@ -3,14 +3,14 @@
 Writing: ``profile.prepare(invoice)`` → ``profile.preflight(prepared, syntax)`` and
 ``calc.check(prepared, syntax=syntax)`` → the syntax writer. Reading:
 (a Factur-X / ZUGFeRD PDF goes through :func:`euinvoice.facturx.extract` first) → :func:`euinvoice._xml.parse`
-(D10) → :func:`euinvoice.detect.detect_root` → the syntax reader. This module sits above every other package;
+(D10) → :func:`euinvoice.detection.detect_root` → the syntax reader. This module sits above every other package;
 nothing below imports it.
 """
 
 import typing as t
 
 from euinvoice import _xml, calc, profiles
-from euinvoice.detect import detect_root, is_pdf
+from euinvoice.detection import detect_root, is_pdf
 from euinvoice.errors import PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles._base import FACTURX_RULE_SET
@@ -102,8 +102,8 @@ def parse(data: bytes) -> Invoice:
 def parse_detailed(data: bytes) -> ParseResult:
     """Read a UBL or CII invoice, or the invoice of a Factur-X / ZUGFeRD PDF, and list what was not mapped.
 
-    The syntax comes from the root element (:func:`euinvoice.detect.detect_root`); the BT-24 profile plays no part
-    in reading. A PDF (``%PDF-`` header, see :func:`euinvoice.detect.is_pdf`) is read with
+    The syntax comes from the root element (:func:`euinvoice.detection.detect_root`); the BT-24 profile plays no part
+    in reading. A PDF (``%PDF-`` header, see :func:`euinvoice.detection.is_pdf`) is read with
     :func:`euinvoice.facturx.extract`, which needs the ``[pdf]`` extra, and its embedded XML is parsed like any
     other.
 

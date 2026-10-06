@@ -3,7 +3,7 @@
 :func:`validate` runs, in order (rule sets per profile verified on issue #17 against the pinned KoSIT
 ``scenarios.xml`` and Peppol BIS 3.0.21):
 
-1. the XML Schema of the root namespace (:func:`euinvoice.validate.xsd.validate`);
+1. the XML Schema of the root namespace (:func:`euinvoice.validation.xsd.validate`);
 2. if the XSD step reported nothing ``fatal`` / ``error``, each Schematron rule set the profile names in
    :attr:`~euinvoice.profiles.Profile.rule_sets`, in that order (EN 16931: CEN; Peppol BIS: CEN, Peppol;
    XRechnung: CEN, XRechnung).
@@ -45,13 +45,13 @@ import typing as t
 from lxml import etree
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import Detection, detect_root
+from euinvoice.detection import Detection, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.profiles.facturx import _UNREGISTERED_LEVEL_IDENTIFIERS
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.syntax import Syntax
-from euinvoice.validate import schematron, xsd
+from euinvoice.validation import schematron, xsd
 
 __all__ = ["EUINVOICE_SOURCE", "PROFILE_FALLBACK_RULE_ID", "validate"]
 
@@ -61,7 +61,7 @@ EUINVOICE_SOURCE: t.Final = "euinvoice"
 """``source`` of findings euinvoice itself adds (not produced by an official rule set)."""
 
 # (Profile.rule_sets name, syntax) → compiled rule set. Lives here, not in profiles: profiles must not
-# import euinvoice.validate (dependency direction, plan §4).
+# import euinvoice.validation (dependency direction, plan §4).
 _RULE_SETS: t.Final[t.Mapping[tuple[str, str], schematron.RuleSet]] = {
     ("cen", "ubl"): schematron.CEN_UBL,
     ("cen", "cii"): schematron.CEN_CII,
@@ -78,7 +78,7 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
     Rule failures are findings, never exceptions (D9). Nothing is downloaded (D7): the artifacts must have
     been fetched with ``python -m euinvoice artifacts fetch``.
 
-    Profile resolution when ``profile`` is ``None``: :func:`euinvoice.detect.detect_root` reads BT-24
+    Profile resolution when ``profile`` is ``None``: :func:`euinvoice.detection.detect_root` reads BT-24
     (XPath ``normalize-space``) and looks it up exactly with :func:`euinvoice.profiles.get`. If there is
     no single non-empty BT-24, or no registered profile declares it (e.g. a CIUS whose profile is not
     implemented yet), the document is validated against :data:`euinvoice.profiles.EN16931` (XSD and CEN

@@ -110,16 +110,16 @@ generated, parsed and validated per profile is in the README table; the open que
   (neither is registered as a profile, [#98](https://github.com/letsrevel/euinvoice/issues/98)); pass
   `profile=profiles.EN16931` to run the core rules. It takes XML (for a PDF, pass `facturx.extract(pdf).xml`),
   returns a `ValidationReport` and never raises on rule failures.
-- XSD validation (`euinvoice.validate.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B
+- XSD validation (`euinvoice.validation.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B
   (the SCRDM Subset schema of the pinned KoSIT configuration, [#15](https://github.com/letsrevel/euinvoice/issues/15)): each schema error is a fatal `XSD` finding
   located by line and element path.
-- Schematron runner (`euinvoice.validate.schematron`, the `[validate]` extra, SaxonC-HE) ([#16](https://github.com/letsrevel/euinvoice/issues/16)): CEN EN 16931,
+- Schematron runner (`euinvoice.validation.schematron`, the `[validate]` extra, SaxonC-HE) ([#16](https://github.com/letsrevel/euinvoice/issues/16)): CEN EN 16931,
   Peppol BIS 3.0 and XRechnung rule sets for UBL and CII. Each SVRL failed assert or successful report becomes a
   `Finding` with rule id, severity (from `@flag`; missing or unknown counts as `error`), XPath and message. A
   document a stylesheet cannot evaluate yields one fatal `SCHEMATRON-RUNTIME` finding instead of an exception.
   Compiled schemas and stylesheets are cached per process and thread-safe.
 - `euinvoice.report`: `Finding`, `Severity` and `ValidationReport` ([#16](https://github.com/letsrevel/euinvoice/issues/16)).
-- Artifact manifest (`euinvoice/validate/manifest.toml`) pinning the official artifacts and corpora by URL and
+- Artifact manifest (`euinvoice/validation/manifest.toml`) pinning the official artifacts and corpora by URL and
   sha256 ([#4](https://github.com/letsrevel/euinvoice/issues/4)): CEN EN 16931 1.3.16 (UBL, CII), Peppol BIS Billing 3.0.21, XRechnung Schematron 2.6.0, XRechnung
   testsuite and KoSIT validator configuration 2026-08-31 (incl. the CII D16B XSD), OASIS UBL 2.1 XSD, ZUGFeRD
   corpus, SchXslt 1.10.1. They are downloaded, never bundled.
@@ -127,7 +127,7 @@ generated, parsed and validated per profile is in the README table; the open que
   `~/.cache/euinvoice/<source>/<version>/`), verifies sha256, extracts zip-slip-safely and precompiles the
   Peppol Schematron with SchXslt from hardened-parsed XML (a `.sch` that pulls in other files is refused).
   Idempotent and offline on a warm cache. `validate()` never downloads; a missing artifact raises
-  `ArtifactsNotAvailableError` naming the fetch command. `euinvoice.validate.artifacts.source_dir()` looks a
+  `ArtifactsNotAvailableError` naming the fetch command. `euinvoice.validation.artifacts.source_dir()` looks a
   fetched source up.
 
 #### Factur-X / ZUGFeRD
@@ -142,9 +142,9 @@ generated, parsed and validated per profile is in the README table; the open que
   PDF/A. All 125 PDFs of the ZUGFeRD corpus's `correct` directories extract.
 
 #### Detection
-- `euinvoice.detect(data)` / `detect_root(root)` ([#26](https://github.com/letsrevel/euinvoice/issues/26)): classify XML as UBL `Invoice` / `CreditNote` or CII
+- `euinvoice.detect(data)` / `euinvoice.detection.detect_root(root)` ([#26](https://github.com/letsrevel/euinvoice/issues/26)): classify XML as UBL `Invoice` / `CreditNote` or CII
   `CrossIndustryInvoice`, read BT-24 (`normalize-space`) and resolve the registered profile by exact match, or
-  `None`. Only PDF input and an unsupported root raise `UnsupportedDocumentError`. `euinvoice.detect.is_pdf` is
+  `None`. Only PDF input and an unsupported root raise `UnsupportedDocumentError`. `euinvoice.detection.is_pdf` is
   the PDF sniff `detect` and `parse` share.
 
 #### API
@@ -156,7 +156,9 @@ generated, parsed and validated per profile is in the README table; the open que
   extract-only: `parse()` raises `UnsupportedDocumentError`); `parse()` discards `unmapped`.
 - `euinvoice` re-exports `to_xml`, `parse`, `parse_detailed`, `validate`, `detect`, `Invoice`, `InvoiceDraft`,
   `ParseResult`, `Syntax`, `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx`; `import
-  euinvoice` loads neither pypdf nor saxonche.
+  euinvoice` loads neither pypdf nor saxonche. The functions `detect` and `validate` live in the modules
+  `euinvoice.detection` and `euinvoice.validation` (`euinvoice.validation.artifacts`, `.xsd`, `.schematron`), named
+  so that no function shadows its module ([#93](https://github.com/letsrevel/euinvoice/issues/93)).
 
 #### Security
 - Hardened XML input ([#6](https://github.com/letsrevel/euinvoice/issues/6)): every document is parsed with entity resolution, DTD loading and network access
@@ -205,7 +207,4 @@ generated, parsed and validated per profile is in the README table; the open que
 - SaxonC-HE 13.0.0 `normalize-space()` crashes on some non-Latin-1 text, giving a false `SCHEMATRON-RUNTIME`
   fatal ([#74](https://github.com/letsrevel/euinvoice/issues/74)).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
-- The top-level `detect` / `validate` functions shadow their modules ([#93](https://github.com/letsrevel/euinvoice/issues/93)): import module
-  members with `from euinvoice.validate import …` / `from euinvoice.detect import …`; attribute access such as
-  `euinvoice.detect.Detection` does not work.
 - The UBL writer refuses an invoice without BT-110 that CII can express ([#87](https://github.com/letsrevel/euinvoice/issues/87), parked).

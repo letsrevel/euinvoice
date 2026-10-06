@@ -25,14 +25,14 @@ from _corpus import Sample, expected_invalid, facturx_pdfs, samples
 from test_detect_corpora import EXCLUDED as NOT_INVOICES
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect, detect_root
+from euinvoice.detection import detect, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.model import Invoice, bt_id
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import Finding
 from euinvoice.syntax import cii, ubl
 from euinvoice.syntax.result import ParseResult
-from euinvoice.validate import artifacts, validate
+from euinvoice.validation import artifacts, validate
 
 pytestmark = pytest.mark.conformance
 

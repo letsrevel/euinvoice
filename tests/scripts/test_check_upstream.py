@@ -11,7 +11,7 @@ import urllib.request
 import pytest
 
 import check_upstream as cu
-from euinvoice.validate.artifacts import Source, load_manifest
+from euinvoice.validation.artifacts import Source, load_manifest
 
 GH = "https://api.github.com/repos"
 CB = "https://codeberg.org/api/v1/repos"
