@@ -28,22 +28,19 @@ from lxml import etree
 
 from euinvoice import _xml, profiles
 from euinvoice.errors import UnsupportedDocumentError
+from euinvoice.syntax import Syntax
 
 __all__ = ["Detection", "Root", "detect", "detect_root"]
-
-# ponytail: plain strings until ``euinvoice.syntax.Syntax`` (a StrEnum with these values) lands; switch the
-# annotation to the enum then. StrEnum members compare equal to these strings, so callers keep working.
-type _Syntax = t.Literal["ubl", "cii"]
 
 type Root = t.Literal["Invoice", "CreditNote", "CrossIndustryInvoice"]
 """The supported root elements. UBL has one per document kind; CII has one for both (BT-3 tells them apart)."""
 
 # Root qualified name → (syntax, root). Root names per the UBL 2.1 maindoc XSDs (UBL-Invoice-2.1.xsd,
 # UBL-CreditNote-2.1.xsd) and the CII D16B CrossIndustryInvoice_100pD16B.xsd.
-_ROOTS: t.Final[t.Mapping[str, tuple[_Syntax, Root]]] = {
-    f"{{{_xml.UBL_INVOICE}}}Invoice": ("ubl", "Invoice"),
-    f"{{{_xml.UBL_CREDIT_NOTE}}}CreditNote": ("ubl", "CreditNote"),
-    f"{{{_xml.CII_RSM}}}CrossIndustryInvoice": ("cii", "CrossIndustryInvoice"),
+_ROOTS: t.Final[t.Mapping[str, tuple[Syntax, Root]]] = {
+    f"{{{_xml.UBL_INVOICE}}}Invoice": (Syntax.UBL, "Invoice"),
+    f"{{{_xml.UBL_CREDIT_NOTE}}}CreditNote": (Syntax.UBL, "CreditNote"),
+    f"{{{_xml.CII_RSM}}}CrossIndustryInvoice": (Syntax.CII, "CrossIndustryInvoice"),
 }
 
 # BT-24 locations, relative to the root: the BR-01 params of the CEN 1.3.16 EN16931-UBL-model.sch
@@ -65,7 +62,8 @@ class Detection:
     """What :func:`detect` found out about a document.
 
     Attributes:
-        syntax: ``"ubl"`` (UBL 2.1) or ``"cii"`` (UN/CEFACT CII D16B).
+        syntax: :attr:`Syntax.UBL <euinvoice.syntax.Syntax.UBL>` (UBL 2.1) or ``Syntax.CII`` (UN/CEFACT
+            CII D16B); a ``StrEnum``, so it also compares equal to ``"ubl"`` / ``"cii"``.
         root: The root element's local name; for UBL it is the document kind (``Invoice`` or
             ``CreditNote``), CII uses ``CrossIndustryInvoice`` for both.
         specification_identifier: BT-24 as found, whitespace-normalized (``normalize-space()``, as BR-01
@@ -75,7 +73,7 @@ class Detection:
             is no BT-24).
     """
 
-    syntax: _Syntax
+    syntax: Syntax
     root: Root
     specification_identifier: str | None
     profile: profiles.Profile | None
@@ -136,7 +134,7 @@ def detect_root(root: etree._Element) -> Detection:
             f"unsupported root element {root.tag!r}; expected a UBL 2.1 Invoice or CreditNote, or a CII D16B "
             "CrossIndustryInvoice"
         ) from None
-    values = root.findall(_UBL_BT24 if syntax == "ubl" else _CII_BT24)
+    values = root.findall(_UBL_BT24 if syntax is Syntax.UBL else _CII_BT24)
     # Several BT-24 elements are ambiguous; the official rules report them, detection picks none.
     # XPath normalize-space() strips only #x20, #x9, #xD, #xA; str.split() would also strip e.g. U+00A0.
     bt24 = str(values[0].xpath("normalize-space(.)")) if len(values) == 1 else ""

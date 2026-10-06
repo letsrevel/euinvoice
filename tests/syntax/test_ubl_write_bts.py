@@ -11,12 +11,14 @@ import typing as t
 from decimal import Decimal
 
 import pytest
-from _ubl_support import TEST_IBAN, buyer, invoice, item, line, payment, price, seller, totals, written, xpath
+from _ubl_support import written, xpath
 
+from _invoices import TEST_IBAN, minimal_invoice, simple_line
 from euinvoice.model import (
     BT_INDEX,
     AdditionalSupportingDocument,
     BinaryObject,
+    Buyer,
     BuyerContact,
     BuyerPostalAddress,
     CreditTransfer,
@@ -25,6 +27,7 @@ from euinvoice.model import (
     DirectDebit,
     DocumentLevelAllowance,
     DocumentLevelCharge,
+    DocumentTotals,
     Identifier,
     InvoiceLineAllowance,
     InvoiceLineCharge,
@@ -33,17 +36,27 @@ from euinvoice.model import (
     InvoicingPeriod,
     ItemAttribute,
     ItemClassificationIdentifier,
+    ItemInformation,
     LineVatInformation,
     Payee,
     PaymentCardInformation,
+    PaymentInstructions,
     PrecedingInvoiceReference,
+    PriceDetails,
     ProcessControl,
+    Seller,
     SellerContact,
     SellerPostalAddress,
     SellerTaxRepresentative,
     TaxRepresentativePostalAddress,
     VatBreakdown,
 )
+
+
+def _totals(**changes: t.Any) -> DocumentTotals:
+    """The minimal invoice's totals with ``changes``."""
+    return DocumentTotals.model_validate({**dict(minimal_invoice().totals), **changes})
+
 
 S: t.Final = "/*/cac:AccountingSupplierParty/cac:Party"
 B: t.Final = "/*/cac:AccountingCustomerParty/cac:Party"
@@ -60,7 +73,9 @@ _ADDRESS = {
     "post_code": "10000",
     "country_subdivision": "State",
 }
-_SELLER = seller(
+_SELLER = Seller(
+    name="Seller Example GmbH",
+    vat_identifier="DE000000000",
     trading_name="Seller Trading",
     identifiers=(Identifier(value="SELLER-1"), Identifier(value="4000001000005", scheme_id="0088")),
     legal_registration_identifier=Identifier(value="HRB 00000", scheme_id="0002"),
@@ -70,7 +85,8 @@ _SELLER = seller(
     postal_address=SellerPostalAddress(country_code="DE", **_ADDRESS),
     contact=SellerContact(contact_point="Sales", telephone="+49 0", email="sales@example.com"),
 )
-_BUYER = buyer(
+_BUYER = Buyer(
+    name="Buyer Example AG",
     trading_name="Buyer Trading",
     identifier=Identifier(value="BUYER-1", scheme_id="0088"),
     legal_registration_identifier=Identifier(value="CHE-000", scheme_id="0183"),
@@ -96,7 +112,8 @@ _DELIVERY = DeliveryInformation(
     invoicing_period=InvoicingPeriod(start_date=datetime.date(2026, 1, 1), end_date=DAY),
     deliver_to_address=DeliverToAddress(country_code="NL", **_ADDRESS),
 )
-_PAYMENT = payment(
+_PAYMENT = PaymentInstructions(
+    payment_means_type_code="58",
     payment_means_text="SEPA credit transfer",
     remittance_information="REF-1",
     credit_transfers=(
@@ -121,7 +138,7 @@ _CHARGE = DocumentLevelCharge(
     amount=D("7.00"), base_amount=D("70.00"), percentage=D("10"), vat_category_code="Z", vat_rate=D("0"),
     reason="Freight", reason_code="FC",
 )  # fmt: skip
-_TOTALS = totals(
+_TOTALS = _totals(
     sum_of_allowances=D("10.00"),
     sum_of_charges=D("7.00"),
     paid_amount=D("5.00"),
@@ -137,7 +154,7 @@ _DOCUMENT = AdditionalSupportingDocument(
     external_location="https://example.com/doc.pdf",
     attached_document=BinaryObject(content=b"%PDF", mime_code="application/pdf", filename="doc.pdf"),
 )
-_LINE = line(
+_LINE = simple_line(
     note="Line note",
     object_identifier=Identifier(value="LINE-OBJ", scheme_id="AAA"),
     purchase_order_line_reference="PO-1-10",
@@ -153,7 +170,7 @@ _LINE = line(
             amount=D("3.00"), base_amount=D("100.00"), percentage=D("3"), reason="Pack", reason_code="ABL"
         ),
     ),
-    price_details=price(
+    price_details=PriceDetails(
         item_net_price=D("49.9900"),
         item_price_discount=D("0.51"),
         item_gross_price=D("50.50"),
@@ -161,7 +178,8 @@ _LINE = line(
         base_quantity_unit_code="KGM",
     ),
     vat_information=LineVatInformation(category_code="Z", rate=D("0.0")),
-    item=item(
+    item=ItemInformation(
+        name="Widget",
         description="A widget",
         sellers_identifier="SKU-1",
         buyers_identifier="BUY-SKU-1",
@@ -341,7 +359,7 @@ BT_ROWS: t.Final[list[Row]] = [
     ("BT-108", {"totals": _TOTALS}, f"string({_LMT}/cbc:ChargeTotalAmount)", "7.00"),
     ("BT-109", {"totals": _TOTALS}, f"string({_LMT}/cbc:TaxExclusiveAmount)", "100.00"),
     ("BT-110", {"totals": _TOTALS}, "string(/*/cac:TaxTotal/cbc:TaxAmount[@currencyID=/*/cbc:DocumentCurrencyCode])", "19.00"),
-    ("BT-111", {"totals": totals(total_vat_in_accounting_currency=D("210.00")), "vat_accounting_currency_code": "SEK"}, "string(/*/cac:TaxTotal/cbc:TaxAmount[@currencyID=/*/cbc:TaxCurrencyCode])", "210.00"),
+    ("BT-111", {"totals": _totals(total_vat_in_accounting_currency=D("210.00")), "vat_accounting_currency_code": "SEK"}, "string(/*/cac:TaxTotal/cbc:TaxAmount[@currencyID=/*/cbc:TaxCurrencyCode])", "210.00"),
     ("BT-112", {"totals": _TOTALS}, f"string({_LMT}/cbc:TaxInclusiveAmount)", "119.00"),
     ("BT-113", {"totals": _TOTALS}, f"string({_LMT}/cbc:PrepaidAmount)", "5.00"),
     ("BT-114", {"totals": _TOTALS}, f"string({_LMT}/cbc:PayableRoundingAmount)", "0.01"),
@@ -360,13 +378,13 @@ BT_ROWS: t.Final[list[Row]] = [
     ("BT-125", {"additional_supporting_documents": (_DOCUMENT,)}, f"string({_ADR}/cac:Attachment/cbc:EmbeddedDocumentBinaryObject)", "JVBERg=="),
     ("BT-125", {"additional_supporting_documents": (_DOCUMENT,)}, f"string({_ADR}/cac:Attachment/cbc:EmbeddedDocumentBinaryObject/@mimeCode)", "application/pdf"),
     ("BT-125", {"additional_supporting_documents": (_DOCUMENT,)}, f"string({_ADR}/cac:Attachment/cbc:EmbeddedDocumentBinaryObject/@filename)", "doc.pdf"),
-    ("BG-25", {"lines": (line(), line(identifier="2"))}, f"string(count({L}))", "2"),
-    ("BT-126", {"lines": (line(identifier="L-7"),)}, f"string({L}/cbc:ID)", "L-7"),
+    ("BG-25", {"lines": (simple_line(), simple_line(identifier="2"))}, f"string(count({L}))", "2"),
+    ("BT-126", {"lines": (simple_line(identifier="L-7"),)}, f"string({L}/cbc:ID)", "L-7"),
     ("BT-127", {"lines": (_LINE,)}, f"string({L}/cbc:Note)", "Line note"),
     ("BT-128", {"lines": (_LINE,)}, f"string({L}/cac:DocumentReference[cbc:DocumentTypeCode='130']/cbc:ID)", "LINE-OBJ"),
     ("BT-128", {"lines": (_LINE,)}, f"string({L}/cac:DocumentReference/cbc:ID/@schemeID)", "AAA"),
-    ("BT-129", {"lines": (line(invoiced_quantity=D("2.500")),)}, f"string({L}/cbc:InvoicedQuantity)", "2.500"),
-    ("BT-130", {"lines": (line(invoiced_quantity_unit_code="HUR"),)}, f"string({L}/cbc:InvoicedQuantity/@unitCode)", "HUR"),
+    ("BT-129", {"lines": (simple_line(invoiced_quantity=D("2.500")),)}, f"string({L}/cbc:InvoicedQuantity)", "2.500"),
+    ("BT-130", {"lines": (simple_line(invoiced_quantity_unit_code="HUR"),)}, f"string({L}/cbc:InvoicedQuantity/@unitCode)", "HUR"),
     ("BT-131", {}, f"string({L}/cbc:LineExtensionAmount)", "100.00"),
     ("BT-131", {}, f"string({L}/cbc:LineExtensionAmount/@currencyID)", "EUR"),
     ("BT-132", {"lines": (_LINE,)}, f"string({L}/cac:OrderLineReference/cbc:LineID)", "PO-1-10"),
@@ -417,7 +435,7 @@ BT_ROWS: t.Final[list[Row]] = [
     ("bt", "changes", "path", "expected"), BT_ROWS, ids=[f"{r[0]}:{i}" for i, r in enumerate(BT_ROWS)]
 )
 def test_business_term_is_written(bt: str, changes: dict[str, t.Any], path: str, expected: str) -> None:
-    assert xpath(written(invoice(**changes)), path) == expected, bt
+    assert xpath(written(minimal_invoice(**changes)), path) == expected, bt
 
 
 def test_every_business_term_has_a_write_row() -> None:

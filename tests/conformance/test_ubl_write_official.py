@@ -5,10 +5,10 @@ import typing as t
 from decimal import Decimal
 
 import pytest
-from _ubl_invoices import TEST_IBAN, full_invoice, minimal_invoice
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from _invoices import TEST_IBAN, full_invoice, minimal_invoice, simple_line
 from euinvoice import _xml
 from euinvoice.model import (
     CreditTransfer,
@@ -39,18 +39,17 @@ INVOICES: t.Final = {
     # 381 credit note: BT-9 in cac:PaymentMeans, BT-11 as DocumentTypeCode 50, BT-17 after the ADRs.
     "full-credit-note": lambda: full_invoice(type_code="381"),
     "credit-note-code-81": lambda: full_invoice(type_code="81"),
-    # BT-8 instead of BT-7 (BR-CO-03 forbids both).
-    "vat-point-date-code": lambda: full_invoice(vat_point_date=None, vat_point_date_code="35"),
-    # bt-mapping.md N5: BT-148 without BT-147 writes cbc:Amount = BT-148 - BT-146.
+    # The shared full invoice carries BT-8; this variant carries BT-7 instead (BR-CO-03 forbids both).
+    "vat-point-date": lambda: full_invoice(vat_point_date=datetime.date(2026, 1, 10), vat_point_date_code=None),
+    # bt-mapping.md "Normalizations": BT-148 without BT-147 writes cbc:Amount = BT-148 - BT-146.
     "gross-equals-net": lambda: _gross_only(Decimal("50"), Decimal("50")),
     "gross-above-net": lambda: _gross_only(Decimal("50"), Decimal("50.75")),
 }
 
 
 def _gross_only(net: Decimal, gross: Decimal) -> Invoice:
-    document = minimal_invoice()
     details = PriceDetails(item_net_price=net, item_gross_price=gross)
-    return minimal_invoice(lines=(document.lines[0].model_copy(update={"price_details": details}),))
+    return minimal_invoice(lines=(simple_line(price_details=details),))
 
 
 @pytest.mark.parametrize("build", [INVOICES["gross-equals-net"], INVOICES["gross-above-net"]], ids=["equal", "above"])
@@ -62,11 +61,10 @@ def test_implied_price_discount_satisfies_peppol_price_rules(build: t.Callable[[
 
 def test_wrong_price_discount_fires_peppol_r046() -> None:
     # Guard for the test above: a discount that does not match gross - net is caught.
-    document = minimal_invoice()
     details = PriceDetails(
         item_net_price=Decimal("50"), item_price_discount=Decimal("1"), item_gross_price=Decimal("50")
     )
-    wrong = minimal_invoice(lines=(document.lines[0].model_copy(update={"price_details": details}),))
+    wrong = minimal_invoice(lines=(simple_line(price_details=details),))
     rule_ids = {f.rule_id for f in schematron.run(schematron.PEPPOL_UBL, ubl.write(wrong))}
     assert "PEPPOL-EN16931-R046" in rule_ids
 

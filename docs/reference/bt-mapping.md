@@ -295,14 +295,6 @@ is unbounded.
   `NA` there (Peppol upstream structure docs, commit 806866b, `ubl-invoice.xml`, BT-13). BT-32 is written
   with `cac:TaxScheme/cbc:ID` `FC`, as in the XRechnung test suite (CEN only requires a value other than
   `VAT`, UBL-SR-13). BT-90 is written under `cac:PayeeParty` when BG-10 is present, else under the Seller.
-* **N5 · UBL item gross price without discount (round-trip normalization).** `cac:Price/cac:AllowanceCharge`
-  requires `cbc:Amount` (UBL 2.1 XSD `AllowanceChargeType`), so BT-148 without BT-147 is written with
-  `cbc:Amount` = BT-148 − BT-146 (`0.00` when equal), the identity of PEPPOL-EN16931-R046 (net price =
-  gross price − allowance amount; `rules/sch/PEPPOL-EN16931-UBL.sch:363`). The CEN example TOSL108 is
-  published as both `ubl-tc434-example2.xml` and `CII_example2.xml`. Model → UBL → model therefore gains
-  BT-147, a deliberate exception to the round trip like the code 81 root. BT-148 below BT-146 is refused:
-  the implied negative discount would be a charge, which PEPPOL-EN16931-R044 forbids on price level.
-
 ## Library conventions
 
 * **BG-0.** EN 16931-1 gives the root "INVOICE" no identifier (XR §11.1: "besitzt … keine eigene
@@ -358,3 +350,12 @@ terms. A model → syntax → model round trip then gains that value.
   `ubl-tc434-example2.xml` carries BT-147 only and `CII_example2.xml` writes gross 1498 = net 1273 +
   allowance 225. A derived BT-148 below zero would break BR-28 (fatal), so the writer raises `ModelError`
   then and asks for an explicit BT-148.
+* **BT-147 derived from BT-148 − BT-146 in UBL.** UBL writes BT-147 and BT-148 as `cbc:Amount` and
+  `cbc:BaseAmount` of `cac:Price/cac:AllowanceCharge`, and `cbc:Amount` is mandatory there (UBL 2.1 XSD
+  `AllowanceChargeType`). When BT-148 is set without BT-147, the UBL writer writes BT-147 = BT-148 − BT-146
+  (`0.00` when they are equal), the identity of PEPPOL-EN16931-R046 (`rules/sch/PEPPOL-EN16931-UBL.sch:363`);
+  the same TOSL108 pair shows the binding. A BT-148 below BT-146 would need a negative discount, i.e. a
+  price-level charge, which PEPPOL-EN16931-R044 forbids, so the writer raises `ModelError` then.
+* **Code 81 written as a UBL `CreditNote`.** BT-3 = 81 is in both CEN UBL lists (BR-CL-01); the UBL writer
+  always writes it as `CreditNote` (Peppol accepts it only there, P0101; issue #10), so a UBL `Invoice` with
+  code 81 is read back and written again as a `CreditNote`. The model stores no root hint (D4).

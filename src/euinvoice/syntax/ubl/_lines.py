@@ -141,7 +141,7 @@ def _price_discount(price: PriceDetails) -> Decimal | None:
     discount BT-147 is written with the discount BT-148 - BT-146, which is what Peppol
     PEPPOL-EN16931-R046 (``rules/sch/PEPPOL-EN16931-UBL.sch:363``: net price = gross price - allowance
     amount) and the EN 16931 definition of the net price require. ``0`` is written as ``0.00``. Model → UBL
-    → model therefore gains BT-147: a deliberate normalization (bt-mapping.md note N5).
+    → model therefore gains BT-147: a deliberate normalization (bt-mapping.md "Normalizations").
 
     Raises:
         ModelError: BT-148 is below BT-146: the implied discount is negative, i.e. a charge, which UBL
