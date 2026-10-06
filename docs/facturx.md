@@ -50,6 +50,8 @@ b'%PDF-'
 
 `embed` does not run the pre-flight checks. To get them, write the XML with `to_xml` first and embed the bytes:
 `facturx.embed(rendered_pdf, to_xml(invoice, profile=profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)`.
+The check below reads both PDFs back with [`facturx.extract`](reference/api.md#euinvoice.facturx.extract),
+which [§3](#3-read-it-back) covers.
 
 ```python
 >>> from euinvoice import to_xml

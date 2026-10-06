@@ -26,7 +26,7 @@ only with an ADR in `docs/adr/` and a `needs-human` issue.
 | Profile | Syntax(es) | Generate | Parse | Validate |
 |---|---|---|---|---|
 | EN 16931 core (`urn:cen.eu:en16931:2017`) | UBL, CII | ✅ | ✅ | ✅ |
-| Peppol BIS Billing 3.0 | UBL | ✅ | ✅ | ✅ |
+| Peppol BIS Billing 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | XRechnung 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: EN16931 (COMFORT) | CII in PDF/A-3 | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ✅ |
