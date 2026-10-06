@@ -27,6 +27,11 @@ All notable changes to this project are documented here. The format follows
 - The CI conformance job runs veraPDF (PDF/A-3B) on the Factur-X PDFs through the digest-pinned
   `verapdf/cli` image (#25). With `EUINVOICE_VERAPDF_REQUIRED=1`, as set in CI, a missing veraPDF fails the veraPDF
   tests instead of skipping them.
+- `euinvoice.facturx.extract()` (the `[pdf]` extra): takes the invoice XML out of a Factur-X 1.0 / ZUGFeRD 2.1+,
+  ZUGFeRD 2.0 or ZUGFeRD 1.0 PDF (`factur-x.xml`, `xrechnung.xml`, `zugferd-invoice.xml`, `ZUGFeRD-invoice.xml`)
+  and returns an `Extracted` with the bytes, the file name, the XMP schema and level, and the profile. The XMP
+  `DocumentFileName` selects the attachment; anything ambiguous raises `PdfError`. The input need not be PDF/A.
+  All 125 PDFs of the pinned ZUGFeRD corpus's `correct` directories extract.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the

@@ -8,10 +8,10 @@ import typing as t
 import pypdf
 import pytest
 from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 from pypdf.generic import NameObject
 
 from _invoices import minimal_invoice
+from _mutations import CUTS, EDITS, Edit, mutate
 from _pdfa import pdf
 from euinvoice import _xml, facturx, profiles
 from euinvoice.errors import PdfError
@@ -43,31 +43,11 @@ def _metadata(data: bytes) -> pypdf.generic.StreamObject:
     return t.cast(pypdf.generic.StreamObject, catalog["/Metadata"].get_object())
 
 
-type _Edit = tuple[t.Literal["overwrite", "insert", "delete"], int, bytes]
-
-_EDITS: t.Final = st.tuples(
-    st.sampled_from(["overwrite", "insert", "delete"]), st.integers(min_value=0), st.binary(min_size=1, max_size=16)
-)
-"""One byte-run edit at a position: overwrite or insert the run there, or delete as many bytes as it is long."""
-
-
 @settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(edits=st.lists(_EDITS, max_size=8), cut=st.one_of(st.none(), st.integers(min_value=0)))
-def test_mutated_pdf_gives_bytes_or_pdf_error(edits: list[_Edit], cut: int | None) -> None:
-    data = bytearray(_source())
-    for kind, position, run in edits:
-        at = position % (len(data) + 1)
-        if kind == "overwrite":
-            data[at : at + len(run)] = run
-        elif kind == "insert":
-            data[at:at] = run
-        else:
-            del data[at : at + len(run)]
-    if cut is not None:
-        del data[cut % (len(data) + 1) :]
-
+@given(edits=EDITS, cut=CUTS)
+def test_mutated_pdf_gives_bytes_or_pdf_error(edits: list[Edit], cut: int | None) -> None:
     try:
-        out = facturx.embed(bytes(data), _xml_bytes(), profile=_PROFILE)
+        out = facturx.embed(mutate(_source(), edits, cut), _xml_bytes(), profile=_PROFILE)
     except PdfError:
         return
     assert out.startswith(b"%PDF-")

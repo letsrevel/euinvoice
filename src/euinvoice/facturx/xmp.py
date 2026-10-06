@@ -26,7 +26,7 @@ from lxml import etree
 
 from euinvoice import _xml
 
-__all__ = ["DOCUMENT_TYPE", "add_facturx", "has_facturx", "pdfa_parts"]
+__all__ = ["DOCUMENT_TYPE", "add_facturx", "has_facturx", "pdfa_parts", "values"]
 
 DOCUMENT_TYPE: t.Final = "INVOICE"
 """``fx:DocumentType`` of all 74 Factur-X PDFs of the pinned corpus (plan §5)."""
@@ -45,8 +45,19 @@ def _q(namespace: str, name: str) -> str:
     return f"{{{namespace}}}{name}"
 
 
-def _values(root: etree._Element, namespace: str, name: str) -> list[str]:
-    """``prefix:name`` as element text or as ``rdf:Description`` attribute (both RDF/XML forms)."""
+def values(root: etree._Element, namespace: str, name: str) -> list[str]:
+    """Return every value of an XMP property, as element text or as ``rdf:Description`` attribute.
+
+    Both RDF/XML forms occur in the corpus (plan §5).
+
+    Args:
+        root: The parsed XMP packet (or any element of it).
+        namespace: The property's namespace URI.
+        name: The property's local name.
+
+    Returns:
+        The raw values in document order, elements first.
+    """
     qname = _q(namespace, name)
     return [element.text or "" for element in root.iter(qname)] + [
         str(element.get(qname)) for element in root.iter() if element.get(qname) is not None
@@ -63,7 +74,7 @@ def pdfa_parts(root: etree._Element) -> list[str]:
         The raw values in document order (elements first). They are not stripped: veraPDF rejects
         ``<pdfaid:part> 3 </pdfaid:part>`` (rules 6.6.4-2 and 6.6.2.3.1-2), so only exactly ``3`` is PDF/A-3.
     """
-    return _values(root, _xml.PDFAID, "part")
+    return values(root, _xml.PDFAID, "part")
 
 
 def has_facturx(root: etree._Element) -> bool:
@@ -96,7 +107,7 @@ def add_facturx(rdf: etree._Element, *, filename: str, version: str, level: str)
         level: ``fx:ConformanceLevel``.
     """
     about = _about(rdf)
-    if _xml.FACTURX_XMP not in _values(rdf, _xml.PDFA_SCHEMA, "namespaceURI"):
+    if _xml.FACTURX_XMP not in values(rdf, _xml.PDFA_SCHEMA, "namespaceURI"):
         _schema(_bag(rdf, about))
     description = _description(rdf, about, {"fx": _xml.FACTURX_XMP})
     for name, value in (
