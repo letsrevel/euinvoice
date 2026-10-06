@@ -202,9 +202,9 @@ invoices: t.Final = st.builds(
 def cii_expressible(invoice: Invoice) -> Invoice:
     """``invoice`` without BT-111 where CII cannot carry it unambiguously.
 
-    The CII writer refuses BT-111 without BT-6 (bt-mapping.md, "CII gap"). With BT-6 equal to BT-5 it writes two
-    ``ram:TaxTotalAmount`` with the same ``@currencyID``, which the reader cannot tell apart (BT-110 and BT-111
-    are bound by ``@currencyID``): not invertible, so left out here (the UBL writer refuses that case).
+    The CII writer refuses BT-111 without BT-6 (bt-mapping.md, "CII gap") and BT-111 with BT-6 equal to BT-5: two
+    ``ram:TaxTotalAmount`` in one currency, which CEN CII BR-53 and BR-CO-15 reject (#71), as the UBL writer
+    refuses it (BR-CO-15).
 
     Args:
         invoice: A random invoice.
