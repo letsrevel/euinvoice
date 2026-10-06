@@ -7,13 +7,14 @@ from collections.abc import Mapping
 
 import pydantic
 import pydantic_core
+from lxml import etree
 
 from euinvoice.errors import ParseError
 from euinvoice.model import bt_id
 
 
 def build[M: pydantic.BaseModel](
-    cls: type[M], location: str, values: Mapping[str, object], term: str | None = None
+    cls: type[M], at: etree._Element, values: Mapping[str, object], term: str | None = None
 ) -> M:
     """Build ``cls`` from ``values`` read from the input.
 
@@ -21,7 +22,8 @@ def build[M: pydantic.BaseModel](
 
     Args:
         cls: The model class.
-        location: The XPath of the element the values were read from (the error location).
+        at: The element the values were read from; its XPath, the error location, is computed only on failure
+            (``getpath`` costs O(siblings), so once per model made reading quadratic in the line count, #80).
         values: The field values.
         term: The business term id of a class whose fields carry none (e.g. ``ItemClassificationIdentifier``).
 
@@ -38,6 +40,7 @@ def build[M: pydantic.BaseModel](
     except pydantic.ValidationError as exc:
         problems = "; ".join(_problem(cls, error) for error in exc.errors())
         label = cls.__name__ if term is None else f"{term} {cls.__name__}"
+        location = at.getroottree().getpath(at)
         raise ParseError(f"cannot read {label}: {problems}", location=location) from exc
 
 

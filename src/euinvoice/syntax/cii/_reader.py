@@ -159,7 +159,7 @@ class Reader:
         Raises:
             ParseError: The values do not form a valid ``cls``; located at ``element``, naming each BT/BG id.
         """
-        return build(cls, self.path(element), values, term)
+        return build(cls, element, values, term)
 
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the input no business term took (``ParseResult.unmapped``; see ``syntax._marks.Marks``)."""
