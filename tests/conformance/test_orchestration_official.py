@@ -222,6 +222,8 @@ def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
     blocking = [f for f in report.findings if f.severity in BLOCKING]
     assert {f.rule_id for f in blocking} == upstream_blocking(source, path)
     assert {f.source for f in blocking} <= {source, "peppol-bis"}
+    # The Peppol rules (e.g. issue116.xml's PEPPOL-COMMON-R049) come from the Peppol rule set, nowhere else.
+    assert all(f.source == "peppol-bis" for f in blocking if f.rule_id.startswith("PEPPOL-"))
     # Examples with a non-core BT-24 (BIS3_*, an Italian CIUS, ...) are checked against core only, and say so.
     assert {f.rule_id for f in report.findings if f.source == EUINVOICE_SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
 

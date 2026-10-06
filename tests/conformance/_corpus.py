@@ -188,9 +188,15 @@ def expected_invalid() -> dict[str, ExpectedInvalid]:
         assert _Entry.__required_keys__ <= set(entry) <= _Entry.__required_keys__ | _Entry.__optional_keys__, entry
         assert entry["outcome"] in t.get_args(Outcome.__value__), entry
         differs = entry.get("differs", [])
+        for ids in (entry["rules"], entry["upstream"], differs):
+            # A bare string (rules = "X") would become a set of characters: refuse it at load time.
+            assert isinstance(ids, list), entry
+            assert all(isinstance(value, str) for value in ids), entry
         assert entry["rules"] or entry["upstream"] or differs, f"{entry} documents no exception"
         assert entry["outcome"] == "reads" or not differs, entry
+        assert isinstance(entry["reason"], str), entry
         assert entry["reason"], entry
+        assert isinstance(entry["link"], str), entry
         assert entry["link"].startswith("https://"), entry
         key = f"{entry['source']}:{entry['file']}"
         assert key not in found, f"duplicate entry {key}"

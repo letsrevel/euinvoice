@@ -95,17 +95,19 @@ def _profile(sample: Sample, data: bytes) -> profiles.Profile:
     return detect.detect(data).profile or profiles.EN16931
 
 
-def _blocking(data: bytes, profile: profiles.Profile) -> frozenset[str]:
-    """Fatal and error rule ids of ``validate(data)``; Factur-X levels without pinned rules (#42) get core rules."""
+def _blocking(data: bytes, profile: profiles.Profile) -> list[Finding]:
+    """Fatal and error findings of ``validate(data)``; Factur-X levels without pinned rules (#42) get core rules."""
     if FACTURX_RULE_SET in profile.rule_sets:
         with pytest.raises(ArtifactsNotAvailableError, match="issues/42"):
             validate(data, profile)
         profile = profiles.EN16931
-    return _ids(validate(data, profile).findings)
+    return [f for f in validate(data, profile).findings if f.severity in ("fatal", "error")]
 
 
-def _ids(findings: t.Iterable[Finding]) -> frozenset[str]:
-    return frozenset(f.rule_id for f in findings if f.severity in ("fatal", "error"))
+def _assert_blocking(findings: list[Finding], expected: frozenset[str]) -> None:
+    """The findings' rule ids are exactly ``expected``; on a mismatch, show ``(rule_id, message)`` for the reason."""
+    found = frozenset(f.rule_id for f in findings)
+    assert found == expected, sorted({(f.rule_id, f.message) for f in findings})
 
 
 def test_every_corpus_is_complete() -> None:
@@ -116,7 +118,11 @@ def test_every_corpus_is_complete() -> None:
 
 
 def test_every_expected_invalid_entry_names_a_sample() -> None:
-    assert set(expected_invalid()) <= {sample.id for sample in samples()}
+    entries = set(expected_invalid())
+    assert entries <= {sample.id for sample in samples()}
+    # Samples the harness only classifies never have an entry.
+    not_invoices = {f"{source}:{file}" for source, files in NOT_INVOICES.items() for file in files}
+    assert entries.isdisjoint(TOO_LARGE | not_invoices)
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=lambda sample: sample.id)
@@ -135,11 +141,11 @@ def test_round_trip_invariant(sample: Sample) -> None:
     profile = _profile(sample, data)
     expected = expected_invalid().get(sample.id)
     upstream = frozenset() if expected is None else expected.upstream
-    assert _blocking(data, profile) == upstream
+    _assert_blocking(_blocking(data, profile), upstream)
     if expected is not None and expected.outcome == "parse-error":
         with pytest.raises(ParseError) as error:
             _read(data)
-        assert frozenset(_NAMED_ID.findall(str(error.value))) == expected.rules
+        assert frozenset(_NAMED_ID.findall(str(error.value))) == expected.rules, str(error.value)
         return
     first = _read(data)
     # The per-file report of out-of-model content asked for by plan §4 (shown with -rP or -s).
@@ -148,7 +154,7 @@ def test_round_trip_invariant(sample: Sample) -> None:
     second = _read(written)
     assert _differs(first.invoice, second.invoice) == (frozenset() if expected is None else expected.differs)
     assert second.unmapped == ()
-    assert _blocking(written, profile) == (frozenset() if expected is None else expected.rules)
+    _assert_blocking(_blocking(written, profile), frozenset() if expected is None else expected.rules)
 
 
 def _differs(first: Invoice, second: Invoice) -> frozenset[str]:
