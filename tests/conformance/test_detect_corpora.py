@@ -13,7 +13,7 @@ import typing as t
 import pytest
 
 from euinvoice import _xml
-from euinvoice import detect as detect_module
+from euinvoice.detect import detect
 from euinvoice.errors import ParseError, UnsupportedDocumentError
 from euinvoice.validate import artifacts
 
@@ -123,10 +123,10 @@ def test_every_corpus_file_is_classified(source: artifacts.SourceName) -> None:
         name = path.relative_to(directory).as_posix()
         if name in excluded:
             with pytest.raises(excluded[name]):
-                detect_module.detect(path.read_bytes())
+                detect(path.read_bytes())
             rejected[name] = excluded[name]
             continue
-        found = detect_module.detect(path.read_bytes())
+        found = detect(path.read_bytes())
         buckets[
             found.syntax, found.root, found.specification_identifier, found.profile.id if found.profile else None
         ] += 1
@@ -140,4 +140,4 @@ def test_peppol_rule_unit_tests_are_rejected_as_non_invoices() -> None:
     assert len(test_sets) == 240
     for path in test_sets:
         with pytest.raises(UnsupportedDocumentError, match=re.escape(f"root element '{{{_xml.VEFA}}}testSet'")):
-            detect_module.detect(path.read_bytes())
+            detect(path.read_bytes())

@@ -5,6 +5,8 @@ Validation results are data, not exceptions (IMPLEMENTATION_PLAN.md D9): rule fa
 artifacts.
 """
 
+from euinvoice.report import Finding, Severity
+
 
 class EuInvoiceError(Exception):
     """Base class of every exception raised by euinvoice."""
@@ -33,6 +35,44 @@ class ParseError(EuInvoiceError):
         """
         super().__init__(message if location is None else f"{message} (at {location})")
         self.location = location
+
+
+class PreflightError(EuInvoiceError):
+    """``to_xml`` refused an invoice: its pre-flight or calculation checks found ``fatal`` / ``error`` problems.
+
+    The checks (the profile's ``preflight`` and ``calc.check`` for the target syntax) run on the invoice after
+    ``Profile.prepare``; a blocking finding means the official rules would reject the written document, so nothing
+    is written.
+
+    Attributes:
+        profile_id: The ``id`` of the profile the invoice was to be written under.
+        syntax: The target syntax (``"ubl"`` or ``"cii"``).
+        findings: Every finding of both checks (warnings included), each naming its rule id and model location.
+    """
+
+    def __init__(self, profile_id: str, syntax: str, findings: tuple[Finding, ...]) -> None:
+        """Create the error.
+
+        Args:
+            profile_id: The profile's ``id``.
+            syntax: The target syntax.
+            findings: The pre-flight and calculation findings.
+
+        Raises:
+            ValueError: No finding is ``fatal`` or ``error``, so there is nothing to refuse.
+        """
+        blocking = [f for f in findings if f.severity in (Severity.FATAL, Severity.ERROR)]
+        if not blocking:
+            raise ValueError("PreflightError needs at least one fatal or error finding")
+        details = "; ".join(f"{f.rule_id} ({f.severity}) at {f.location}: {f.message}" for f in blocking)
+        super().__init__(f"invoice fails the {profile_id} pre-flight and calculation checks for {syntax}: {details}")
+        self.profile_id = profile_id
+        self.syntax = syntax
+        self.findings = findings
+
+    def __reduce__(self) -> tuple[type["PreflightError"], tuple[str, str, tuple[Finding, ...]]]:
+        """Pickle by the constructor arguments (the default would call it with the message alone)."""
+        return type(self), (self.profile_id, self.syntax, self.findings)
 
 
 class UnsupportedDocumentError(EuInvoiceError):

@@ -17,8 +17,9 @@ import pypdf
 import pytest
 
 from _pdfa import pdf
-from euinvoice import _xml, detect, facturx
-from euinvoice.errors import PdfError, UnsupportedDocumentError
+from euinvoice import _xml, facturx, parse, parse_detailed
+from euinvoice.detect import detect_root
+from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.syntax import Syntax
 from euinvoice.validate import artifacts
 
@@ -93,9 +94,9 @@ def test_every_correct_pdf_extracts() -> None:
         if extracted.container == "zugferd-1.0":
             # ZUGFeRD 1.0 embeds its own CrossIndustryDocument (or the RC's CBFBUY Invoice), not CII D16B.
             with pytest.raises(UnsupportedDocumentError):
-                detect.detect_root(root)
+                detect_root(root)
         else:
-            assert detect.detect_root(root).syntax is Syntax.CII, name
+            assert detect_root(root).syntax is Syntax.CII, name
     assert dict(found) == CORRECT
 
 
@@ -130,3 +131,26 @@ def test_round_trip_of_every_factur_x_pdf_through_embed() -> None:
         assert (again.xml, again.profile) == (extracted.xml, extracted.profile), name
         count += 1
     assert count == sum(n for (container, _, profile), n in CORRECT.items() if container == "factur-x" and profile)
+
+
+def test_parse_reads_every_correct_pdf_as_its_extracted_xml() -> None:
+    # euinvoice.parse on a PDF is parse_detailed of the XML extract() selects. Factur-X MINIMUM and BASIC WL lack terms
+    # EN 16931 requires (BG-25 lines, BR-16; MINIMUM also BG-23 and BT-106), so they raise ParseError (#69).
+    # (XMP level, the error parse raised or None) -> PDFs.
+    outcomes: collections.Counter[tuple[str | None, type[Exception] | None]] = collections.Counter()
+    for name, data in _pdfs().items():
+        if _kind(name) != "correct":
+            continue
+        extracted = facturx.extract(data)
+        try:
+            expected = parse_detailed(extracted.xml)
+        except (ParseError, UnsupportedDocumentError) as exc:
+            with pytest.raises(type(exc)):
+                parse(data)
+            outcomes[extracted.conformance_level, type(exc)] += 1
+        else:
+            assert parse_detailed(data) == expected, name
+            assert parse(data) == expected.invoice, name
+            outcomes[extracted.conformance_level, None] += 1
+    for level, count in (("MINIMUM", 6), ("BASIC WL", 5)):
+        assert {key: n for key, n in outcomes.items() if key[0] == level} == {(level, ParseError): count}

@@ -2,7 +2,8 @@
 
 import pytest
 
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles import facturx
@@ -80,16 +81,16 @@ class TestRegistry:
     @pytest.mark.parametrize("profile", OWN_BT24, ids=lambda p: p.id)
     def test_levels_with_their_own_bt24_are_registered(self, profile: profiles.Profile) -> None:
         assert profiles.get(profile.specification_identifier) is profile
-        assert detect.detect(_cii(profile.specification_identifier)).profile is profile
+        assert detect(_cii(profile.specification_identifier)).profile is profile
 
     def test_the_core_bt24_stays_the_core_profile(self) -> None:
         # A bare core BT-24 is EN 16931 core; only the PDF's XMP selects FACTURX_EN16931 (#26).
         assert profiles.get(CORE) is profiles.EN16931
-        assert detect.detect(_cii(CORE)).profile is profiles.EN16931
+        assert detect(_cii(CORE)).profile is profiles.EN16931
 
     def test_the_xrechnung_bt24_stays_the_xrechnung_profile(self) -> None:
         assert profiles.get(XRECHNUNG) is profiles.XRECHNUNG
-        assert detect.detect(_cii(XRECHNUNG)).profile is profiles.XRECHNUNG
+        assert detect(_cii(XRECHNUNG)).profile is profiles.XRECHNUNG
 
 
 class TestGeneration:
@@ -98,7 +99,7 @@ class TestGeneration:
     @pytest.mark.parametrize("profile", SHARED_BT24, ids=lambda p: p.id)
     def test_prepare_and_write_claim_the_level_bt24(self, profile: profiles.Profile, invoice: Invoice) -> None:
         written = cii.write(profile.prepare(invoice))
-        assert detect.detect(written).specification_identifier == profile.specification_identifier
+        assert detect(written).specification_identifier == profile.specification_identifier
         assert cii.read(_xml.parse(written)).invoice == profile.prepare(invoice)
 
 

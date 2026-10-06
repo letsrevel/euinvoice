@@ -20,7 +20,8 @@ from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObjec
 from _invoices import minimal_invoice
 from _pdfa import PDFA_ID, PRODUCER, pdf, xmp
 from _xrechnung_cases import xrechnung_invoice
-from euinvoice import _xml, detect, facturx, profiles
+from euinvoice import _xml, facturx, profiles
+from euinvoice.detect import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.model import ProcessControl
 from euinvoice.profiles import Profile
@@ -228,7 +229,7 @@ def test_invoice_is_written_as_cii_under_the_profile() -> None:
 
     xml = pypdf.PdfReader(io.BytesIO(out)).attachments["xrechnung.xml"][0]
     assert xml == cii.write(profiles.FACTURX_XRECHNUNG.prepare(invoice))
-    found = detect.detect(xml)
+    found = detect(xml)
     assert found.syntax is Syntax.CII
     assert found.profile is profiles.XRECHNUNG  # BT-24 alone names XRechnung; the XMP level picks the Factur-X one
 
@@ -237,9 +238,9 @@ def test_extracted_xml_is_detected_and_the_pdf_is_recognised_as_pdf() -> None:
     out = facturx.embed(pdf(), _xml_for(profiles.FACTURX_BASIC), profile=profiles.FACTURX_BASIC)
 
     xml = pypdf.PdfReader(io.BytesIO(out)).attachments["factur-x.xml"][0]
-    assert detect.detect(xml).profile is profiles.FACTURX_BASIC
+    assert detect(xml).profile is profiles.FACTURX_BASIC
     with pytest.raises(UnsupportedDocumentError, match=r"facturx\.extract"):
-        detect.detect(out)
+        detect(out)
 
 
 @pytest.mark.parametrize(
