@@ -160,9 +160,6 @@ Open questions waiting for a maintainer decision (`needs-human`):
   and CVD).
 - [#67](https://github.com/letsrevel/euinvoice/issues/67): the XRechnung profiles set no default BT-23; the caller
   must provide it (the pre-flight reports PEPPOL-EN16931-R001 otherwise).
-- [#74](https://github.com/letsrevel/euinvoice/issues/74): SaxonC-HE 13.0.0 crashes in `normalize-space()` on
-  text that combines leading whitespace, a character above U+00FF and one above U+FFFF, so `validate()` reports a
-  false `SCHEMATRON-RUNTIME` fatal for such invoices.
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
 

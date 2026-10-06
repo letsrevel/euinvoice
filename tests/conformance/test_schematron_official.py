@@ -76,6 +76,9 @@ def test_amount_the_rules_cannot_evaluate_is_a_blocking_finding_not_an_exception
 
     assert [(f.rule_id, f.severity) for f in findings] == [(schematron.RUNTIME_ERROR_RULE_ID, Severity.FATAL)]
     assert 'Cannot convert string "abc" to xs:decimal' in findings[0].message
+    # One line, without the template trace and its absolute cache paths (saxonche 12.x, issue #74).
+    assert "\n" not in findings[0].message
+    assert "file:" not in findings[0].message
     assert not ValidationReport(findings).ok
 
 

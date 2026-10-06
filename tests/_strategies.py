@@ -54,7 +54,7 @@ from euinvoice.model import (
 )
 
 
-def text(*, max_codepoint: int = 0x10FFFF, include_characters: str = "") -> st.SearchStrategy[str]:
+def text(*, include_characters: str = "") -> st.SearchStrategy[str]:
     """Short non-blank text of XML-compatible characters.
 
     No surrogates, controls or noncharacters such as U+FFFE, except ``include_characters``; not blank, because
@@ -62,7 +62,6 @@ def text(*, max_codepoint: int = 0x10FFFF, include_characters: str = "") -> st.S
     """
     alphabet = st.characters(
         codec="utf-8",
-        max_codepoint=max_codepoint,
         exclude_categories=("Cs", "Cc", "Cn"),
         include_characters=include_characters,
     )

@@ -51,16 +51,15 @@ def test_invoices_validate(target: Target, syntax: Syntax, data: st.DataObject) 
     assert [f for f in target.profile.preflight(invoice, syntax) if f.severity in BLOCKING] == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="issue #74: SaxonC-HE 13.0.0 regression (12.9 passes): normalize-space() throws "
-    "ArrayIndexOutOfBoundsException on whitespace + a character above U+00FF + one above U+FFFF, so the CEN "
-    "stylesheet fails at run time",
-)
 @pytest.mark.parametrize("syntax", list(WRITERS))
 def test_saxon_normalize_space_regression(syntax: Syntax) -> None:
-    """Found by the property above: a valid buyer name makes validate() report SCHEMATRON-RUNTIME (fatal)."""
+    """A buyer name mixing whitespace, U+0100 and U+10000 validates without SCHEMATRON-RUNTIME.
+
+    Found by the property above (issue #74): SaxonC-HE 13.0.0 throws ArrayIndexOutOfBoundsException in
+    normalize-space() on such a string, so the CEN stylesheet aborted at run time and validate() reported a false
+    fatal. The ``[validate]`` extra excludes 13.0.0 (``saxonche>=12.9,!=13.0.0``); this test guards the
+    exclusion and any later SaxonC release.
+    """
     invoice = minimal_invoice()
     invoice = rebuild(invoice, buyer=invoice.buyer.model_copy(update={"name": " \u0100\U000100000000"}))
     report = validate(WRITERS[syntax](invoice), profiles.EN16931)

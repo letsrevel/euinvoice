@@ -10,3 +10,7 @@ updates:
     schedule: { interval: weekly }
     groups:
       python: { patterns: ["*"] }
+    ignore:
+      # SaxonC-HE 13.0.0 normalize-space() crash; the [validate] extra excludes it (issue #74).
+      - dependency-name: "saxonche"
+        versions: ["13.0.0"]

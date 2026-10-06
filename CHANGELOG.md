@@ -121,6 +121,10 @@ generated, parsed and validated per profile is in the README table; the open que
   `Finding` with rule id, severity (from `@flag`; missing or unknown counts as `error`), XPath and message. A
   document a stylesheet cannot evaluate yields one fatal `SCHEMATRON-RUNTIME` finding instead of an exception.
   Compiled schemas and stylesheets are cached per process and thread-safe.
+- The `[validate]` extra requires `saxonche>=12.9,!=13.0.0`: SaxonC-HE 13.0.0 crashes in `normalize-space()` on
+  text that combines leading whitespace, a character above U+00FF and one above U+FFFF, so the official
+  stylesheets aborted and `validate()` reported a false `SCHEMATRON-RUNTIME` fatal; 12.9 and 12.10 are
+  not affected, and a fixed 13.0.x is accepted ([#74](https://github.com/letsrevel/euinvoice/issues/74)).
 - `euinvoice.report`: `Finding`, `Severity` and `ValidationReport` ([#16](https://github.com/letsrevel/euinvoice/issues/16)).
 - Artifact manifest (`euinvoice/validation/manifest.toml`) pinning the official artifacts and corpora by URL and
   sha256 ([#4](https://github.com/letsrevel/euinvoice/issues/4)): CEN EN 16931 1.3.16 (UBL, CII), Peppol BIS Billing 3.0.21, XRechnung Schematron 2.6.0, XRechnung
@@ -207,6 +211,4 @@ generated, parsed and validated per profile is in the README table; the open que
   can be built or read. `validate()` rejects every CVD document: BR-CL-13 when it carries the `CVD` item
   classification, BR-DE-CVD-03 (fatal) when it does not (`XRechnung-UBL-validation.sch` lines 560-562, CEN
   `EN16931-UBL-codes.sch` lines 67-68). No default BT-23 for XRechnung ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
-- SaxonC-HE 13.0.0 `normalize-space()` crashes on some non-Latin-1 text, giving a false `SCHEMATRON-RUNTIME`
-  fatal ([#74](https://github.com/letsrevel/euinvoice/issues/74)).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
