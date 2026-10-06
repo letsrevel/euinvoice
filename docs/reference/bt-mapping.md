@@ -360,3 +360,38 @@ terms. A model → syntax → model round trip then gains that value.
 * **Code 81 written as a UBL `CreditNote`.** BT-3 = 81 is in both CEN UBL lists (BR-CL-01); the UBL writer
   always writes it as `CreditNote` (Peppol accepts it only there, P0101; issue #10), so a UBL `Invoice` with
   code 81 is read back and written again as a `CreditNote`. The model stores no root hint (D4).
+* **Empty groups are not written in CII.** The CII writer skips a BG-1 note with neither BT-21 nor BT-22, a BG-13
+  whose terms (including BG-14) are all absent and a BG-19 whose BT-89, BT-90 and BT-91 are all absent, so a
+  model → CII → model round trip drops them. It writes BT-29 identifiers without a scheme first (`ram:ID` precedes
+  `ram:GlobalID` in the D16B `TradePartyType` sequence), so their order may change.
+
+### The CII reader (#14)
+
+The reader (`euinvoice.syntax.cii.read`) is the inverse of the writer. Anything it cannot map to a business term is
+listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
+
+* Dates are read only with `@format='102'` (CCYYMMDD); another format, or an invalid date, is a `ParseError` (binding
+  note on #13). BT-8 is mapped back from UNTDID 2475 (5, 29, 72) to 2005 (3, 35, 432); another code is a
+  `ParseError` (CII BR-CL-06).
+* BT-7 and BT-8 are read from whichever `ram:ApplicableTradeTax` carries them (CII-SR-461: at most one
+  `ram:TaxPointDate` per breakdown; CII-SR-462: one distinct `ram:DueDateTypeCode`); a later different value is unmapped.
+* BT-84 is `ram:IBANID`, else `ram:ProprietaryID`. BT-81 and BT-82 are the first `ram:TypeCode` and the first
+  `ram:Information` across the payment means; as in CII-SR-467/468, a means whose own `ram:TypeCode` /
+  `ram:Information` is absent or equal under `normalize-space` belongs to the same BG-16 and adds its account as a
+  BG-17, and a means with a different one is unmapped. BT-83, BT-89 and BT-90 without any payment means are unmapped
+  (BG-16 needs BT-81, BR-49). BT-91 is `ram:IBANID` only (CII-SR-444 warns that `ram:ProprietaryID` should not be
+  there; one is unmapped).
+* An allowance or charge (BG-20, BG-21, BG-27, BG-28) whose `ram:ChargeIndicator/udt:Indicator` is missing or not an
+  `xs:boolean` is unmapped: the D16B XSD makes the indicator optional and the CEN rules select the groups by it.
+  BT-147 is the first gross price `ram:AppliedTradeAllowanceCharge` with indicator false; a charge, one without an
+  indicator (CII-SR-119 accepts it without amount) and any later allowance are unmapped.
+* BT-41 / BT-56 is `ram:PersonName`, else `ram:DepartmentName`. A party identifier is `ram:ID` or `ram:GlobalID`, each
+  with its `@schemeID` if present.
+* `ram:TaxTotalAmount` is BT-110 or BT-111 by its `@currencyID` (BT-5 or BT-6); one with neither is unmapped.
+* Consumed without a business term, and only with exactly the value the writer itself writes (any other value is
+  unmapped): `ram:SpecifiedProcuringProject/ram:Name` equal to "Project reference" (`PROJECT_NAME`), a gross price
+  `ram:BasisQuantity` equal to the net one, the `ram:TypeCode` `VAT` of taxes and 916 / 50 / 130 of BG-24 / BT-17 /
+  BT-18 documents, empty `ram:IncludedNote` elements (no child, no text), and `@format='102'` of dates.
+* Content the model cannot hold (e.g. a line-level `ram:ExemptionReason`, Factur-X EXTENDED elements, a second card)
+  is unmapped. A model that cannot be built (a missing required term, a code outside its list) is a `ParseError`
+  naming the BT/BG and located at the element being read; Factur-X MINIMUM / BASIC WL subsets are #22's job.
