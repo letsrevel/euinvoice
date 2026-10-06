@@ -1,0 +1,201 @@
+"""BT coverage gate (#32, plan §8 9.4): every EN 16931 term and group has a write and a read test per syntax.
+
+Coverage is derived from the per-term row tables (data, not test names): ``BT_ROWS`` of
+``test_ubl_write_bts.py`` / ``test_cii_write_bts.py`` (each row's XPath is asserted on the written XML) and
+``READ_ROWS`` of ``test_ubl_read_bts.py`` / ``test_cii_read_bts.py`` (each row's values are asserted on the
+read invoice). Every row starts with its BT/BG id and ends with its expected value; a row whose expected value
+is empty (``""``, ``()``, a count of ``0``) proves nothing and does not count. The full id list is
+:data:`euinvoice.model.BT_INDEX`, which ``tests/model/test_bt_index.py`` pins to the EN 16931 inventory.
+
+A term that genuinely cannot be expressed in a syntax goes into :data:`EXEMPTIONS` with the CEN Schematron /
+binding evidence, never a silent skip. This gate is the single source of truth for coverage (the tables carry no
+completeness tests of their own, so an exemption is reachable). It also checks that ``docs/reference/bt-coverage.md``
+is current; ``make bt-coverage`` regenerates it (sets ``EUINVOICE_REGEN_DOCS``).
+"""
+
+import collections
+import os
+import re
+import typing as t
+from collections.abc import Collection, Mapping, Sequence
+from decimal import Decimal
+from pathlib import Path
+
+import test_cii_read_bts
+import test_cii_write_bts
+import test_ubl_read_bts
+import test_ubl_write_bts
+
+from euinvoice.model import BT_INDEX
+from euinvoice.syntax import Syntax
+
+Direction = t.Literal["write", "read"]
+Cell = tuple[Syntax, Direction]
+Gap = tuple[str, Syntax, Direction]
+Row = Sequence[t.Any]
+"""A row of a per-term table: ``row[0]`` is the BT/BG id, ``row[-1]`` the expected value."""
+
+CELLS: t.Final[tuple[Cell, ...]] = (
+    (Syntax.UBL, "write"),
+    (Syntax.UBL, "read"),
+    (Syntax.CII, "write"),
+    (Syntax.CII, "read"),
+)
+
+TABLES: t.Final[Mapping[Cell, Sequence[Row]]] = {
+    (Syntax.UBL, "write"): test_ubl_write_bts.BT_ROWS,
+    (Syntax.UBL, "read"): test_ubl_read_bts.READ_ROWS,
+    (Syntax.CII, "write"): test_cii_write_bts.BT_ROWS,
+    (Syntax.CII, "read"): test_cii_read_bts.READ_ROWS,
+}
+
+EXEMPTIONS: t.Final[Mapping[Gap, str]] = {}
+"""``(id, syntax, direction)`` → why the term cannot be expressed there, citing the CEN binding evidence.
+
+Empty: every term and group has a non-vacuous row in all four tables (see ``bt-coverage.md``).
+"""
+
+ROOT: t.Final = Path(__file__).parents[2]
+DOC: t.Final = ROOT / "docs" / "reference" / "bt-coverage.md"
+MAPPING: t.Final = ROOT / "docs" / "reference" / "bt-mapping.md"
+
+
+def proves_something(row: Row) -> bool:
+    """Whether a row asserts a non-empty value.
+
+    Vacuous: a blank string, a ``string(count(...))`` of ``"0"``, a count of ``0``, or a tuple with no value that
+    is neither ``None`` nor blank. A value of zero (e.g. a ``"0"`` VAT rate, ``Decimal("0")``) still counts.
+    """
+    expected = row[-1]
+    if isinstance(expected, str):
+        text = expected.strip()
+        return bool(text) and not (str(row[-2]).startswith("string(count(") and text == "0")
+    if isinstance(expected, tuple):
+        return any(v is not None and not (isinstance(v, str) and not v.strip()) for v in expected)
+    return bool(expected != 0)
+
+
+def covering_rows(rows: Sequence[Row]) -> collections.Counter[str]:
+    """The number of non-vacuous rows per id."""
+    return collections.Counter(str(row[0]) for row in rows if proves_something(row))
+
+
+def gaps(tables: Mapping[Cell, Sequence[Row]], exemptions: Collection[Gap], ids: Collection[str]) -> list[Gap]:
+    """Every ``(id, syntax, direction)`` with neither a covering row nor an exemption."""
+    counts = {cell: covering_rows(tables.get(cell, ())) for cell in CELLS}
+    return [
+        (ident, *cell)
+        for ident in ids
+        for cell in CELLS
+        if not counts[cell][ident] and (ident, *cell) not in exemptions
+    ]
+
+
+def _sort_key(ident: str) -> tuple[str, int]:
+    kind, number = ident.split("-")
+    return kind, int(number)
+
+
+def _names() -> dict[str, str]:
+    """Id → name, from ``bt-mapping.md`` (whose names ``test_bt_index.py`` checks against the EN 16931 list)."""
+    row = re.compile(r"^\| (B[GT]-\d+) \| ([^|]+) \|")
+    return {m[1]: m[2].strip() for m in map(row.match, MAPPING.read_text(encoding="utf-8").splitlines()) if m}
+
+
+def render(tables: Mapping[Cell, Sequence[Row]], exemptions: Mapping[Gap, str]) -> str:
+    """The Markdown of ``docs/reference/bt-coverage.md``."""
+    ids = sorted(BT_INDEX, key=_sort_key)
+    names = _names()
+    counts = {cell: covering_rows(tables[cell]) for cell in CELLS}
+    missing = gaps(tables, exemptions, ids)
+    header = " | ".join(f"{syntax.name} {direction}" for syntax, direction in CELLS)
+
+    def cell_text(ident: str, cell: Cell) -> str:
+        if counts[cell][ident]:
+            return str(counts[cell][ident])
+        return "exempt" if (ident, *cell) in exemptions else "**missing**"
+
+    lines = [
+        "# BT coverage: write and read tests per syntax",
+        "",
+        "<!-- Generated by tests/syntax/test_bt_coverage.py; do not edit. Run `make bt-coverage` to regenerate. -->",
+        "",
+        "Every EN 16931 business term and group (and the library's root `BG-0`) needs a write test and a read test",
+        "in each syntax. The counts are the non-vacuous rows of the per-term tables: `BT_ROWS` in",
+        "`tests/syntax/test_{ubl,cii}_write_bts.py` (the XPath each term is written to) and `READ_ROWS` in",
+        "`tests/syntax/test_{ubl,cii}_read_bts.py` (the value the reader returns). The gate",
+        "`tests/syntax/test_bt_coverage.py` fails on any missing cell that is not an exemption with a reason.",
+        "",
+        "## Summary",
+        "",
+        f"| | {header} |",
+        "|---|" + "---|" * len(CELLS),
+        f"| Ids | {' | '.join(str(len(ids)) for _ in CELLS)} |",
+        f"| Covered | {' | '.join(str(sum(1 for i in ids if counts[c][i])) for c in CELLS)} |",
+        f"| Exempt | {' | '.join(str(sum(1 for i in ids if (i, *c) in exemptions)) for c in CELLS)} |",
+        f"| Missing | {' | '.join(str(sum(1 for g in missing if g[1:] == c)) for c in CELLS)} |",
+        f"| Rows | {' | '.join(str(sum(counts[c].values())) for c in CELLS)} |",
+        "",
+        "## Exemptions",
+        "",
+    ]
+    if exemptions:
+        lines += ["| Id | Syntax | Direction | Reason |", "|---|---|---|---|"]
+        lines += [f"| {i} | {s.name} | {d} | {why} |" for (i, s, d), why in sorted(exemptions.items())]
+    else:
+        lines.append("None: every term and group is covered in both directions of both syntaxes.")
+    lines += ["", "## Per term", "", f"| Id | Name | {header} |", "|---|---|" + "---|" * len(CELLS)]
+    lines += [f"| {i} | {names[i]} | {' | '.join(cell_text(i, c) for c in CELLS)} |" for i in ids]
+    return "\n".join(lines) + "\n"
+
+
+def test_every_term_has_a_write_and_a_read_test_per_syntax() -> None:
+    missing = gaps(TABLES, EXEMPTIONS, sorted(BT_INDEX, key=_sort_key))
+    assert not missing, "\n".join(f"{i}: no {d} test in {s.name}" for i, s, d in missing)
+
+
+def test_every_row_names_a_model_id() -> None:
+    for cell, rows in TABLES.items():
+        unknown = sorted({str(row[0]) for row in rows} - set(BT_INDEX))
+        assert not unknown, (cell, unknown)
+
+
+def test_exemptions_are_reasoned_and_not_stale() -> None:
+    for (ident, syntax, direction), reason in EXEMPTIONS.items():
+        assert ident in BT_INDEX, ident
+        assert reason.strip(), ident
+        assert not covering_rows(TABLES[syntax, direction])[ident], f"{ident} is covered; drop the exemption"
+
+
+def test_the_gate_reports_every_missing_cell() -> None:
+    covered: Sequence[Row] = (("BT-1", {}, "string(/x)", "1"), ("BT-2", {}, "string(count(/y))", "0"))
+    tables = dict.fromkeys(CELLS, covered)
+    assert gaps(tables, {}, ["BT-1", "BT-2"]) == [("BT-2", *cell) for cell in CELLS]
+    assert gaps(tables, {("BT-2", *cell) for cell in CELLS}, ["BT-1", "BT-2"]) == []
+    assert gaps({}, {}, ["BT-1"]) == [("BT-1", *cell) for cell in CELLS]
+
+
+def test_vacuous_rows_cover_nothing() -> None:
+    assert proves_something(("BT-119", {}, "string(//cbc:Percent)", "0"))
+    assert not proves_something(("BG-1", {}, "string(count(//cbc:Note))", "0"))
+    assert not proves_something(("BT-1", {}, "string(/x)", ""))
+    assert not proves_something(("BG-1", {}, "//ram:Note", 0))
+    assert not proves_something(("BT-1", {}, ()))
+    assert proves_something(("BT-1", {}, ("INV-1",)))
+    assert not proves_something(("BT-1", {}, ("",)))
+    assert not proves_something(("BT-1", {}, (None,)))
+    assert not proves_something(("BT-1", {}, "string(/x)", " "))
+    assert not proves_something(("BG-1", {}, "string(count(//cbc:Note))", " "))
+    assert proves_something(("BT-119", {}, (Decimal("0"),)))
+    assert proves_something(("BG-1", {}, "//ram:Note", 2))
+    rates = [row for cell in CELLS for row in TABLES[cell] if row[0] in ("BT-103", "BT-119")]
+    assert rates
+    assert all(proves_something(row) for row in rates)
+
+
+def test_coverage_doc_is_current() -> None:
+    expected = render(TABLES, EXEMPTIONS)
+    if os.environ.get("EUINVOICE_REGEN_DOCS"):
+        DOC.write_text(expected, encoding="utf-8")
+    current = DOC.read_text(encoding="utf-8") if DOC.exists() else ""
+    assert current == expected, f"{DOC.relative_to(ROOT)} is stale: run `make bt-coverage` and commit it"
