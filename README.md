@@ -26,8 +26,8 @@ is a small, typed, MIT-licensed Python library with three principles:
 | EN 16931 core | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN |
 | Peppol BIS Billing 3.0 | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN + Peppol |
 | XRechnung 3.0 (CIUS) | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN + XRechnung |
-| XRechnung 3.0 Extension | UBL 2.1, CII D16B | ✅ EN 16931 content only | ✅ extension content listed as unmapped; content outside the CEN code lists (e.g. ICD `XR03`, testsuite `04.05a` CII) raises `ParseError` | ✅ XSD + CEN + XRechnung, plus the KoSIT verdict |
-| XRechnung 3.0 CVD | UBL 2.1, CII D16B | ❌ | ❌ conforming documents (BR-CL-13) | ⚠️ raw flags reject, the KoSIT verdict accepts; see below |
+| XRechnung 3.0 Extension | UBL 2.1, CII D16B | ✅ EN 16931 content only | ✅ extension content listed as unmapped; content outside the CEN code lists (e.g. ICD `XR03`, testsuite `04.05a` CII) raises `ParseError` | ⚠️ `ok` is `False` for 2 of the 6 official instances, `kosit.accepted` is `True`; see below |
+| XRechnung 3.0 CVD | UBL 2.1, CII D16B | ❌ | ❌ conforming documents (BR-CL-13) | ⚠️ `ok` is `False` for every CVD document, `kosit.accepted` is `True` for the official instances; see below |
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |

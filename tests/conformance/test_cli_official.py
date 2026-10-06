@@ -47,6 +47,7 @@ def test_validate_prints_the_kosit_verdict_and_exits_on_ok(capsys: pytest.Captur
     assert payload["ok"] is False
     assert payload["kosit"]["scenario"] == "EN16931 XRechnung Extension (UBL Invoice)"
     assert payload["kosit"]["accepted"] is True
+    assert payload["kosit"]["blocking"] == []
     override = {"rule_id": "BR-CO-16", "severity": "fatal", "effective_severity": "information"}
     assert override in payload["kosit"]["overrides"]
     assert cli.main(["validate", str(path)]) == 1

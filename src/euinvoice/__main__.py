@@ -35,7 +35,8 @@ JSON output (``--json``), one object on stdout:
 * ``validate``: ``{"ok": bool, "findings": [{"rule_id", "severity", "location", "message", "source"}], "kosit"}``,
   the fields of :class:`euinvoice.report.Finding` (``location`` may be ``null``). ``kosit`` is ``null``, or the
   KoSIT verdict of an XRechnung report (:class:`euinvoice.report.KositAssessment`): ``{"scenario", "accepted",
-  "overrides": [{"rule_id", "severity", "effective_severity"}]}``, ``severity`` being the official flag. The text
+  "overrides": [...], "blocking": [...]}``, each entry ``{"rule_id", "severity", "effective_severity"}`` with
+  ``severity`` the official flag; ``blocking`` lists the findings that make KoSIT reject. The text
   output prints it as one ``kosit:`` line before the verdict line. The exit code follows ``ok`` only.
 * ``info``: ``{"syntax", "root", "specification_identifier", "profile", "pdf", "invoice", "unmapped"}``.
   ``profile`` is a profile id or ``null``; ``pdf`` is ``null`` for XML, else ``{"container",
@@ -101,11 +102,17 @@ def _finding_line(finding: Finding) -> str:
 
 
 def _kosit_json(kosit: KositAssessment) -> dict[str, t.Any]:
-    overrides = [
-        {"rule_id": o.finding.rule_id, "severity": o.finding.severity, "effective_severity": o.severity}
-        for o in kosit.overrides
-    ]
-    return {"scenario": kosit.scenario, "accepted": kosit.accepted, "overrides": overrides}
+    def entry(finding: Finding, effective: Severity) -> dict[str, str]:
+        return {"rule_id": finding.rule_id, "severity": finding.severity, "effective_severity": effective}
+
+    # A blocking finding's effective severity is its override if one applies (matched by identity), else its own.
+    overridden = {id(o.finding): o.severity for o in kosit.overrides}
+    return {
+        "scenario": kosit.scenario,
+        "accepted": kosit.accepted,
+        "overrides": [entry(o.finding, o.severity) for o in kosit.overrides],
+        "blocking": [entry(f, overridden.get(id(f), f.severity)) for f in kosit.blocking],
+    }
 
 
 def _validate(args: argparse.Namespace) -> int:
@@ -137,9 +144,9 @@ def _validate(args: argparse.Namespace) -> int:
             sys.stdout.write(_finding_line(finding))
         if kosit is not None:
             outcome = "accepted" if kosit.accepted else "rejected"
-            sys.stdout.write(
-                f"kosit: {outcome} under scenario {kosit.scenario!r} ({len(kosit.overrides)} severity overrides)\n"
-            )
+            count = len(kosit.overrides)
+            overrides = f"{count} severity override{'' if count == 1 else 's'}"
+            sys.stdout.write(f"kosit: {outcome} under scenario {kosit.scenario!r} ({overrides})\n")
         verdict = "ok" if report.ok else "invalid"
         sys.stdout.write(f"{verdict}: {blocking} fatal/error, {len(report.findings) - blocking} warning/information\n")
     return 0 if report.ok else 1

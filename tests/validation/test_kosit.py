@@ -115,6 +115,13 @@ def test_custom_level_codes_are_whitespace_tokenized(loaded: tuple[kosit.Scenari
     assert dict(loaded[1].levels) == {}
 
 
+def test_levels_are_read_only(loaded: tuple[kosit.Scenario, ...]) -> None:
+    # Parsed scenarios are cached and shared between validate() calls.
+    levels = t.cast(dict[str, Severity], loaded[0].levels)
+    with pytest.raises(TypeError):
+        levels["BR-02"] = Severity.INFORMATION
+
+
 @pytest.mark.parametrize(
     "data",
     [
@@ -193,7 +200,7 @@ def test_blocking_xsd_finding_rejects(loaded: tuple[kosit.Scenario, ...]) -> Non
     assert kosit.assess(loaded[0], (xsd_warning,)).accepted
 
 
-# --- assessment: when validate() sets report.kosit --------------------------------------------------------------
+# --- verdict: when validate() sets report.kosit -----------------------------------------------------------------
 
 XR_UBL_RULES = (schematron.CEN_UBL, schematron.XRECHNUNG_UBL)
 
@@ -207,7 +214,7 @@ def pinned(monkeypatch: pytest.MonkeyPatch, loaded: tuple[kosit.Scenario, ...]) 
 @pytest.mark.usefixtures("pinned")
 def test_xrechnung_profiles_get_the_matching_scenario(profile: profiles.Profile) -> None:
     fatal = finding("BR-CL-23", Severity.FATAL)
-    assessment = kosit.assessment(_xml.parse(ubl(A_ID)), profile, XR_UBL_RULES, (fatal,))
+    assessment = kosit.verdict(_xml.parse(ubl(A_ID)), profile, XR_UBL_RULES, (fatal,))
     assert assessment == KositAssessment("A (UBL Invoice)", (SeverityOverride(fatal, Severity.WARNING),))
 
 
@@ -222,18 +229,18 @@ def test_other_profiles_get_none_without_reading_the_configuration(
 
     monkeypatch.setattr(kosit, "scenarios", cold)
     rule_sets = tuple(schematron.CEN_UBL if n == "cen" else schematron.XRECHNUNG_UBL for n in profile.rule_sets)
-    assert kosit.assessment(_xml.parse(ubl(A_ID)), profile, rule_sets, ()) is None
+    assert kosit.verdict(_xml.parse(ubl(A_ID)), profile, rule_sets, ()) is None
 
 
 @pytest.mark.usefixtures("pinned")
 def test_scenario_that_runs_other_rule_sets_gives_none() -> None:
     # Explicit XRECHNUNG on a document KoSIT routes to B (CEN only): its verdict is not about the rules that ran.
-    assert kosit.assessment(_xml.parse(ubl("urn:example.com:other")), profiles.XRECHNUNG, XR_UBL_RULES, ()) is None
+    assert kosit.verdict(_xml.parse(ubl("urn:example.com:other")), profiles.XRECHNUNG, XR_UBL_RULES, ()) is None
 
 
 @pytest.mark.usefixtures("pinned")
 def test_no_matching_scenario_gives_none() -> None:
-    assert kosit.assessment(_xml.parse(ORDER), profiles.XRECHNUNG, XR_UBL_RULES, ()) is None
+    assert kosit.verdict(_xml.parse(ORDER), profiles.XRECHNUNG, XR_UBL_RULES, ()) is None
 
 
 # --- scenarios(): the pinned file, cached ------------------------------------------------------------------------

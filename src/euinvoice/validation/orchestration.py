@@ -88,7 +88,7 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
 
     For the XRECHNUNG, XRECHNUNG_EXTENSION and XRECHNUNG_CVD profiles, ``kosit`` holds the KoSIT validator's
     verdict when a scenario of the pinned KoSIT configuration matches the document and runs the same rule sets
-    (:func:`euinvoice.validation.kosit.assessment`); otherwise it is ``None``. It never changes ``findings``
+    (:func:`euinvoice.validation.kosit.verdict`); otherwise it is ``None``. It never changes ``findings``
     or ``ok``.
 
     Returns:
@@ -125,7 +125,7 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
     if ValidationReport(schema_findings).ok:
         for rule_set in rule_sets:
             findings.extend(schematron.run(rule_set, root))
-    return ValidationReport(tuple(findings), kosit=kosit.assessment(root, profile, rule_sets, findings))
+    return ValidationReport(tuple(findings), kosit=kosit.verdict(root, profile, rule_sets, findings))
 
 
 def _facturx_not_pinned(clause: str) -> ArtifactsNotAvailableError:

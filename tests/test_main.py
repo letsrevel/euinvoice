@@ -161,7 +161,7 @@ _DOWNGRADED = Finding("BR-CL-23", Severity.FATAL, "/Invoice/cac:InvoiceLine[1]",
 _KOSIT = KositAssessment(
     "EN16931 XRechnung (UBL Invoice)",
     overrides=(SeverityOverride(_DOWNGRADED, Severity.WARNING), SeverityOverride(_WARNING, Severity.ERROR)),
-    blocking=(_WARNING,),
+    blocking=(_WARNING, _ERROR),
 )
 
 
@@ -169,7 +169,7 @@ def test_validate_json_carries_the_kosit_verdict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # The exit code stays tied to ok (here not ok), whatever KoSIT says.
-    _fake_validate(monkeypatch, ValidationReport((_DOWNGRADED, _WARNING), kosit=_KOSIT))
+    _fake_validate(monkeypatch, ValidationReport((_DOWNGRADED, _WARNING, _ERROR), kosit=_KOSIT))
     assert cli.main(["validate", "--json", _write(tmp_path, "a.xml", b"<x/>")]) == 1
     assert json.loads(capsys.readouterr().out)["kosit"] == {
         "scenario": "EN16931 XRechnung (UBL Invoice)",
@@ -177,6 +177,11 @@ def test_validate_json_carries_the_kosit_verdict(
         "overrides": [
             {"rule_id": "BR-CL-23", "severity": "fatal", "effective_severity": "warning"},
             {"rule_id": "UBL-CR-001", "severity": "warning", "effective_severity": "error"},
+        ],
+        # Why KoSIT rejects: an upgraded warning (its override) and a fatal finding no customLevel touches.
+        "blocking": [
+            {"rule_id": "UBL-CR-001", "severity": "warning", "effective_severity": "error"},
+            {"rule_id": "BR-02", "severity": "fatal", "effective_severity": "fatal"},
         ],
     }
 
@@ -189,8 +194,12 @@ def test_validate_json_carries_the_kosit_verdict(
             KositAssessment("EN16931 XRechnung (CII)"),
             "kosit: accepted under scenario 'EN16931 XRechnung (CII)' (0 severity overrides)\n",
         ),
+        (
+            KositAssessment("EN16931 XRechnung (CII)", (SeverityOverride(_DOWNGRADED, Severity.WARNING),)),
+            "kosit: accepted under scenario 'EN16931 XRechnung (CII)' (1 severity override)\n",
+        ),
     ],
-    ids=["rejected", "accepted"],
+    ids=["rejected", "accepted", "one-override"],
 )
 def test_validate_text_adds_one_kosit_line_before_the_verdict(
     kosit: KositAssessment,

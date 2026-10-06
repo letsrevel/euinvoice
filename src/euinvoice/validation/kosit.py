@@ -8,8 +8,15 @@ id is copied into euinvoice.
 **Scenario.** ``scenarios.xml`` lists ``<scenario>`` elements, each with a ``<match>`` XPath and its
 ``<namespace prefix="...">`` declarations. :func:`select` evaluates them in document order on Saxon (the
 matches use XPath 2 functions such as ``exists``) and takes the first that is true. In the pinned file each
-match compares BT-24 with a different value, or tests a different root, so at most one scenario matches a
-schema-valid document and "first match" cannot differ from "the only match".
+match compares BT-24 with a different value, or tests a different root. For UBL that makes the matches exclusive
+(``cbc:CustomizationID`` has ``maxOccurs="1"``, ``UBL-Invoice-2.1.xsd`` / ``UBL-CreditNote-2.1.xsd`` line 30). For
+CII it does not: ``ram:GuidelineSpecifiedDocumentContextParameter`` is ``maxOccurs="unbounded"``
+(``CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd`` line 224), so a schema-valid
+document with two context parameters can match two scenarios. Under an explicit XRechnung profile (auto-detection
+falls back to EN 16931 core for two BT-24s, with no verdict) such a document makes the CEN CII stylesheet fail at
+run time (``SCHEMATRON-RUNTIME``, fatal; CII-SR-009, fatal, would apply otherwise), and no scenario overrides either.
+KoSIT therefore rejects it whether it takes the first match or falls back (its multi-match rule is in the unpinned
+Java source), so ``accepted`` is ``False`` either way. Only ``scenario`` can differ from KoSIT's report.
 
 **Levels.** The overrides are the ``<customLevel level="...">`` children of the matched scenario's
 ``<createReport>``. Their text is a whitespace-separated list of codes: ``rep:custom-level`` in
@@ -27,11 +34,17 @@ message keeps the level the report gave it: an SVRL ``@flag`` of ``fatal`` or ``
 is ``fatal`` or ``error``, which is what :func:`assess` computes. Every assert in the pinned rule sets carries
 a ``flag`` (a conformance test checks it), so KoSIT's ``@role`` fallbacks never apply.
 
-**When.** :func:`assessment` returns ``None`` unless the profile is XRECHNUNG, XRECHNUNG_EXTENSION or
+**When.** :func:`verdict` returns ``None`` unless the profile is XRECHNUNG, XRECHNUNG_EXTENSION or
 XRECHNUNG_CVD, a scenario matches, and that scenario's ``validateWithSchematron`` steps are the rule sets
 ``validate()`` ran, compared by stylesheet file stem (``EN16931-UBL-validation``, ``XRechnung-CII-validation``,
 ...). The pinned configuration names the same CEN 1.3.16 and XRechnung Schematron 2.6.0 releases as the
-``cen-*`` and ``xrechnung-schematron`` pins (its ``scenarios.xml`` description). With an explicit profile,
+``cen-*`` and ``xrechnung-schematron`` pins (its ``scenarios.xml`` description). ponytail: the compiled CEN CII
+stylesheets still differ in one assert. Upstream ``EN16931-CII-syntax.sch`` defines the param ``CII-SR-282`` twice
+(lines 427 and 429); our ``cen-cii`` XSLT tests ``not(ram:SellerTaxRepresentativeTradeParty/ram:ID)`` and KoSIT's
+bundled ``resources/cii/16b/xsl/EN16931-CII-validation.xsl`` tests ``not(ram:BuyerTaxRepresentativeTradeParty)``.
+CII-SR-282 is a ``warning`` that no scenario overrides, so raw warnings can differ from KoSIT's report, but the
+verdict cannot. Upgrade path: compare the assert sets of both builds on
+each pin bump. With an explicit profile,
 KoSIT's choice of scenario still follows the document: XRECHNUNG on an Extension document gets the Extension
 scenario (same rule sets), while XRECHNUNG on a plain EN 16931 document matches a CEN-only scenario and gets
 ``None``, because that verdict would not be about the XRechnung rules that ran.
@@ -39,8 +52,9 @@ scenario (same rule sets), while XRECHNUNG on a plain EN 16931 document matches 
 
 import dataclasses
 import functools
+import types
 import typing as t
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 
 from lxml import etree
@@ -50,7 +64,7 @@ from euinvoice.errors import ArtifactIntegrityError
 from euinvoice.report import Finding, KositAssessment, Severity, SeverityOverride
 from euinvoice.validation import artifacts, schematron
 
-__all__ = ["SOURCE", "Scenario", "assess", "assessment", "load", "scenarios", "select"]
+__all__ = ["SOURCE", "Scenario", "assess", "load", "scenarios", "select", "verdict"]
 
 SOURCE: t.Final[artifacts.SourceName] = "xrechnung-validator-configuration"
 """The manifest source that ships ``scenarios.xml``."""
@@ -72,14 +86,15 @@ class Scenario:
         match: Its ``<match>`` XPath.
         namespaces: Its ``<namespace>`` declarations as ``(prefix, uri)``, in document order.
         schematron: The file stems of its ``validateWithSchematron`` stylesheets, in order.
-        levels: Each code of its ``<customLevel>`` elements, mapped to that element's level.
+        levels: Each code of its ``<customLevel>`` elements, mapped to that element's level (read-only: parsed
+            scenarios are cached and shared).
     """
 
     name: str
     match: str
     namespaces: tuple[tuple[str, str], ...]
     schematron: tuple[str, ...]
-    levels: Mapping[str, Severity]
+    levels: t.Mapping[str, Severity]
 
 
 def scenarios(
@@ -153,7 +168,7 @@ def _scenario(element: etree._Element) -> Scenario:
             PurePosixPath(location.text or "").stem
             for location in element.iterfind(f"{_S}validateWithSchematron/{_S}resource/{_S}location")
         ),
-        levels=levels,
+        levels=types.MappingProxyType(levels),
     )
 
 
@@ -208,7 +223,7 @@ def assess(scenario: Scenario, findings: Sequence[Finding]) -> KositAssessment:
     )
 
 
-def assessment(
+def verdict(
     document: etree._Element,
     profile: profiles.Profile,
     rule_sets: Sequence[schematron.RuleSet],

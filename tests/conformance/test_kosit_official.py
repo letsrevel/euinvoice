@@ -158,6 +158,30 @@ def test_schema_invalid_xrechnung_document_is_rejected() -> None:
     assert not report.kosit.accepted
 
 
+def test_cii_document_matching_two_scenarios_is_rejected() -> None:
+    # ram:GuidelineSpecifiedDocumentContextParameter is maxOccurs="unbounded" (CII D16B RABIE XSD line 224), so a
+    # second parameter with the core BT-24 is schema-valid and matches both "EN16931 XRechnung (CII)" and
+    # "EN16931 (CII)". The CEN CII stylesheet cannot evaluate BR-01 on two IDs (SCHEMATRON-RUNTIME, fatal) and no
+    # scenario overrides it, so KoSIT rejects whichever scenario it takes.
+    root = _xml.parse(synthetic(Syntax.CII))
+    parameter = root.find(f"{{{_xml.CII_RSM}}}ExchangedDocumentContext/{RAM}GuidelineSpecifiedDocumentContextParameter")
+    assert parameter is not None
+    core = copy.deepcopy(parameter)
+    core_id = core.find(f"{RAM}ID")
+    assert core_id is not None
+    core_id.text = profiles.EN16931.specification_identifier
+    parameter.addnext(core)
+
+    # Explicit profile: with two BT-24s auto-detection falls back to EN 16931 core, which gets no verdict.
+    report = validate(etree.tostring(root), profiles.XRECHNUNG)
+
+    assert "XSD" not in {f.rule_id for f in report.findings}
+    assert report.kosit is not None
+    assert report.kosit.scenario == "EN16931 XRechnung (CII)"  # the first match
+    assert "SCHEMATRON-RUNTIME" in {f.rule_id for f in report.kosit.blocking}
+    assert not report.kosit.accepted
+
+
 def test_explicit_xrechnung_profile_follows_the_scenario_kosit_selects() -> None:
     # An Extension instance under the CIUS profile: KoSIT matches the Extension scenario, which runs the same rule
     # sets, so its levels apply (BR-CO-16 fatal -> information).

@@ -111,7 +111,8 @@ Recommendation 20, the second line's `C62` replaced by `QQQ`:
 BR-CL-23 alone would not stop KoSIT, but the missing XRechnung terms do. `kosit` is `None` for every other
 profile, when no KoSIT scenario matches, and when the matching scenario runs other rule sets than the profile (an
 explicit `profiles.XRECHNUNG` on an EN 16931 document, as above). The CLI prints the verdict as one `kosit:` line,
-and as a `kosit` key with `--json`. Its exit code follows `report.ok`.
+and as a `kosit` key with `--json` (`scenario`, `accepted`, `overrides` and `blocking`, each entry with the rule id,
+the official severity and the effective severity). Its exit code follows `report.ok`.
 
 If the document's BT-24 names no registered profile, `validate()` falls back to EN 16931 core and the report
 starts with an `information` finding `EUINVOICE-PROFILE-FALLBACK` that says only the core rules ran. The
