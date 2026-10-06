@@ -31,6 +31,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |
+| ZUGFeRD 2.0 MINIMUM, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ BASIC, EXTENDED; ❌ MINIMUM | ❌ |
 
 - **Parse** means read into the EN 16931 model. Readers never drop input silently: every element or attribute
   without a business term is listed in `parse_detailed(...).unmapped`.
@@ -49,9 +50,12 @@ is a small, typed, MIT-licensed Python library with three principles:
   rules only, and raises `ArtifactsNotAvailableError` for MINIMUM, BASIC WL, BASIC and EXTENDED. MINIMUM and
   BASIC WL carry no invoice lines, so they cannot become an `Invoice`: `parse()` raises `ParseError`
   ([#69](https://github.com/letsrevel/euinvoice/issues/69)). The library does not check PDF/A-3 conformance
-  (the test suite runs veraPDF on `embed()` output). ZUGFeRD 2.0 BT-24s (`urn:zugferd.de:2p0:*`) and the FNFE
-  BASIC colon variant are not registered, so `validate()` falls back to EN 16931 core with
-  `EUINVOICE-PROFILE-FALLBACK` (information) instead of raising, and the CLI can exit 0 ([#98](https://github.com/letsrevel/euinvoice/issues/98)).
+  (the test suite runs veraPDF on `embed()` output). ZUGFeRD 2.0 PDFs are extract-only (not generated). Their
+  MINIMUM, BASIC and EXTENDED BT-24s (`urn:zugferd.de:2p0:*`) and the colon spellings of BASIC and EXTENDED
+  (`urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:*`) are not registered as profiles, but `validate()` raises
+  `ArtifactsNotAvailableError` for them as for the levels above (CLI exit 2;
+  [#98](https://github.com/letsrevel/euinvoice/issues/98)). A ZUGFeRD 2.0 EN 16931 invoice carries the core BT-24
+  and is validated as EN 16931 core.
   ZUGFeRD 1.0 PDFs are extract-only (`parse()` raises `UnsupportedDocumentError`).
 
 Planned later: ebInterface, more national CIUSes (RO, HR, FR, DK, …), FatturaPA, KSeF, Facturae, and
@@ -145,12 +149,10 @@ once the maintainer enables Pages for the repository and sets the repository var
 
 ## Known limitations
 
-Open questions waiting for a maintainer decision (`needs-human`), one open bug ([#98](https://github.com/letsrevel/euinvoice/issues/98)) and one parked enhancement:
+Open questions waiting for a maintainer decision (`needs-human`) and one parked enhancement:
 
 - [#42](https://github.com/letsrevel/euinvoice/issues/42): the Factur-X / ZUGFeRD XSD and Schematron have no
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
-- [#98](https://github.com/letsrevel/euinvoice/issues/98): ZUGFeRD 2.0 BT-24s and the FNFE BASIC colon variant are not registered, so `validate()` falls
-  back to EN 16931 core instead of raising.
 - [#69](https://github.com/letsrevel/euinvoice/issues/69): Factur-X MINIMUM and BASIC WL cannot be read into the
   model.
 - [#49](https://github.com/letsrevel/euinvoice/issues/49): KoSIT's XRechnung severity overrides are not applied,

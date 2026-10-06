@@ -105,7 +105,9 @@ generated, parsed and validated per profile is in the README table; the open que
   Schematron rule set of the profile in order, with the raw official severities. Without a profile it is picked
   by BT-24; an unregistered or missing BT-24 falls back to EN 16931 core with an `information` finding
   `EUINVOICE-PROFILE-FALLBACK`. Factur-X MINIMUM, BASIC WL, BASIC and EXTENDED documents raise
-  `ArtifactsNotAvailableError` (Factur-X 1.0 / ZUGFeRD 2.1+ BT-24s; see [#98](https://github.com/letsrevel/euinvoice/issues/98)) instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)); pass
+  `ArtifactsNotAvailableError` instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)), and so do auto-detected CII documents
+  with a ZUGFeRD 2.0 MINIMUM, BASIC or EXTENDED BT-24 or a colon-spelled BASIC / EXTENDED BT-24
+  (`profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS`, not registered as profiles, [#98](https://github.com/letsrevel/euinvoice/issues/98)); pass
   `profile=profiles.EN16931` to run the core rules. It takes XML (for a PDF, pass `facturx.extract(pdf).xml`),
   returns a `ValidationReport` and never raises on rule failures.
 - XSD validation (`euinvoice.validate.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B
@@ -150,7 +152,7 @@ generated, parsed and validated per profile is in the README table; the open que
   profile (default: the one registered for its BT-24), runs the profile's pre-flight and `calc.check`, and raises
   `PreflightError` (with the findings, the profile id and the syntax; picklable) on any `fatal` / `error`
   finding before writing UBL or CII. It refuses the Factur-X levels that are not generated. `euinvoice.parse()` /
-  `parse_detailed()` read UBL, CII and Factur-X / ZUGFeRD 2.x PDFs (for ZUGFeRD 2.0 BT-24s no Factur-X profile is registered, [#98](https://github.com/letsrevel/euinvoice/issues/98); ZUGFeRD 1.0 PDFs are
+  `parse_detailed()` read UBL, CII and Factur-X / ZUGFeRD 2.x PDFs (ZUGFeRD 2.0 is extract-only: no profile is registered for its BT-24s; ZUGFeRD 1.0 PDFs are
   extract-only: `parse()` raises `UnsupportedDocumentError`); `parse()` discards `unmapped`.
 - `euinvoice` re-exports `to_xml`, `parse`, `parse_detailed`, `validate`, `detect`, `Invoice`, `InvoiceDraft`,
   `ParseResult`, `Syntax`, `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx`; `import
@@ -190,10 +192,10 @@ generated, parsed and validated per profile is in the README table; the open que
 
 ### Known issues
 - Factur-X 1.0 / ZUGFeRD 2.1+: the Factur-X XSD and Schematron are not pinned ([#42](https://github.com/letsrevel/euinvoice/issues/42)). MINIMUM, BASIC WL, BASIC and EXTENDED
-  are not validated (`ArtifactsNotAvailableError`); EN 16931 and XRECHNUNG get the EN 16931 / XRechnung verdict.
-- ZUGFeRD 2.0 BT-24s (`urn:zugferd.de:2p0:*`) and the FNFE BASIC colon variant are not registered, so
-  `validate()` falls back to EN 16931 core with `EUINVOICE-PROFILE-FALLBACK` (information) instead of raising,
-  and the CLI can exit 0 ([#98](https://github.com/letsrevel/euinvoice/issues/98)).
+  are not validated (`ArtifactsNotAvailableError`), nor are ZUGFeRD 2.0 MINIMUM, BASIC and EXTENDED or the
+  colon-spelled BASIC / EXTENDED BT-24s ([#98](https://github.com/letsrevel/euinvoice/issues/98)); EN 16931 and XRECHNUNG get the EN 16931 / XRechnung verdict.
+  No ZUGFeRD 2.0 BASIC WL sample is in the pinned corpus, so its BT-24 is not recognised and still falls back to
+  EN 16931 core.
 - Factur-X MINIMUM and BASIC WL are detected and extracted but cannot be read into the model ([#69](https://github.com/letsrevel/euinvoice/issues/69)).
 - XRechnung: KoSIT's per-scenario severity overrides are not applied ([#49](https://github.com/letsrevel/euinvoice/issues/49)), so the verdict can differ from KoSIT's
   (e.g. 2 of the 6 official Extension instances get fatal findings KoSIT downgrades). No *conforming* CVD invoice
