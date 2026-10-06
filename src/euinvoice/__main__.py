@@ -55,13 +55,13 @@ from pathlib import Path
 
 from euinvoice import profiles
 from euinvoice._api import parse_detailed, to_xml
-from euinvoice.detect import detect, is_pdf
+from euinvoice.detection import detect, is_pdf
 from euinvoice.errors import ArtifactsNotAvailableError, EuInvoiceError, PreflightError
 from euinvoice.model.bt_index import path_of
 from euinvoice.model.invoice import Invoice
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.syntax import Syntax
-from euinvoice.validate import artifacts, validate
+from euinvoice.validation import artifacts, validate
 
 if t.TYPE_CHECKING:
     from euinvoice.facturx import Extracted

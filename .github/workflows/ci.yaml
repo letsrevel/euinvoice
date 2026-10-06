@@ -63,7 +63,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .artifacts
-          key: artifacts-${{ hashFiles('src/euinvoice/validate/manifest.toml') }}
+          key: artifacts-${{ hashFiles('src/euinvoice/validation/manifest.toml') }}
       - name: Fetch artifacts
         env:
           EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
@@ -93,4 +93,4 @@ jobs:
           uv venv /tmp/wheeltest
           uv pip install --python /tmp/wheeltest/bin/python dist/*.whl
           /tmp/wheeltest/bin/python -c "import euinvoice; print(euinvoice.__version__)"
-          /tmp/wheeltest/bin/python -c "import importlib.resources as r; f = r.files('euinvoice'); assert f.joinpath('py.typed').is_file(); assert f.joinpath('validate/manifest.toml').is_file()"
+          /tmp/wheeltest/bin/python -c "import importlib.resources as r; f = r.files('euinvoice'); assert f.joinpath('py.typed').is_file(); assert f.joinpath('validation/manifest.toml').is_file()"

@@ -3,7 +3,7 @@
 import pytest
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles import facturx

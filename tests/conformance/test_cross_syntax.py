@@ -31,12 +31,12 @@ from test_detect_corpora import EXCLUDED as NOT_INVOICES
 
 from _strategies import cii_normalized
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect_root
+from euinvoice.detection import detect_root
 from euinvoice.errors import ModelError
 from euinvoice.model import Invoice, InvoiceLine, PriceDetails
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.syntax import Syntax
-from euinvoice.validate import artifacts, validate
+from euinvoice.validation import artifacts, validate
 
 pytestmark = pytest.mark.conformance
 

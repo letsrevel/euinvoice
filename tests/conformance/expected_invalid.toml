@@ -3,7 +3,7 @@
 # The single source of truth for test_corpus_harness.py (and test_orchestration_official.py).
 # Every entry is asserted, never skipped: a sample that starts to pass, or fails differently, fails the harness.
 #
-#   source, file  the sample: a pinned source (validate/manifest.toml) and the path in its cache directory;
+#   source, file  the sample: a pinned source (validation/manifest.toml) and the path in its cache directory;
 #                 for a Factur-X PDF the path of the PDF (the sample is its embedded XML)
 #   outcome       "parse-error": read(X) raises a ParseError whose message names exactly `rules` (rule/BT/BG ids)
 #                 "reads": X reads, and validate(write(read(X))) has exactly `rules` as fatal/error rule ids

@@ -39,7 +39,7 @@ except ImportError as exc:
 from lxml import etree
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import detect
+from euinvoice.detection import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.facturx import xmp
 from euinvoice.facturx._pypdf import PYPDF_FAILURES, metadata_bytes

@@ -24,7 +24,7 @@ from euinvoice.errors import ModelError
 from euinvoice.model import Invoice
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax, cii, ubl
-from euinvoice.validate import schematron
+from euinvoice.validation import schematron
 
 pytestmark = pytest.mark.conformance
 

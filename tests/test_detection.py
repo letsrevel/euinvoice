@@ -1,11 +1,11 @@
-"""Tests for :func:`euinvoice.detect.detect` on small synthetic documents."""
+"""Tests for :func:`euinvoice.detection.detect` on small synthetic documents."""
 
 import dataclasses
 
 import pytest
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import Detection, detect, detect_root
+from euinvoice.detection import Detection, detect, detect_root
 from euinvoice.errors import ParseError, UnsupportedDocumentError
 from euinvoice.syntax import Syntax
 

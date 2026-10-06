@@ -12,7 +12,7 @@ python -m euinvoice artifacts fetch     # once; or: make artifacts in a checkout
 ```
 
 The artifacts are not bundled, because of their licences ([Artifact licences](reference/artifacts.md)). `fetch`
-downloads the pinned archives listed in `src/euinvoice/validate/manifest.toml`, checks each sha256, and
+downloads the pinned archives listed in `src/euinvoice/validation/manifest.toml`, checks each sha256, and
 extracts them into `$EUINVOICE_ARTIFACTS_DIR` (default `~/.cache/euinvoice`). Rule sets that upstream ships as
 `.sch` only (Peppol) are compiled to XSLT with SchXslt during the fetch.
 

@@ -12,7 +12,7 @@ from _invoices import minimal_invoice
 from _pdfa import pdf
 from euinvoice import __main__ as cli
 from euinvoice import facturx, profiles, to_xml, validate
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 pytestmark = pytest.mark.conformance
 

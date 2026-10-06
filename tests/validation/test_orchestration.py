@@ -13,7 +13,7 @@ from euinvoice.profiles import _base as profiles_base
 from euinvoice.profiles import facturx
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax import Syntax
-from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
+from euinvoice.validation import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
 
 CORE = "urn:cen.eu:en16931:2017"
 CIUS = "urn:cen.eu:en16931:2017#compliant#urn:example.com:cius"

@@ -19,7 +19,7 @@ import pypdf
 
 from euinvoice import facturx
 from euinvoice.errors import ArtifactsNotAvailableError
-from euinvoice.validate import artifacts
+from euinvoice.validation import artifacts
 
 XML_DIRECTORIES: t.Final[dict[artifacts.SourceName, str]] = {
     "cen-ubl": "examples",

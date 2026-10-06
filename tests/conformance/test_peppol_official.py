@@ -47,7 +47,7 @@ from euinvoice.model import (
 from euinvoice.profiles import peppol
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax, cii, ubl
-from euinvoice.validate import artifacts, orchestration, schematron, validate
+from euinvoice.validation import artifacts, orchestration, schematron, validate
 
 pytestmark = pytest.mark.conformance
 

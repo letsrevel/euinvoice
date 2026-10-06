@@ -4,6 +4,7 @@ import dataclasses
 import pickle  # ruff: ignore[suspicious-pickle-import] - round-trips our own exception
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - runs this interpreter on a fixed snippet
 import sys
+import types
 import typing as t
 
 import pytest
@@ -241,12 +242,28 @@ def test_every_name_in_all_resolves_and_star_imports_without_pypdf() -> None:
 
 
 def test_the_reexports_are_the_functions() -> None:
-    from euinvoice.detect import detect
-    from euinvoice.validate.orchestration import validate
+    from euinvoice.detection import detect
+    from euinvoice.validation.orchestration import validate
 
     assert euinvoice.validate is validate
     assert euinvoice.detect is detect
     assert euinvoice.facturx.extract is facturx.extract
+
+
+def test_the_functions_do_not_shadow_their_modules() -> None:
+    # #93: the modules are named ``detection`` / ``validation`` so the top-level functions hide nothing.
+    import euinvoice.detection as detection
+    import euinvoice.validation.artifacts as artifacts
+
+    assert isinstance(detection, types.ModuleType)
+    assert detection.Detection.__module__ == "euinvoice.detection"
+    assert artifacts.__name__ == "euinvoice.validation.artifacts"
+    assert euinvoice.validation.artifacts.source_dir is artifacts.source_dir
+    assert euinvoice.detection.is_pdf is detection.is_pdf
+    assert euinvoice.detect is detection.detect
+    assert euinvoice.validate is euinvoice.validation.validate
+    assert not isinstance(euinvoice.detect, types.ModuleType)
+    assert not isinstance(euinvoice.validate, types.ModuleType)
 
 
 def test_an_unknown_attribute_raises_attribute_error() -> None:

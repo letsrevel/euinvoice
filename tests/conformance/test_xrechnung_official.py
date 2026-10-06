@@ -17,7 +17,7 @@ from euinvoice.model import Invoice
 from euinvoice.profiles import xrechnung
 from euinvoice.report import Severity, ValidationReport
 from euinvoice.syntax import Syntax, cii, ubl
-from euinvoice.validate import EUINVOICE_SOURCE, validate
+from euinvoice.validation import EUINVOICE_SOURCE, validate
 
 pytestmark = pytest.mark.conformance
 

@@ -108,9 +108,9 @@ SAXON_METHODS = frozenset(
 PER_FILE_ALLOWED: dict[str, dict[str, int]] = {
     # Compiles the pinned rule set by path from a recipe-fingerprint-checked cache entry (xsl:include
     # and xsl:import need a base URI).
-    "validate/schematron.py": {"stylesheet_file": 1},
+    "validation/schematron.py": {"stylesheet_file": 1},
     # Compiles the pinned SchXslt pipeline by path (it xsl:includes its sibling stylesheets).
-    "validate/artifacts.py": {"stylesheet_file": 1},
+    "validation/artifacts.py": {"stylesheet_file": 1},
 }
 
 

@@ -165,9 +165,6 @@ Open questions waiting for a maintainer decision (`needs-human`) and one parked 
   false `SCHEMATRON-RUNTIME` fatal for such invoices.
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
-- [#93](https://github.com/letsrevel/euinvoice/issues/93): the top-level functions `detect` and `validate` shadow
-  the modules of the same name; import module members with `from euinvoice.detect import …` /
-  `from euinvoice.validate import …`. The module names may change before the release.
 - [#87](https://github.com/letsrevel/euinvoice/issues/87) (parked): the UBL writer refuses an invoice without
   BT-110 (no VAT, BT-112 = BT-109), which CII can express, instead of writing `0.00`.
 
