@@ -43,17 +43,28 @@ def _metadata(data: bytes) -> pypdf.generic.StreamObject:
     return t.cast(pypdf.generic.StreamObject, catalog["/Metadata"].get_object())
 
 
-@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(
-    mutations=st.lists(st.tuples(st.integers(min_value=0), st.integers(min_value=0, max_value=255)), max_size=8),
-    cut=st.one_of(st.none(), st.integers(min_value=0)),
+type _Edit = tuple[t.Literal["overwrite", "insert", "delete"], int, bytes]
+
+_EDITS: t.Final = st.tuples(
+    st.sampled_from(["overwrite", "insert", "delete"]), st.integers(min_value=0), st.binary(min_size=1, max_size=16)
 )
-def test_mutated_pdf_gives_bytes_or_pdf_error(mutations: list[tuple[int, int]], cut: int | None) -> None:
+"""One byte-run edit at a position: overwrite or insert the run there, or delete as many bytes as it is long."""
+
+
+@settings(max_examples=150, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(edits=st.lists(_EDITS, max_size=8), cut=st.one_of(st.none(), st.integers(min_value=0)))
+def test_mutated_pdf_gives_bytes_or_pdf_error(edits: list[_Edit], cut: int | None) -> None:
     data = bytearray(_source())
-    for position, value in mutations:
-        data[position % len(data)] = value
+    for kind, position, run in edits:
+        at = position % (len(data) + 1)
+        if kind == "overwrite":
+            data[at : at + len(run)] = run
+        elif kind == "insert":
+            data[at:at] = run
+        else:
+            del data[at : at + len(run)]
     if cut is not None:
-        del data[cut % len(data) :]
+        del data[cut % (len(data) + 1) :]
 
     try:
         out = facturx.embed(bytes(data), _xml_bytes(), profile=_PROFILE)
@@ -105,6 +116,16 @@ def test_trailer_without_size_is_a_pdf_error() -> None:
     with pytest.raises(PdfError, match="cannot read the PDF: KeyError") as excinfo:
         facturx.embed(source, _xml_bytes(), profile=_PROFILE)
     assert isinstance(excinfo.value.__cause__, KeyError)
+
+
+def test_our_own_bug_is_not_reported_as_a_broken_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(*args: object, **kwargs: object) -> None:
+        raise AttributeError("bug in our XMP code")
+
+    monkeypatch.setattr("euinvoice.facturx._embed.xmp.add_facturx", broken)
+
+    with pytest.raises(AttributeError, match="bug in our XMP code"):
+        facturx.embed(_source(), _xml_bytes(), profile=_PROFILE)
 
 
 def test_pypdf_failure_is_chained() -> None:

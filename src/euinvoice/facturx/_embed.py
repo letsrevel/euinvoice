@@ -98,10 +98,25 @@ def embed(
     elif relationship not in _RELATIONSHIPS:
         raise ValueError(f"unknown AFRelationship {relationship!r}; known: {', '.join(map(repr, _RELATIONSHIPS))}")
     xml = _cii(invoice, profile)
-    # One boundary for every pypdf operation on the untrusted PDF: whatever pypdf raises on a malformed file
-    # becomes a PdfError (our own PdfError and the XMP's ParseError mapping pass through unchanged).
+    # pypdf work on the untrusted PDF runs in two boundaries, _read and _write: whatever pypdf raises on a malformed
+    # file becomes a PdfError there. Our own XMP code runs between them, unwrapped, so a bug of ours is not
+    # reported as a broken PDF.
     try:
-        return _embed(pdf, xml, level=level, filename=filename, relationship=relationship)
+        reader, metadata, attachments = _read(pdf)
+    except _PYPDF_FAILURES as exc:
+        raise PdfError(f"cannot read the PDF: {type(exc).__name__}: {exc}") from exc
+    packet = _packet(metadata)
+    if filename in attachments:
+        raise PdfError(f"the PDF already has an attachment named {filename!r}")
+    rdf = next(packet.iter(f"{{{_xml.RDF}}}RDF"), None)
+    if rdf is None:
+        raise PdfError("the XMP metadata has no rdf:RDF element")
+    # fx:Version: "1.0", or the embedded XRechnung's version for XRECHNUNG (inferred "3.0", see the docstring; #42).
+    xmp.add_facturx(rdf, filename=filename, version="3.0" if level == _XRECHNUNG else "1.0", level=level)
+    # The packet's processing instructions (<?xpacket?>) are siblings of the root, so serialize the tree.
+    packet_bytes = etree.tostring(packet.getroottree(), encoding="UTF-8")
+    try:
+        return _write(reader, xml, filename=filename, relationship=relationship, metadata=packet_bytes)
     except _PYPDF_FAILURES as exc:
         raise PdfError(f"cannot read the PDF: {type(exc).__name__}: {exc}") from exc
 
@@ -110,7 +125,8 @@ _PYPDF_FAILURES: t.Final = (PyPdfError, ValueError, KeyError, IndexError, TypeEr
 """What pypdf raises on malformed input besides its own ``PyPdfError`` hierarchy (found by byte-mutation fuzzing)."""
 
 
-def _embed(pdf: bytes, xml: bytes, *, level: str, filename: str, relationship: Relationship) -> bytes:
+def _read(pdf: bytes) -> tuple[pypdf.PdfReader, bytes, frozenset[str]]:
+    """Pypdf phase 1: open and check the PDF; return the reader, the raw XMP packet and the attachment names."""
     reader = pypdf.PdfReader(io.BytesIO(pdf))
     if reader.is_encrypted:
         raise PdfError("the PDF is encrypted, which PDF/A forbids")
@@ -118,21 +134,22 @@ def _embed(pdf: bytes, xml: bytes, *, level: str, filename: str, relationship: R
     identifier = reader.trailer.get("/ID")
     if identifier is not None and len(t.cast(ArrayObject, identifier.get_object())) != 2:
         raise PdfError("the trailer /ID must hold two file identifiers (ISO 32000-1 §14.4, PDF/A 6.1.3)")
-    packet = _packet(reader)
-    if filename in reader.attachments:
-        raise PdfError(f"the PDF already has an attachment named {filename!r}")
-    rdf = next(packet.iter(f"{{{_xml.RDF}}}RDF"), None)
-    if rdf is None:
-        raise PdfError("the XMP metadata has no rdf:RDF element")
-    # fx:Version: "1.0", or the embedded XRechnung's version for XRECHNUNG (inferred "3.0", see the docstring; #42).
-    xmp.add_facturx(rdf, filename=filename, version="3.0" if level == _XRECHNUNG else "1.0", level=level)
+    metadata = reader.root_object.get("/Metadata")
+    if metadata is None:
+        raise PdfError("the PDF has no XMP metadata, so it is not PDF/A-3 (plan §5)")
+    stream = metadata.get_object()
+    if not isinstance(stream, pypdf.generic.StreamObject):
+        raise PdfError("the catalog /Metadata is not a stream")
+    return reader, stream.get_data(), frozenset(reader.attachments)
 
+
+def _write(reader: pypdf.PdfReader, xml: bytes, *, filename: str, relationship: Relationship, metadata: bytes) -> bytes:
+    """Pypdf phase 2: clone the PDF, attach the XML, replace the XMP and serialize."""
     writer = pypdf.PdfWriter(clone_from=reader)
     _attach(writer, filename, xml, relationship)
-    # A new, unfiltered metadata stream: pypdf can only rewrite a FlateDecode or unfiltered one in place. The
-    # packet's processing instructions (<?xpacket?>) are siblings of the root, so serialize the tree.
+    # A new, unfiltered metadata stream: pypdf can only rewrite a FlateDecode or unfiltered one in place.
     del writer.root_object["/Metadata"]
-    writer.xmp_metadata = etree.tostring(packet.getroottree(), encoding="UTF-8")
+    writer.xmp_metadata = metadata
     stream = t.cast(pypdf.generic.StreamObject, writer.root_object["/Metadata"].get_object())
     stream[NameObject("/Type")] = NameObject("/Metadata")
     stream[NameObject("/Subtype")] = NameObject("/XML")
@@ -190,16 +207,10 @@ def _reject_signed(catalog: pypdf.generic.DictionaryObject) -> None:
         raise PdfError("the PDF is signed; embed before signing")
 
 
-def _packet(reader: pypdf.PdfReader) -> etree._Element:
+def _packet(metadata: bytes) -> etree._Element:
     """The parsed XMP packet of a PDF/A-3 document; raises :class:`PdfError` for anything else."""
-    metadata = reader.root_object.get("/Metadata")
-    if metadata is None:
-        raise PdfError("the PDF has no XMP metadata, so it is not PDF/A-3 (plan §5)")
-    stream = metadata.get_object()
-    if not isinstance(stream, pypdf.generic.StreamObject):
-        raise PdfError("the catalog /Metadata is not a stream")
     try:
-        packet = _xml.parse(stream.get_data())
+        packet = _xml.parse(metadata)
     except ParseError as exc:
         raise PdfError(f"the XMP metadata is not well-formed XML: {exc}") from exc
     if (parts := xmp.pdfa_parts(packet)) != ["3"]:
