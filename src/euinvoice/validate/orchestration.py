@@ -37,6 +37,7 @@ import typing as t
 from lxml import etree
 
 from euinvoice import _xml, profiles
+from euinvoice.detect import Detection, detect_root
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.validate import schematron, xsd
 from euinvoice.validate.report import Finding, Severity, ValidationReport
@@ -47,14 +48,6 @@ PROFILE_FALLBACK_RULE_ID: t.Final = "EUINVOICE-PROFILE-FALLBACK"
 """Rule id of the ``information`` finding added when an auto-detected profile falls back to EN 16931 core."""
 EUINVOICE_SOURCE: t.Final = "euinvoice"
 """``source`` of findings euinvoice itself adds (not produced by an official rule set)."""
-
-# Root qualified name → syntax. Root names per the UBL 2.1 maindoc XSDs (UBL-Invoice-2.1.xsd,
-# UBL-CreditNote-2.1.xsd) and CII D16B CrossIndustryInvoice_100pD16B.xsd.
-_SYNTAXES: t.Final[t.Mapping[str, str]] = {
-    f"{{{_xml.UBL_INVOICE}}}Invoice": "ubl",
-    f"{{{_xml.UBL_CREDIT_NOTE}}}CreditNote": "ubl",
-    f"{{{_xml.CII_RSM}}}CrossIndustryInvoice": "cii",
-}
 
 # (Profile.rule_sets name, syntax) → compiled rule set. Lives here, not in profiles: profiles must not
 # import euinvoice.validate (dependency direction, plan §4).
@@ -67,16 +60,6 @@ _RULE_SETS: t.Final[t.Mapping[tuple[str, str], schematron.RuleSet]] = {
     ("xrechnung", "cii"): schematron.XRECHNUNG_CII,
 }
 
-# BT-24 locations, relative to the root: the BR-01 params of the CEN 1.3.16 EN16931-UBL-model.sch
-# (``cbc:CustomizationID``) and EN16931-CII-model.sch.
-_BT24: t.Final[t.Mapping[str, str]] = {
-    "ubl": f"{{{_xml.UBL_CBC}}}CustomizationID",
-    "cii": (
-        f"{{{_xml.CII_RSM}}}ExchangedDocumentContext/{{{_xml.CII_RAM}}}GuidelineSpecifiedDocumentContextParameter"
-        f"/{{{_xml.CII_RAM}}}ID"
-    ),
-}
-
 
 def validate(data: bytes, profile: profiles.Profile | None = None) -> ValidationReport:
     """Validate an e-invoice against the official XSD and the Schematron rule sets of its profile.
@@ -84,12 +67,13 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
     Rule failures are findings, never exceptions (D9). Nothing is downloaded (D7): the artifacts must have
     been fetched with ``python -m euinvoice artifacts fetch``.
 
-    Profile resolution when ``profile`` is ``None``: the document's BT-24 is looked up exactly with
-    :func:`euinvoice.profiles.get`. If there is no single non-empty BT-24, or no registered profile
-    declares it (e.g. a CIUS whose profile is not implemented yet), the document is validated against
-    :data:`euinvoice.profiles.EN16931` (XSD and CEN rules) and the report starts with an ``information``
-    finding :data:`PROFILE_FALLBACK_RULE_ID` saying that only the core rules ran. The same fallback applies
-    when the BT-24's profile does not support the document's syntax. The official steps report the BT-24
+    Profile resolution when ``profile`` is ``None``: :func:`euinvoice.detect.detect_root` reads BT-24
+    (XPath ``normalize-space``) and looks it up exactly with :func:`euinvoice.profiles.get`. If there is
+    no single non-empty BT-24, or no registered profile declares it (e.g. a CIUS whose profile is not
+    implemented yet), the document is validated against :data:`euinvoice.profiles.EN16931` (XSD and CEN
+    rules) and the report starts with an ``information`` finding :data:`PROFILE_FALLBACK_RULE_ID` saying
+    that only the core rules ran. The same fallback applies when the BT-24's profile does not support the
+    document's syntax. The official steps report the BT-24
     problem itself: a missing or blank BT-24 fails BR-01 (and, in CII without the context parameter,
     CII-SR-009 and CII-SR-010); a repeated UBL ``cbc:CustomizationID`` or CII ``ram:ID`` fails the XSD
     (each allows at most one); a repeated CII ``ram:GuidelineSpecifiedDocumentContextParameter`` makes the
@@ -115,10 +99,11 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
             command), or ``saxonche`` is not installed.
     """
     root = _xml.parse(data)
-    syntax = _syntax(root)
+    detection = detect_root(root)
+    syntax = detection.syntax
     findings: list[Finding] = []
     if profile is None:
-        profile, note = _resolve(root, syntax)
+        profile, note = _resolve(detection)
         findings.extend(note)
     elif syntax not in profile.syntaxes:
         raise UnsupportedDocumentError(
@@ -143,40 +128,17 @@ def _rule_findings(rule_set: schematron.RuleSet, root: etree._Element) -> tuple[
     return schematron.run(rule_set, root)
 
 
-def _syntax(root: etree._Element) -> str:
-    """The syntax of a document by its root element.
-
-    Raises:
-        UnsupportedDocumentError: The root is neither a UBL 2.1 Invoice / CreditNote nor a CII D16B
-            CrossIndustryInvoice.
-    """
-    syntax = _SYNTAXES.get(root.tag)
-    if syntax is None:
-        raise UnsupportedDocumentError(
-            f"unsupported root element {root.tag!r}; expected a UBL 2.1 Invoice or CreditNote, or a CII D16B "
-            "CrossIndustryInvoice"
-        )
-    return syntax
-
-
-# ponytail: minimal BT-24 sniffing duplicated from the in-flight ``euinvoice.detect`` (#26); switch to
-# ``detect.detect_root`` once it lands.
-def _resolve(root: etree._Element, syntax: str) -> tuple[profiles.Profile, tuple[Finding, ...]]:
-    """The profile named by the document's BT-24, or EN 16931 core plus an ``information`` note."""
-    values = root.findall(_BT24[syntax])
-    # XPath normalize-space() strips only #x20, #x9, #xD, #xA (str.split() would also strip e.g. U+00A0).
-    bt24 = str(values[0].xpath("normalize-space(.)")) if len(values) == 1 else ""
-    if not bt24:
+def _resolve(detection: Detection) -> tuple[profiles.Profile, tuple[Finding, ...]]:
+    """The detected profile, or EN 16931 core plus an ``information`` note."""
+    bt24, profile, syntax = detection.specification_identifier, detection.profile, detection.syntax
+    if bt24 is None:
         reason = "the document has no single non-empty specification identifier (BT-24)"
+    elif profile is None:
+        reason = f"specification identifier (BT-24) {bt24!r} is not a registered profile"
+    elif syntax not in profile.syntaxes:
+        reason = f"profile {profile.id!r} of BT-24 {bt24!r} does not support {syntax.upper()} documents"
     else:
-        try:
-            profile = profiles.get(bt24)
-        except UnsupportedDocumentError:
-            reason = f"specification identifier (BT-24) {bt24!r} is not a registered profile"
-        else:
-            if syntax in profile.syntaxes:
-                return profile, ()
-            reason = f"profile {profile.id!r} of BT-24 {bt24!r} does not support {syntax.upper()} documents"
+        return profile, ()
     note = Finding(
         rule_id=PROFILE_FALLBACK_RULE_ID,
         severity=Severity.INFORMATION,
