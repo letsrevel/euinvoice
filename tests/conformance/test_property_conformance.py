@@ -1,9 +1,11 @@
 """Property: invoices built through ``calc.complete`` pass the official rules of their profile (issue #31, plan §7).
 
-Each invoice drawn by :func:`_property_drafts.invoices` for a profile is written in UBL and in CII and
-validated with :func:`euinvoice.validate.validate` against the pinned XSD and the profile's Schematron rule
-sets (EN 16931: CEN; Peppol BIS: CEN, Peppol; XRechnung: CEN, XRechnung): no ``fatal`` or ``error`` finding is
-allowed (``ValidationReport.ok``), and neither from the profile's pre-flight checks. The round trip half of the
+Each invoice drawn by :func:`_property_drafts.invoices` for a profile is prepared with
+:meth:`~euinvoice.profiles.Profile.prepare` (BT-24, BT-23, BT-119 = 0 on O breakdowns where required), written
+in UBL and in CII and validated with :func:`euinvoice.validate.validate` against the pinned XSD and the
+profile's Schematron rule sets (EN 16931: CEN; Peppol BIS: CEN, Peppol; XRechnung: CEN, XRechnung): no
+``fatal`` or ``error`` finding is allowed (``ValidationReport.ok``), and neither from the profile's pre-flight
+checks. The round trip half of the
 property runs without artifacts in ``tests/syntax/test_round_trip_properties.py``.
 
 Hypothesis settings: :data:`MAX_EXAMPLES` examples per (profile, syntax), no deadline (the profiles in
@@ -41,7 +43,7 @@ BLOCKING: t.Final = (Severity.FATAL, Severity.ERROR)
 @settings(max_examples=MAX_EXAMPLES, derandomize=True)
 @given(data=st.data())
 def test_invoices_validate(target: Target, syntax: Syntax, data: st.DataObject) -> None:
-    invoice: Invoice = data.draw(invoices(target, syntax))
+    invoice: Invoice = target.profile.prepare(data.draw(invoices(target)))
     report = validate(WRITERS[syntax](invoice), target.profile)
     assert [f for f in report.findings if f.severity in BLOCKING] == []
     assert report.ok
