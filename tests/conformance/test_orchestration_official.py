@@ -10,6 +10,7 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.report import Severity
+from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, artifacts, schematron, validate, xsd
 
 CII_XSD = "xsd:xrechnung-validator-configuration"
@@ -22,7 +23,7 @@ PEPPOL = profiles.PEPPOL
 # passed explicitly.
 XRECHNUNG = profiles.Profile(
     id="test-xrechnung", title="XRechnung (test)", specification_identifier="urn:example.com:xrechnung",
-    syntaxes=frozenset({"ubl", "cii"}), rule_sets=("cen", "xrechnung"),
+    syntaxes=frozenset(Syntax), rule_sets=("cen", "xrechnung"),
 )  # fmt: skip
 
 EXAMPLE1 = "examples/ubl-tc434-example1.xml"

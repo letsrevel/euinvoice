@@ -10,6 +10,7 @@ from euinvoice import profiles
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice, ProcessControl
 from euinvoice.profiles import EN16931, Profile, registry
+from euinvoice.syntax import Syntax
 
 MakeInvoice = Callable[..., Invoice]
 
@@ -98,7 +99,7 @@ class TestEn16931:
         assert EN16931.id == "en16931"
         assert EN16931.specification_identifier == "urn:cen.eu:en16931:2017"
         assert EN16931.business_process_type is None
-        assert EN16931.syntaxes == frozenset({"ubl", "cii"})
+        assert EN16931.syntaxes == frozenset(Syntax)
 
     def test_runs_the_cen_rules_only(self) -> None:
         assert EN16931.rule_sets == ("cen",)

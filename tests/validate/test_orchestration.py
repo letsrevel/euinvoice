@@ -11,6 +11,7 @@ from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.profiles import _base as profiles_base
 from euinvoice.report import Finding, Severity
+from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
 
 CORE = "urn:cen.eu:en16931:2017"
@@ -20,11 +21,11 @@ NO_BT24 = "no single non-empty specification identifier (BT-24)"
 
 PEPPOL = profiles.PEPPOL
 XRECHNUNG = profiles.Profile(
-    id="test-xrechnung", title="t", specification_identifier="urn:example.com:xr", syntaxes=frozenset({"ubl", "cii"}),
+    id="test-xrechnung", title="t", specification_identifier="urn:example.com:xr", syntaxes=frozenset(Syntax),
     rule_sets=("cen", "xrechnung"),
 )  # fmt: skip
 UBL_ONLY = profiles.Profile(
-    id="test-ubl", title="t", specification_identifier="urn:example.com:ubl", syntaxes=frozenset({"ubl"}),
+    id="test-ubl", title="t", specification_identifier="urn:example.com:ubl", syntaxes=frozenset({Syntax.UBL}),
     rule_sets=("cen",),
 )  # fmt: skip
 
