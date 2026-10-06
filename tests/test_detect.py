@@ -126,6 +126,15 @@ def test_a_pdf_header_after_leading_bytes_is_still_sniffed(prefix: bytes) -> Non
         detect(prefix + b"%PDF-1.7\n")
 
 
+def test_pdf_magic_inside_xml_text_is_not_a_pdf() -> None:
+    # Regression (spec-audit of #56): "%PDF-" in a note within the first 1024 bytes is invoice text.
+    data = ubl().replace(b"<cbc:ID>", b"<cbc:Note>%PDF-1.7 attached</cbc:Note><cbc:ID>")
+    assert data.find(b"%PDF-") < 1024
+    assert detect(data) == Detection(
+        syntax="ubl", root="Invoice", specification_identifier=CORE, profile=profiles.EN16931
+    )
+
+
 def test_a_pdf_header_beyond_the_first_1024_bytes_is_not_sniffed() -> None:
     with pytest.raises(ParseError):
         detect(b"x" * 1024 + b"%PDF-1.7\n")

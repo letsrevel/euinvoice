@@ -105,7 +105,9 @@ def detect(data: bytes) -> Detection:
         >>> detect(xml.encode()).profile.id
         'en16931'
     """
-    if isinstance(data, bytes) and _PDF_MAGIC in data[:_PDF_WINDOW]:
+    # A PDF header counts only before any markup: "%PDF-" in XML text (e.g. a BT-22 note) is not a PDF.
+    header = data.find(_PDF_MAGIC, 0, _PDF_WINDOW) if isinstance(data, bytes) else -1
+    if header != -1 and b"<" not in data[:header]:
         raise UnsupportedDocumentError(
             "input is a PDF; extract the embedded Factur-X / ZUGFeRD XML with euinvoice.facturx.extract first"
         )
