@@ -54,7 +54,8 @@ b'%PDF-'
 ```python
 >>> from euinvoice import to_xml
 >>> xml = to_xml(invoice, profile=profiles.FACTURX_EN16931)  # CII, the only syntax of the level
->>> facturx.embed(rendered_pdf, xml, profile=profiles.FACTURX_EN16931) == hybrid_pdf
+>>> from_bytes = facturx.embed(rendered_pdf, xml, profile=profiles.FACTURX_EN16931)
+>>> facturx.extract(from_bytes).xml == facturx.extract(hybrid_pdf).xml  # same invoice embedded
 True
 ```
 

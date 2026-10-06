@@ -46,7 +46,7 @@ def test_the_docs_examples_run_without_artifacts() -> None:
         "quickstart.md": 10,
         "concepts.md": 8,
         "validation.md": 3,
-        "facturx.md": 10,
+        "facturx.md": 11,
         "mapping/freelancer.md": 11,
         "mapping/ticketing.md": 15,
     }
