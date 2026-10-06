@@ -38,7 +38,8 @@ def write(invoice: Invoice) -> bytes:
 
     Raises:
         ModelError: The invoice holds a value CII cannot carry: more than one preceding invoice reference
-            (BG-3), a base quantity unit (BT-150) without base quantity (BT-149), or BT-111 without BT-6.
+            (BG-3), a base quantity unit (BT-150) without base quantity (BT-149), BT-111 without BT-6, or
+            BT-111 with BT-6 equal to BT-5 (CEN BR-53).
             An item price discount (BT-147) without gross price (BT-148) is written with the gross price
             BT-146 + BT-147, and raises only when that sum is negative (BR-28).
     """

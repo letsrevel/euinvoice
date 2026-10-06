@@ -160,3 +160,7 @@ All notable changes to this project are documented here. The format follows
   now refuse characters outside the XML 1.0 `Char` production (NUL and other C0 controls except tab,
   LF and CR, lone surrogates, U+FFFE, U+FFFF) with a `ModelError` naming the code point and its index,
   instead of failing late in the UBL/CII writers (#57).
+- `syntax.cii.write()` now refuses a VAT accounting currency (BT-6) equal to the invoice currency (BT-5)
+  together with BT-111, as `syntax.ubl.write()` already did, with a `ModelError` citing BR-53. It used to
+  write two `ram:TaxTotalAmount` in the same currency that no reader can tell apart and that the CEN CII
+  Schematron always rejects (BR-53) (#71).

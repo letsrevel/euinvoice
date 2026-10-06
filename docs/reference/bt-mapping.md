@@ -337,6 +337,11 @@ syntax's writer reports the gap.
 * **CII gap · BT-111 without BT-6.** BT-111's only binding is
   `ram:TaxTotalAmount[@currencyID = ../../ram:TaxCurrencyCode]` (KoSIT binding, BR-53, BR-DEC-15); without
   BT-6 the amount has no currency to carry. The CII writer raises `ModelError`.
+* **Gap in both syntaxes · BT-6 = BT-5 with BT-111.** BT-110 and BT-111 are told apart only by `@currencyID`, so
+  equal currencies give two amounts in BT-5 that no reader can tell apart, and the CEN Schematron rejects every
+  such document: CII BR-53 requires `ram:TaxCurrencyCode` to differ from `ram:InvoiceCurrencyCode`, UBL BR-CO-15
+  requires exactly one `cbc:TaxAmount` in BT-5. Both writers raise `ModelError` (#71). Without BT-111 both write
+  BT-6 = BT-5, which fails CII BR-53 only.
 
 ## Normalizations
 

@@ -318,3 +318,23 @@ def test_vat_total_in_accounting_currency_needs_its_currency() -> None:
     )
     with pytest.raises(ModelError, match=r"BT-111.*BT-6"):
         cii.write(minimal_invoice(totals=totals))
+
+
+def test_accounting_currency_equal_to_invoice_currency_without_bt111_is_written() -> None:
+    # Lossless (BT-6 has its own ram:TaxCurrencyCode); the CEN CII BR-53 failure is validate()'s to report.
+    root = written(minimal_invoice(vat_accounting_currency_code="EUR"))
+    assert root.xpath(f"string({STL}ram:TaxCurrencyCode)", namespaces=_xml.CII_NSMAP) == "EUR"
+
+
+def test_accounting_currency_equal_to_invoice_currency_with_bt111_is_refused() -> None:
+    # Regression for #71: two ram:TaxTotalAmount in BT-5 nobody can tell apart, which CEN CII BR-53 always rejects.
+    totals = DocumentTotals(
+        sum_of_line_net_amounts=Decimal("100.00"),
+        total_without_vat=Decimal("100.00"),
+        total_vat=Decimal("19.00"),
+        total_vat_in_accounting_currency=Decimal("19.00"),
+        total_with_vat=Decimal("119.00"),
+        amount_due=Decimal("119.00"),
+    )
+    with pytest.raises(ModelError, match=r"^BT-6 cannot be written in CII: .*BR-53"):
+        cii.write(minimal_invoice(vat_accounting_currency_code="EUR", totals=totals))

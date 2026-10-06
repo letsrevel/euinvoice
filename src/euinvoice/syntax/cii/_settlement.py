@@ -152,7 +152,23 @@ def _totals(parent: etree._Element, totals: DocumentTotals, invoice: Invoice) ->
     ``ram:TaxTotalAmount`` is the only amount with a ``@currencyID`` (the CEN ``AmountType`` context excludes
     it from CII-DT-031): BT-110 in the invoice currency (BT-5), BT-111 in the VAT accounting currency
     (BT-6), as bound by BR-53, BR-CO-15, BR-DEC-13 and BR-DEC-15.
+
+    Raises:
+        ModelError: BT-6 equals BT-5 while BT-111 is set (the UBL writer refuses it too), or BT-111 is set
+            without BT-6.
     """
+    if totals.total_vat_in_accounting_currency is not None and invoice.vat_accounting_currency_code == (
+        invoice.currency_code
+    ):
+        # The D16B XSD allows any number of ram:TaxTotalAmount, but two in BT-5 cannot be told apart, and CEN CII
+        # BR-53 (schematron/CII/EN16931-CII-model.sch) requires not(ram:TaxCurrencyCode = ram:InvoiceCurrencyCode)
+        # whenever BT-6 is present, so every such document is rejected.
+        raise cannot_express(
+            "BT-6",
+            "a VAT accounting currency equal to the invoice currency (BT-5) together with BT-111 gives two "
+            "ram:TaxTotalAmount with the same currencyID that no reader can tell apart, and CEN BR-53 requires "
+            "BT-6 to differ from BT-5",
+        )
     element = sub(parent, "SpecifiedTradeSettlementHeaderMonetarySummation")
     sub(element, "LineTotalAmount", decimal(totals.sum_of_line_net_amounts))
     if totals.sum_of_charges is not None:

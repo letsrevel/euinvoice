@@ -10,8 +10,9 @@ the pinned ``CEN_CII`` / ``CEN_UBL`` rule set; then:
 * ``check(invoice, syntax=...)`` reports exactly the ids in calc's scope (:data:`IN_SCOPE`) that the
   rule set reports: no more, no fewer.
 
-The UBL writer refuses an invoice without BT-110 or with BT-6 = BT-5 (UBL cannot express it); for those
-``check(invoice, syntax=Syntax.UBL)`` must report the rejection instead.
+The UBL writer refuses an invoice without BT-110, and both writers refuse BT-6 = BT-5 with BT-111 (#71); for
+those ``check(invoice, syntax=...)`` must report the rejection instead. ``test_accounting_currency_official.py``
+proves on hand-made documents that the official rules reject that last case in both syntaxes.
 """
 
 import datetime
@@ -211,6 +212,11 @@ RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] =
 }
 IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-79]|CO-20|29|30|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
 """The official rules ``calc.check`` covers (BR-x-02..04 are about party identifiers, not amounts)."""
+BOTH_REFUSE: t.Final[dict[str, dict[Syntax, set[str]]]] = {
+    # BT-111 = BT-110 = 23.50: CII BR-53 and BR-CO-15, UBL BR-CO-15 (no BR-CO-14, the two amounts are equal)
+    "BR-53 BT-6 = BT-5 with BT-111": {Syntax.CII: {"BR-53", "BR-CO-15"}, Syntax.UBL: {"BR-CO-15"}},
+}
+"""Cases both writers refuse (#71), with the rule ids the pinned CEN Schematron reports per syntax."""
 CLEAN: t.Final = {
     "clean",
     "BR-CO-17 within 1",
@@ -231,8 +237,12 @@ def test_check_agrees_with_the_official_cen_schematron(name: str, syntax: Syntax
     try:
         document = serialize(invoice)
     except ModelError:
-        assert syntax is Syntax.UBL
-        assert calc.check(invoice, syntax=syntax), name  # the writer's refusal is a UBL rejection
+        assert syntax is Syntax.UBL or name in BOTH_REFUSE, name
+        targeted = {f.rule_id for f in calc.check(invoice, syntax=syntax)}
+        assert targeted, name  # the writer's refusal is a rejection in this syntax
+        if name in BOTH_REFUSE:
+            # what the pinned rules report on the hand-made document (test_accounting_currency_official.py)
+            assert targeted == BOTH_REFUSE[name][syntax], (name, targeted)
         return
     official = {f.rule_id for f in schematron.run(rule_set, document) if f.severity in {Severity.FATAL, Severity.ERROR}}
 
