@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
+  without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
+  CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged
+  ([#108](https://github.com/letsrevel/euinvoice/issues/108)).
+
 ## [0.1.0] - 2026-10-06
 
 First release: the EN 16931 semantic model, totals and VAT calculation, UBL 2.1 and CII D16B writers and readers,

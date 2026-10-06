@@ -100,11 +100,10 @@ class ArtifactsNotAvailableError(EuInvoiceError):
             message: Human-readable description, without the fallback hint.
             fallback_profile_id: The ``id`` of the EN 16931 core profile to suggest instead, if any.
         """
-        hint = (
-            ""
-            if fallback_profile_id is None
-            else f". To run only the EN 16931 core rules, pass profile=euinvoice.profiles.{fallback_profile_id.upper()}"
-        )
+        hint = ""
+        if fallback_profile_id is not None:  # the constant's name is the id upper-cased, hyphens as underscores
+            constant = fallback_profile_id.upper().replace("-", "_")
+            hint = f". To run only the EN 16931 core rules, pass profile=euinvoice.profiles.{constant}"
         super().__init__(message + hint)
         self.reason = message
         self.fallback_profile_id = fallback_profile_id
