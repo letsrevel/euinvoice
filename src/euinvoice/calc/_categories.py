@@ -12,10 +12,9 @@ from collections.abc import Iterator
 from decimal import Decimal
 from fractions import Fraction
 
-from euinvoice.calc._common import at, fatal, fmt, round_cents, total, verdict
+from euinvoice.calc._common import Verdict, at, fatal, fmt, round_cents, total, verdict
 from euinvoice.model import Invoice, VatBreakdown
 from euinvoice.model.codes import VatCategory
-from euinvoice.report import Finding
 
 __all__ = ["CATEGORY_RULES", "CategoryRules", "RateRule", "category_findings", "vat_in_tolerance"]
 
@@ -116,7 +115,7 @@ def vat_in_tolerance(tax: Decimal, taxable: Decimal, rate: Decimal, *, strict: b
     return abs(tax) - 1 <= expected <= abs(tax) + 1
 
 
-def _rates(invoice: Invoice) -> Iterator[Finding]:
+def _rates(invoice: Invoice) -> Iterator[Verdict]:
     """BR-<x>-05, -06, -07: the VAT rate of each line, document level allowance and charge."""
     items: list[tuple[str, str, str, int, str, Decimal | None]] = [
         ("05", "BT-152", "Invoiced item VAT rate", i, line.vat_information.category_code, line.vat_information.rate)
@@ -143,8 +142,13 @@ def _rates(invoice: Invoice) -> Iterator[Finding]:
             )
 
 
-def _items(invoice: Invoice, category: str, rate: Decimal | None, per_rate: bool) -> list[Decimal]:
-    """The signed amounts a ``-08`` test sums: line net amounts and charges, minus allowances."""
+def _items(
+    invoice: Invoice, category: str, rate: Decimal | None, per_rate: bool, *, lines: bool = True
+) -> list[Decimal]:
+    """The signed amounts a ``-08`` test sums.
+
+    Line net amounts (unless ``lines`` is false) and charges, minus allowances.
+    """
 
     def matches(item_category: str, item_rate: Decimal | None) -> bool:
         return item_category == category and (not per_rate or item_rate == rate)
@@ -152,18 +156,21 @@ def _items(invoice: Invoice, category: str, rate: Decimal | None, per_rate: bool
     amounts = [
         line.net_amount
         for line in invoice.lines
-        if matches(line.vat_information.category_code, line.vat_information.rate)
+        if lines and matches(line.vat_information.category_code, line.vat_information.rate)
     ]
     amounts += [charge.amount for charge in invoice.charges if matches(charge.vat_category_code, charge.vat_rate)]
     amounts += [-a.amount for a in invoice.allowances if matches(a.vat_category_code, a.vat_rate)]
     return amounts
 
 
-def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Finding]:
+def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Verdict]:
     """``-08``: the taxable amount of a breakdown.
 
-    UBL: S/AF/AG within 1 and the rate must occur on an item; others exact. CII: S/AF/AG and O exact;
-    Z/E/AE/IC/G within 1.
+    CII: S/AF/AG and O exact; Z/E/AE/IC/G within 1. UBL: Z/E/AE/IC/G/O exact; AF/AG within 1 (their
+    ``exists(//cac:InvoiceLine)`` guard always holds). UBL BR-S-08 reads, by XPath precedence,
+    ``(occurs and within 1 of the full sum) or (an allowance or charge has the rate and within 1 of
+    charges - allowances)``: its second disjunct is the credit-note branch, whose line sum is empty on
+    an invoice (and the invoice-line one on a credit note), so a document-level-only sum also passes.
     """
     category, rate, taxable = group.category_code, group.rate, group.taxable_amount
     if rules.per_rate and rate is None:  # "every $rate in BT-119 satisfies …": vacuous without a rate
@@ -171,8 +178,12 @@ def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryR
     amounts = _items(invoice, category, rate, rules.per_rate)
     expected = total(amounts)
     within_one = abs(taxable - expected) < 1
-    if rules.per_rate:
-        ubl, cii = bool(amounts) and within_one, taxable == expected
+    if category == VatCategory.STANDARD_RATED:
+        document_level = _items(invoice, category, rate, per_rate=True, lines=False)
+        ubl = (bool(amounts) and within_one) or (bool(document_level) and abs(taxable - total(document_level)) < 1)
+        cii = taxable == expected
+    elif rules.per_rate:
+        ubl, cii = within_one, taxable == expected
     elif category == VatCategory.NOT_SUBJECT_TO_VAT:
         ubl = cii = taxable == expected
     else:
@@ -188,7 +199,7 @@ def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryR
     )
 
 
-def _tax(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Finding]:
+def _tax(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Verdict]:
     """``-09``: 0 for Z/E/AE/IC/G/O (both bindings); the strict ±1 test for S/AF/AG (CII: S only)."""
     category, rate, tax = group.category_code, group.rate, group.tax_amount
     if rules.zero_tax:
@@ -207,7 +218,7 @@ def _tax(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Find
     )
 
 
-def _reason(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Finding]:
+def _reason(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Verdict]:
     """``-10``: the same test in both bindings."""
     if (group.exemption_reason is not None or group.exemption_reason_code is not None) != rules.needs_reason:
         need = "shall have" if rules.needs_reason else "shall not have"
@@ -219,7 +230,7 @@ def _reason(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[F
         )
 
 
-def _presence(invoice: Invoice) -> Iterator[Finding]:
+def _presence(invoice: Invoice) -> Iterator[Verdict]:
     """``-01`` with ``n`` = lines, ``a`` = document allowances and charges, ``b`` = breakdowns of the category.
 
     UBL S/AF/AG: ``(n + a > 0) = (b > 0)``. UBL Z/E/AE/IC/G/O: ``b = 1 or n + a + b = 0`` (its
@@ -252,38 +263,43 @@ def _presence(invoice: Invoice) -> Iterator[Finding]:
         )
 
 
-def _not_subject_to_vat(invoice: Invoice) -> Iterator[Finding]:
+def _not_subject_to_vat(invoice: Invoice) -> Iterator[Verdict]:
     """BR-O-11 … BR-O-14: with a category O breakdown, nothing else may carry another category.
 
     UBL tests each kind separately: other breakdowns (11), lines (12), allowances (13), charges (14).
     CII tests ``//ram:ApplicableTradeTax`` (breakdowns and lines) for both 11 and 12, and
-    ``//ram:CategoryTradeTax`` (allowances and charges) for both 13 and 14.
+    ``//ram:CategoryTradeTax`` (allowances and charges) for both 13 and 14. CII's wider test also
+    counts the partner kind; those items are already fatal under the partner rule, so it never changes
+    the outcome.
     """
-    if not any(group.category_code == VatCategory.NOT_SUBJECT_TO_VAT for group in invoice.vat_breakdown):
-        return
     o = VatCategory.NOT_SUBJECT_TO_VAT
+    if not any(group.category_code == o for group in invoice.vat_breakdown):
+        return
     kinds = {
-        "BR-O-11": [at("BT-118", i) for i, g in enumerate(invoice.vat_breakdown) if g.category_code != o],
-        "BR-O-12": [at("BT-151", i) for i, ln in enumerate(invoice.lines) if ln.vat_information.category_code != o],
-        "BR-O-13": [at("BT-95", i) for i, x in enumerate(invoice.allowances) if x.vat_category_code != o],
-        "BR-O-14": [at("BT-102", i) for i, x in enumerate(invoice.charges) if x.vat_category_code != o],
+        ("BR-O-11", "a VAT breakdown"): [
+            at("BT-118", i) for i, g in enumerate(invoice.vat_breakdown) if g.category_code != o
+        ],
+        ("BR-O-12", "an Invoice line"): [
+            at("BT-151", i) for i, ln in enumerate(invoice.lines) if ln.vat_information.category_code != o
+        ],
+        ("BR-O-13", "a Document level allowance"): [
+            at("BT-95", i) for i, x in enumerate(invoice.allowances) if x.vat_category_code != o
+        ],
+        ("BR-O-14", "a Document level charge"): [
+            at("BT-102", i) for i, x in enumerate(invoice.charges) if x.vat_category_code != o
+        ],
     }
-    cii_pairs = {"BR-O-11": "BR-O-12", "BR-O-12": "BR-O-11", "BR-O-13": "BR-O-14", "BR-O-14": "BR-O-13"}
-    what = {"BR-O-11": "VAT breakdown", "BR-O-12": "Invoice line", "BR-O-13": "Document level allowance"}
-    what["BR-O-14"] = "Document level charge"
-    for rule, offenders in kinds.items():
-        partner = kinds[cii_pairs[rule]]
-        message = (
-            f"An Invoice with a VAT breakdown of category O (Not subject to VAT) shall not contain a {what[rule]} "
-            "of another VAT category."
-        )
+    for (rule, what), offenders in kinds.items():
         for location in offenders:  # both bindings reject each of these
-            yield from fatal(rule, location, message)
-        if not offenders and partner:  # only CII's wider test rejects
-            yield from verdict(rule, partner[0], message, ubl=True, cii=False)
+            yield from fatal(
+                rule,
+                location,
+                f"An Invoice with a VAT breakdown of category O (Not subject to VAT) shall not contain {what} "
+                "of another VAT category.",
+            )
 
 
-def _split_payment(invoice: Invoice) -> Iterator[Finding]:
+def _split_payment(invoice: Invoice) -> Iterator[Verdict]:
     """BR-B-02: no ``S`` anywhere when ``B`` is used (the same test in both bindings)."""
     categories = [(at("BT-151", i), ln.vat_information.category_code) for i, ln in enumerate(invoice.lines)]
     categories += [(at("BT-95", i), x.vat_category_code) for i, x in enumerate(invoice.allowances)]
@@ -300,14 +316,14 @@ def _split_payment(invoice: Invoice) -> Iterator[Finding]:
                 )
 
 
-def category_findings(invoice: Invoice) -> Iterator[Finding]:
+def category_findings(invoice: Invoice) -> Iterator[Verdict]:
     """Every per-category rule, in document order: rates, breakdowns, presence, O and B rules.
 
     Args:
         invoice: A complete invoice.
 
     Yields:
-        The findings.
+        The verdicts of the rules that fail in at least one binding.
     """
     yield from _rates(invoice)
     for index, group in enumerate(invoice.vat_breakdown):

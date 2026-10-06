@@ -97,8 +97,11 @@ All notable changes to this project are documented here. The format follows
   rate (BG-23, BR-CO-17, BR-<x>-08), rounding half up to cents, and returns a validated `Invoice`
   that passes the CEN rules in both UBL and CII. `check(invoice)` evaluates BR-CO-10…17, BR-48,
   BR-53, the per-category rules BR-<x>-01/05/06/07/08/09/10 (S, Z, E, AE, K, G, O, L, M), BR-O-11…14
-  and BR-B-02 as both the UBL and the CII binding test them: `fatal` under the official rule id when
-  both reject, a `warning` `EUINV-CALC-PORTABILITY` naming the rule and binding when only one does.
+  and BR-B-02 as both the UBL and the CII binding test them (including CII's first-match rule
+  shadowing). `check(invoice, syntax=Syntax.UBL | Syntax.CII)` reports that binding's failures as
+  `fatal`; without a syntax, a rule is `fatal` when both bindings reject it and a `warning`
+  `EUINV-CALC-PORTABILITY` naming the rule and binding when only one does. A conformance test
+  cross-checks `check()` against the official CEN CII Schematron on mutated invoices.
   `ExemptionReason` carries BT-120/BT-121 per category. `complete()` reproduces the totals of every
   CEN 1.3.16 and Peppol 3.0.21 example (except one HUF example that rounds VAT to whole forints).
 

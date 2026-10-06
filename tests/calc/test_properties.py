@@ -6,10 +6,10 @@ four decimals, so ties at the rounding points, negative ones included, occur oft
 
 from decimal import Decimal, localcontext
 
-from _calc_drafts import allowance, charge, draft, line
 from hypothesis import given
 from hypothesis import strategies as st
 
+from _calc_drafts import allowance, charge, draft, line
 from euinvoice import calc
 from euinvoice.calc._categories import CATEGORY_RULES
 from euinvoice.model import DocumentLevelAllowance, DocumentLevelCharge, Invoice, InvoiceDraft, LineDraft

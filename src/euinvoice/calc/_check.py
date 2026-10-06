@@ -6,17 +6,20 @@ BR-45, BR-46 and BR-47 (a VAT breakdown has BT-116, BT-117 and BT-118) cannot fa
 :class:`~euinvoice.model.Invoice`: the model makes those terms mandatory.
 """
 
+import typing as t
 from collections.abc import Iterator
 
 from euinvoice.calc._categories import category_findings, vat_in_tolerance
-from euinvoice.calc._common import ZERO, at, fatal, fmt, total, verdict, xpath_round
+from euinvoice.calc._common import ZERO, Verdict, at, fatal, fmt, total, verdict, xpath_round
 from euinvoice.model import Invoice, VatBreakdown
+from euinvoice.model.codes import VatCategory
 from euinvoice.report import Finding
+from euinvoice.syntax import Syntax
 
 __all__ = ["check"]
 
 
-def _sums(invoice: Invoice) -> Iterator[Finding]:
+def _sums(invoice: Invoice) -> Iterator[Verdict]:
     """BR-CO-10 … BR-CO-14 and BR-CO-16: the same test in both bindings."""
     totals = invoice.totals
     lines = total(line.net_amount for line in invoice.lines)
@@ -60,54 +63,77 @@ def _sums(invoice: Invoice) -> Iterator[Finding]:
         )
 
 
-def _with_vat(invoice: Invoice) -> Iterator[Finding]:
+def _with_vat(invoice: Invoice) -> Iterator[Verdict]:
     """BR-CO-15: BT-112 = BT-109 + BT-110.
 
-    UBL: exactly one ``cbc:TaxAmount`` in BT-5 and BT-112 = BT-109 + BT-110. CII: that, or
-    BT-112 = BT-109 (its second disjunct, which also accepts an absent BT-110).
+    UBL: exactly one ``cbc:TaxAmount`` in BT-5 and BT-112 = BT-109 + BT-110. CII: exactly one
+    ``ram:TaxTotalAmount`` in BT-5 and that sum, or BT-112 = BT-109 (its second disjunct, which also
+    accepts an absent BT-110). BT-6 = BT-5 with BT-111 puts a second amount in BT-5, so then only the
+    second disjunct can pass.
     """
     totals = invoice.totals
-    adds_up = totals.total_vat is not None and totals.total_with_vat == totals.total_without_vat + totals.total_vat
+    second_in_bt5 = (
+        invoice.vat_accounting_currency_code == invoice.currency_code
+        and totals.total_vat_in_accounting_currency is not None
+    )
+    adds_up = (
+        not second_in_bt5
+        and totals.total_vat is not None
+        and totals.total_with_vat == totals.total_without_vat + totals.total_vat
+    )
     yield from verdict(
         "BR-CO-15",
         at("BT-112"),
         f"Invoice total amount with VAT (BT-112) {fmt(totals.total_with_vat)} != BT-109 "
-        f"{fmt(totals.total_without_vat)} + BT-110 {fmt(totals.total_vat)}.",
+        f"{fmt(totals.total_without_vat)} + BT-110 {fmt(totals.total_vat)}"
+        + (", or a second VAT total in the invoice currency (BT-6 = BT-5 with BT-111)." if second_in_bt5 else "."),
         ubl=adds_up,
         cii=adds_up or totals.total_with_vat == totals.total_without_vat,
     )
 
 
-def _accounting_currency(invoice: Invoice) -> Iterator[Finding]:
+def _accounting_currency(invoice: Invoice) -> Iterator[Verdict]:
     """BR-53. UBL: a ``cbc:TaxAmount`` exists in BT-6. CII: BT-111 in BT-6 and BT-6 != BT-5.
 
-    BT-6 = BT-5 with BT-111 fails CII's BR-53 and, in UBL, BR-CO-15 (two ``cbc:TaxAmount`` in BT-5): a
-    fatal BR-53. Without BT-111 only CII rejects BT-6 = BT-5 (UBL's BT-110 is then in BT-6).
+    With BT-6 = BT-5 only CII rejects BR-53: UBL finds BT-110 (or BT-111) in BT-6. BT-6 = BT-5 with
+    BT-111 also breaks BR-CO-15 (see :func:`_with_vat`).
     """
     code, bt111 = invoice.vat_accounting_currency_code, invoice.totals.total_vat_in_accounting_currency
     if code is None:
         return
     same = code == invoice.currency_code
+    # UBL: BT-111 is written in BT-6, and BT-110 is in BT-6 too when BT-6 = BT-5
+    ubl_has_amount_in_bt6 = bt111 is not None or same
     yield from verdict(
         "BR-53",
         at("BT-111"),
         f"With the VAT accounting currency code (BT-6) {code}, the Invoice total VAT amount in accounting "
         f"currency (BT-111) shall be provided, and BT-6 shall differ from the invoice currency (BT-5) "
         f"{invoice.currency_code}; BT-111 is {fmt(bt111)}.",
-        ubl=same if bt111 is None else not same,
+        ubl=ubl_has_amount_in_bt6,
         cii=bt111 is not None and not same,
     )
 
 
-def _group(index: int, group: VatBreakdown) -> Iterator[Finding]:
-    """BR-48 (same in both bindings) and BR-CO-17 (UBL strict ``<``/``>``, CII ``<=``/``>=``)."""
+# CII binds $VATAF, $VATAG and $VATO to the same node as $VAT_breakdown (ram:ApplicableTradeTax) and lists
+# them first in its single pattern, so Schematron's first-match rule never runs the $VAT_breakdown asserts
+# (BR-45 … BR-48, BR-CO-17) on an L, M or O breakdown (schematron/CII/EN16931-CII-model.sch and
+# schematron/abstract/EN16931-CII-model.sch). The other categories bind ram:CategoryCode, a child node.
+_CII_SHADOWED: t.Final = frozenset({VatCategory.IGIC, VatCategory.IPSI, VatCategory.NOT_SUBJECT_TO_VAT})
+
+
+def _group(index: int, group: VatBreakdown) -> Iterator[Verdict]:
+    """BR-48 and BR-CO-17 (UBL strict ``<``/``>``, CII ``<=``/``>=``; CII never tests L, M and O)."""
     rate, tax = group.rate, group.tax_amount
-    if rate is None and group.category_code != "O":
-        yield from fatal(
+    cii_tests = group.category_code not in _CII_SHADOWED
+    if rate is None and group.category_code != VatCategory.NOT_SUBJECT_TO_VAT:
+        yield from verdict(
             "BR-48",
             at("BT-119", index),
             f"The VAT breakdown of category {group.category_code} has no VAT category rate (BT-119); only "
             "category O may omit it.",
+            ubl=False,
+            cii=not cii_tests,
         )
     # three branches: rate rounds to 0, rate present, rate absent (the first and last need round(BT-117) = 0)
     if rate is not None and xpath_round(rate) != 0:
@@ -122,32 +148,35 @@ def _group(index: int, group: VatBreakdown) -> Iterator[Finding]:
         f"{fmt(group.taxable_amount)} * (VAT category rate (BT-119) {fmt(rate)} / 100), rounded to two decimals "
         "(the rule tolerates a difference below 1).",
         ubl=ubl,
-        cii=cii,
+        cii=cii or not cii_tests,
     )
 
 
-def check(invoice: Invoice) -> tuple[Finding, ...]:
+def check(invoice: Invoice, *, syntax: Syntax | None = None) -> tuple[Finding, ...]:
     """Report where the amounts of a complete invoice break the CEN calculation and VAT rules.
 
     Checked (CEN validation-1.3.16, every rule ``fatal`` in both bindings): BR-CO-10 … BR-CO-17,
     BR-48, BR-53; per VAT category code S, Z, E, AE, K, G, O, L and M the rules ``BR-<x>-01``
     (breakdown present), ``-05``/``-06``/``-07`` (line, allowance and charge VAT rates), ``-08``
     (taxable amount), ``-09`` (tax amount) and ``-10`` (exemption reason); BR-O-11 … BR-O-14 and
-    BR-B-02. Each rule is evaluated as the UBL and the CII binding test it: ``fatal`` under the rule's
-    id when both reject it, a ``warning`` :data:`~euinvoice.calc.PORTABILITY` when only one does (see
-    :mod:`euinvoice.calc`). The official Schematron stays the oracle (D8): this is an early,
-    syntax-free warning, not a replacement for ``validate()``.
+    BR-B-02. Each rule is evaluated as the UBL and the CII binding test it. With a target ``syntax``,
+    a rule its binding rejects is ``fatal`` under the rule's id, and the other binding is ignored.
+    Without one, a rule is ``fatal`` when both bindings reject it and a ``warning``
+    :data:`~euinvoice.calc.PORTABILITY` when only one does (see :mod:`euinvoice.calc`). The
+    official Schematron stays the oracle (D8): this is an early warning, not a replacement for
+    ``validate()``.
 
     Args:
         invoice: A complete invoice.
+        syntax: The syntax the invoice will be written in, or ``None`` for either.
 
     Returns:
         The findings, each with the model path as location (e.g. ``vat_breakdown[0].tax_amount``, see
-        :mod:`euinvoice.model.bt_index`) and source ``"calc"``; empty if every rule holds in both
-        bindings.
+        :mod:`euinvoice.model.bt_index`) and source ``"calc"``; empty if every rule holds in the target
+        syntax (both, without one).
     """
-    findings = [*_sums(invoice), *_with_vat(invoice), *_accounting_currency(invoice)]
+    verdicts = [*_sums(invoice), *_with_vat(invoice), *_accounting_currency(invoice)]
     for index, group in enumerate(invoice.vat_breakdown):
-        findings += _group(index, group)
-    findings += category_findings(invoice)
-    return tuple(findings)
+        verdicts += _group(index, group)
+    verdicts += category_findings(invoice)
+    return tuple(finding for v in verdicts if (finding := v.finding(syntax)) is not None)

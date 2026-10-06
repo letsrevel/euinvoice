@@ -3,6 +3,7 @@
 Sources: see :mod:`euinvoice.calc`.
 """
 
+import dataclasses
 import math
 import typing as t
 from collections.abc import Iterable, Iterator
@@ -11,6 +12,7 @@ from fractions import Fraction
 
 from euinvoice.model.bt_index import path_of
 from euinvoice.report import Finding, Severity
+from euinvoice.syntax import Syntax
 
 ZERO: t.Final = Decimal("0.00")
 _WIDE = Context(prec=MAX_PREC)  # rescaling must never round digits away
@@ -22,8 +24,8 @@ PORTABILITY: t.Final = "EUINV-CALC-PORTABILITY"
 """Rule id of the warning :func:`check` reports when only one syntax binding rejects an official rule."""
 
 _BINDING_FILES: t.Final = {
-    "UBL": "schematron/UBL/EN16931-UBL-model.sch",
-    "CII": "schematron/CII/EN16931-CII-model.sch",
+    Syntax.UBL: "schematron/UBL/EN16931-UBL-model.sch",
+    Syntax.CII: "schematron/CII/EN16931-CII-model.sch",
 }
 
 
@@ -90,42 +92,84 @@ def fmt(value: Decimal | None) -> str:
     return "absent" if value is None else format(value, "f")
 
 
-def verdict(rule_id: str, location: str, message: str, *, ubl: bool, cii: bool) -> Iterator[Finding]:
-    """Turn the outcome of one official rule in both syntax bindings into findings (D8).
+@dataclasses.dataclass(frozen=True, slots=True)
+class Verdict:
+    """One official rule that fails in at least one syntax binding.
 
-    The rule is reported ``fatal`` under its own id only if its test fails in **both** bindings. If
-    only one binding rejects it, the invoice is valid in one syntax and not the other: that is a
-    ``warning`` with rule id :data:`PORTABILITY` naming the rule and the rejecting binding.
-
-    Args:
+    Attributes:
         rule_id: The official rule id, e.g. ``BR-S-08``.
         location: The model path.
         message: What is wrong, with the values.
         ubl: Whether the test of ``schematron/UBL/EN16931-UBL-model.sch`` passes.
         cii: Whether the test of ``schematron/CII/EN16931-CII-model.sch`` passes.
+    """
+
+    rule_id: str
+    location: str
+    message: str
+    ubl: bool
+    cii: bool
+
+    def passes(self, syntax: Syntax) -> bool:
+        """Whether the rule's test in ``syntax`` passes.
+
+        Args:
+            syntax: The binding.
+
+        Returns:
+            The outcome of that binding's test.
+        """
+        return self.ubl if syntax is Syntax.UBL else self.cii
+
+    def finding(self, syntax: Syntax | None) -> Finding | None:
+        """The finding for a target syntax, or for both syntaxes (D8 policy, see :mod:`euinvoice.calc`).
+
+        Args:
+            syntax: The target syntax, or ``None`` for both.
+
+        Returns:
+            With a syntax: a fatal finding under :attr:`rule_id` if that binding rejects the rule, else
+            ``None``. Without: fatal if both reject it, a :data:`PORTABILITY` warning if only one does.
+        """
+        if syntax is not None:
+            return None if self.passes(syntax) else self._fatal()
+        if not self.ubl and not self.cii:
+            return self._fatal()
+        rejecting, accepting = (Syntax.UBL, Syntax.CII) if not self.ubl else (Syntax.CII, Syntax.UBL)
+        return Finding(
+            rule_id=PORTABILITY,
+            severity=Severity.WARNING,
+            location=self.location,
+            message=f"{self.rule_id} fails in the {rejecting.name} binding only ({_BINDING_FILES[rejecting]}); "
+            f"the {accepting.name} binding's test accepts it. {self.message}",
+            source=SOURCE,
+        )
+
+    def _fatal(self) -> Finding:
+        return Finding(
+            rule_id=self.rule_id, severity=Severity.FATAL, location=self.location, message=self.message, source=SOURCE
+        )
+
+
+def verdict(rule_id: str, location: str, message: str, *, ubl: bool, cii: bool) -> Iterator[Verdict]:
+    """The verdict of one official rule in both bindings; nothing if both tests pass.
+
+    Args:
+        rule_id: The official rule id.
+        location: The model path.
+        message: What is wrong, with the values.
+        ubl: Whether the UBL binding's test passes.
+        cii: Whether the CII binding's test passes.
 
     Yields:
-        Nothing, one fatal finding, or one portability warning.
+        Nothing, or one :class:`Verdict`.
     """
-    if ubl and cii:
-        return
-    if not ubl and not cii:
-        yield Finding(rule_id=rule_id, severity=Severity.FATAL, location=location, message=message, source=SOURCE)
-        return
-    rejecting, accepting = ("UBL", "CII") if not ubl else ("CII", "UBL")
-    yield Finding(
-        rule_id=PORTABILITY,
-        severity=Severity.WARNING,
-        location=location,
-        message=f"{rule_id} fails in the {rejecting} binding only ({_BINDING_FILES[rejecting]}); the "
-        f"{accepting} binding accepts it, so the invoice is valid in {accepting} but not in {rejecting}. "
-        f"{message}",
-        source=SOURCE,
-    )
+    if not (ubl and cii):
+        yield Verdict(rule_id, location, message, ubl, cii)
 
 
-def fatal(rule_id: str, location: str, message: str) -> Iterator[Finding]:
-    """A rule whose test is the same in both bindings and fails: one fatal finding.
+def fatal(rule_id: str, location: str, message: str) -> Iterator[Verdict]:
+    """A rule whose test is the same in both bindings and fails.
 
     Args:
         rule_id: The official rule id.
@@ -133,6 +177,6 @@ def fatal(rule_id: str, location: str, message: str) -> Iterator[Finding]:
         message: What is wrong, with the values.
 
     Yields:
-        The fatal finding.
+        The verdict, failing in both bindings.
     """
     yield from verdict(rule_id, location, message, ubl=False, cii=False)

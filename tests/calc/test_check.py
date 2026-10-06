@@ -7,11 +7,12 @@ warning (only BINDING rejects RULE).
 from decimal import Decimal
 
 import pytest
-from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
 
+from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
 from euinvoice import calc
 from euinvoice.model import DocumentLevelAllowance, DocumentLevelCharge, Invoice, LineDraft, VatBreakdown
 from euinvoice.report import Finding, Severity
+from euinvoice.syntax import Syntax
 
 E_REASON = {"E": calc.ExemptionReason(code="VATEX-EU-132")}
 O_REASON = {"O": calc.ExemptionReason(code="VATEX-EU-O")}
@@ -89,7 +90,7 @@ def test_portability_warning_names_rule_and_rejecting_binding(invoice: Invoice) 
         "totals.total_with_vat",
     )
     assert finding.message.startswith("BR-CO-15 fails in the UBL binding only (schematron/UBL/EN16931-UBL-model.sch)")
-    assert "valid in CII but not in UBL" in finding.message
+    assert "the CII binding's test accepts it." in finding.message
 
 
 # --- BR-CO-10 … BR-CO-16, BR-53 (document totals) -----------------------------------------------------
@@ -147,21 +148,40 @@ def test_br_co_15_binding_asymmetry(invoice: Invoice, changes: dict[str, str | N
     assert outcomes(with_totals(invoice, **changes)) == expected
 
 
+BT111 = "totals.total_vat_in_accounting_currency"
+BT112 = "totals.total_with_vat"
+
+
 @pytest.mark.parametrize(
     ("currency", "bt111", "expected"),
     [
-        ("SEK", None, {"BR-53"}),  # no amount in BT-6 in either syntax
+        ("SEK", None, {("BR-53", BT111)}),  # no amount in BT-6 in either syntax
         ("SEK", "270.00", set()),
-        ("EUR", "23.50", {"BR-53"}),  # CII: BT-6 = BT-5; UBL: two cbc:TaxAmount in EUR break BR-CO-15
-        ("EUR", None, {"~BR-53@CII"}),  # UBL finds BT-110 in EUR; CII refuses BT-6 = BT-5
+        # BT-6 = BT-5 with BT-111: UBL finds an amount in BT-6, so BR-53 is CII-only; two VAT totals in
+        # EUR break BR-CO-15 in UBL and the first CII disjunct, and BT-112 != BT-109 fails the second
+        ("EUR", "23.50", {("~BR-53@CII", BT111), ("BR-CO-15", BT112)}),
+        ("EUR", None, {("~BR-53@CII", BT111)}),  # UBL finds BT-110 in EUR; CII refuses BT-6 = BT-5
     ],
 )
-def test_br53_vat_accounting_currency(invoice: Invoice, currency: str, bt111: str | None, expected: set[str]) -> None:
+def test_br53_vat_accounting_currency(
+    invoice: Invoice, currency: str, bt111: str | None, expected: set[tuple[str, str]]
+) -> None:
     with_bt6 = with_totals(
         replace(invoice, vat_accounting_currency_code=currency), total_vat_in_accounting_currency=bt111
     )
 
-    assert located(with_bt6) == {(rule, "totals.total_vat_in_accounting_currency") for rule in expected}
+    assert located(with_bt6) == expected
+
+
+def test_second_vat_total_in_bt5_passes_cii_br_co_15_only_through_bt112_equal_bt109(invoice: Invoice) -> None:
+    same = with_totals(
+        replace(invoice, vat_accounting_currency_code="EUR"),
+        total_vat_in_accounting_currency="23.50",
+        total_with_vat="165.00",
+        amount_due="165.00",
+    )
+
+    assert located(same) == {("~BR-53@CII", BT111), ("~BR-CO-15@UBL", BT112)}
 
 
 # --- BR-48, BR-CO-17, -09 -------------------------------------------------------------------------------
@@ -187,8 +207,9 @@ def test_difference_of_exactly_one_on_standard_rate(invoice: Invoice) -> None:
     ("category", "prefix", "tax", "expected"),
     [
         ("L", "BR-AF", "8.00", {"~BR-CO-17@UBL", "~BR-AF-09@UBL"}),  # 7.00 + 1: CII BR-AF-09 is true()
-        ("L", "BR-AF", "12.00", {"BR-CO-17", "~BR-AF-09@UBL"}),
-        ("M", "BR-AG", "12.00", {"BR-CO-17", "~BR-AG-09@UBL"}),
+        # CII never runs BR-CO-17 on an L or M breakdown ($VATAF/$VATAG shadow $VAT_breakdown)
+        ("L", "BR-AF", "12.00", {"~BR-CO-17@UBL", "~BR-AF-09@UBL"}),
+        ("M", "BR-AG", "12.00", {"~BR-CO-17@UBL", "~BR-AG-09@UBL"}),
     ],
 )
 def test_igic_and_ipsi_tax_amount(category: str, prefix: str, tax: str, expected: set[str]) -> None:
@@ -330,16 +351,15 @@ def test_not_subject_to_vat_with_another_category_on_a_line() -> None:
 
 
 def test_not_subject_to_vat_with_another_category_on_an_allowance() -> None:
-    """UBL tests allowances (13) and charges (14) apart; CII's 13 and 14 both test either."""
+    """UBL tests allowances (13) and charges (14) apart; CII's 13 and 14 both test either, but every
+    item that adds is already fatal under the partner rule."""
     invoice = calc.complete(
         draft(line("1", "100", "O", None), allowances=(allowance("1.00", "S", "20"),)), exemption_reasons=O_REASON
     )
 
     assert located(invoice) == {
         ("BR-O-11", "vat_breakdown[1].category_code"),
-        ("~BR-O-12@CII", "vat_breakdown[1].category_code"),  # CII 12 also sees the S breakdown
         ("BR-O-13", "allowances[0].vat_category_code"),
-        ("~BR-O-14@CII", "allowances[0].vat_category_code"),
     }
 
 
@@ -348,7 +368,7 @@ def test_not_subject_to_vat_with_another_category_on_a_charge() -> None:
         draft(line("1", "100", "O", None), charges=(charge("1.00", "Z", "0"),)), exemption_reasons=O_REASON
     )
 
-    assert outcomes(invoice) == {"BR-O-11", "~BR-O-12@CII", "~BR-O-13@CII", "BR-O-14"}
+    assert outcomes(invoice) == {"BR-O-11", "BR-O-14"}
 
 
 def test_split_payment_alone_passes() -> None:
@@ -435,3 +455,59 @@ def test_igic_rate_zero_is_rejected_by_cii_only() -> None:
 )
 def test_valid_rates_pass(category: str, rate: str | None) -> None:
     assert calc.check(complete_with_reasons(line("1", "100", category, rate))) == ()
+
+
+# --- round 2 regressions: UBL -08 branches, target syntax ---------------------------------------------
+
+
+def test_standard_rated_taxable_equal_to_document_level_amounts_passes_ubl_only(invoice: Invoice) -> None:
+    """UBL BR-S-08's second disjunct accepts BT-116 = charges - allowances at the rate (CEN example3 shape)."""
+    groups = list(invoice.vat_breakdown)
+    groups[1] = group(1, invoice, taxable_amount="5.00", tax_amount="0.50")  # the 5.00 charge at 10 %
+
+    assert located(with_breakdown(invoice, groups)) == {("~BR-S-08@CII", "vat_breakdown[1].taxable_amount")}
+
+
+@pytest.mark.parametrize("category", ["L", "M"])
+def test_igic_ipsi_breakdown_at_an_unused_rate_passes(category: str) -> None:
+    """UBL BR-AF-08 / BR-AG-08 have no "the rate occurs on an item" condition, CII sums nothing to 0."""
+    invoice = calc.complete(draft(line("1", "100", category, "7")))
+
+    assert calc.check(with_breakdown(invoice, (*invoice.vat_breakdown, breakdown(category, "3")))) == ()
+
+
+@pytest.mark.parametrize(
+    ("changes", "ubl", "cii"),
+    [
+        ({"total_vat": None, "total_with_vat": "165.00", "amount_due": "165.00"}, {"BR-CO-15"}, set()),
+        ({"total_with_vat": "188.51", "amount_due": "188.51"}, {"BR-CO-15"}, {"BR-CO-15"}),
+    ],
+)
+def test_target_syntax_reports_that_bindings_verdict_as_fatal(
+    invoice: Invoice, changes: dict[str, str | None], ubl: set[str], cii: set[str]
+) -> None:
+    broken = with_totals(invoice, **changes)
+
+    for syntax, expected in ((Syntax.UBL, ubl), (Syntax.CII, cii)):
+        findings = calc.check(broken, syntax=syntax)
+        assert {f.rule_id for f in findings} == expected
+        assert all(f.severity is Severity.FATAL for f in findings)
+
+
+def test_target_syntax_ignores_the_other_bindings_rejections(invoice: Invoice) -> None:
+    lone_z = with_breakdown(invoice, (*invoice.vat_breakdown, breakdown("Z", "0")))  # CII-only BR-Z-01
+    assert outcomes(lone_z) == {"~BR-Z-01@CII"}
+
+    assert calc.check(lone_z, syntax=Syntax.UBL) == ()
+    assert [(f.rule_id, f.severity, f.location) for f in calc.check(lone_z, syntax=Syntax.CII)] == [
+        ("BR-Z-01", Severity.FATAL, "vat_breakdown")
+    ]
+
+
+@pytest.mark.parametrize("category", ["L", "M"])
+def test_cii_never_runs_the_breakdown_rules_on_igic_and_ipsi(category: str) -> None:
+    """``$VATAF`` / ``$VATAG`` match the same node as ``$VAT_breakdown`` first: BR-48 is UBL-only here."""
+    invoice = calc.complete(draft(line("1", "100", category, "7")))
+    no_rate = with_breakdown(invoice, (group(0, invoice, rate=None, tax_amount="0.00"),))
+
+    assert "~BR-48@UBL" in outcomes(no_rate)

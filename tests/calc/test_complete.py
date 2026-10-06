@@ -4,8 +4,8 @@ from decimal import Decimal
 
 import pydantic
 import pytest
-from _calc_drafts import allowance, charge, draft, line
 
+from _calc_drafts import allowance, charge, draft, line
 from euinvoice import calc
 from euinvoice.errors import ModelError
 from euinvoice.model import DocumentTotals, LineDraft, VatBreakdown
