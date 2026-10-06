@@ -311,4 +311,30 @@ syntax's writer reports the gap.
   `cbc:Note`): the code is the text between a leading `#…#` (e.g. `#ADU#text`, as in the XRechnung test
   suite).
 * **BT-8 in CII.** The model stores UNTDID 2005 codes (3, 35, 432); CII requires UNTDID 2475 codes
-  (5, 29, 72). The sourced correspondence between the two is tracked on #13 (CII writer).
+  (5, 29, 72). The correspondence 3 = 5, 35 = 29, 432 = 72 is the European Commission's "EN16931 code
+  lists values v17b - used from 2026-05-15" (ec.europa.eu, Registry of supporting artefacts to implement
+  EN16931), sheet "Time"; `euinvoice/syntax/cii/_build.py` encodes it.
+* **CII gap · more than one BG-3.** The model allows 0..n preceding invoice references (XR table), but
+  `ram:HeaderTradeSettlementType` declares `ram:InvoiceReferencedDocument` with `minOccurs="0"` and the
+  default `maxOccurs` 1 (D16B `CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd`).
+  The CII writer raises `ModelError` for a second one.
+* **CII gap · BT-150 without BT-149.** CII writes BT-150 as the `@unitCode` of `ram:BasisQuantity` (BT-149),
+  a `udt:QuantityType` whose content is an `xs:decimal` (D16B `..._UnqualifiedDataType_100pD16B.xsd`), so a
+  unit without a quantity has no element to sit on. The CII writer raises `ModelError`.
+* **CII gap · BT-111 without BT-6.** BT-111's only binding is
+  `ram:TaxTotalAmount[@currencyID = ../../ram:TaxCurrencyCode]` (KoSIT binding, BR-53, BR-DEC-15); without
+  BT-6 the amount has no currency to carry. The CII writer raises `ModelError`.
+
+## Normalizations
+
+A writer may add a value the model leaves out when a syntax requires it and the value follows from other
+terms. A model → syntax → model round trip then gains that value.
+
+* **BT-148 derived from BT-146 + BT-147 in CII.** CII writes the item price discount BT-147 as an
+  allowance on `ram:GrossPriceProductTradePrice`, whose `ram:ChargeAmount` (BT-148) the D16B XSD requires
+  (`TradePriceType`, minOccurs 1). When BT-147 is set without BT-148, the CII writer writes
+  BT-148 = BT-146 + BT-147 (the identity BT-146 = BT-148 − BT-147 of PEPPOL-EN16931-R046), with BT-149/BT-150
+  as the gross price's `ram:BasisQuantity` (written on every gross price, as in the CEN examples). CEN does the same for its TOSL108 invoice:
+  `ubl-tc434-example2.xml` carries BT-147 only and `CII_example2.xml` writes gross 1498 = net 1273 +
+  allowance 225. A derived BT-148 below zero would break BR-28 (fatal), so the writer raises `ModelError`
+  then and asks for an explicit BT-148.

@@ -76,6 +76,8 @@ ignore = ["undocumented-public-module", "undocumented-public-package", "undocume
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "assert", "import-private-name"]
 "scripts/**" = ["print"]
+# The Syntax enum lives in the package root (IMPLEMENTATION_PLAN.md §4: "Syntax enum {UBL, CII}").
+"src/euinvoice/syntax/__init__.py" = ["non-empty-init-module"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -107,7 +109,7 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Dev scripts in scripts/ are importable from tests (tests/scripts/test_<name>.py).
-pythonpath = ["scripts"]
+pythonpath = ["scripts", "tests"]
 addopts = "-ra --strict-markers --strict-config -m 'not conformance'"
 xfail_strict = true
 markers = [
