@@ -73,3 +73,9 @@ All notable changes to this project are documented here. The format follows
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.
+
+### Fixed
+- Model text, code, identifier (value and scheme ids) and binary object (filename, mime code) fields
+  now refuse characters outside the XML 1.0 `Char` production (NUL and other C0 controls except tab,
+  LF and CR, lone surrogates, U+FFFE, U+FFFF) with a `ModelError` naming the code point and its index,
+  instead of failing late in the UBL/CII writers (#57).

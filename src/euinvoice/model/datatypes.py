@@ -70,11 +70,42 @@ __all__ = [
 _XPATH_SPACE: t.Final = " \t\r\n"
 """The characters XPath ``normalize-space`` strips (#x20, #x9, #xD, #xA)."""
 
-Text = t.Annotated[str, pydantic.Strict()]
+_NOT_XML_CHAR: t.Final = re.compile(r"[^\t\n\r\x20-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]")
+"""Any character outside the XML 1.0 ``Char`` production (W3C XML 1.0 5th edition, §2.2):
+``#x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]``."""
+
+
+def _xml_chars(value: str) -> str:
+    """Refuse text that holds a character XML 1.0 cannot carry.
+
+    UBL and CII instances are XML 1.0 documents, so such a character (NUL and the other C0 controls
+    except tab, LF and CR, a lone surrogate, U+FFFE, U+FFFF) can never be written in any syntax.
+
+    Args:
+        value: The text.
+
+    Returns:
+        ``value`` unchanged.
+
+    Raises:
+        ModelError: ``value`` holds a character outside the XML 1.0 ``Char`` production.
+    """
+    bad = _NOT_XML_CHAR.search(value)
+    if bad is not None:
+        raise ModelError(
+            f"character U+{ord(bad.group()):04X} at index {bad.start()} is not allowed in XML 1.0 "
+            "(W3C XML 1.0 5th edition §2.2, Char), so no syntax can carry it"
+        )
+    return value
+
+
+Text = t.Annotated[str, pydantic.Strict(), pydantic.AfterValidator(_xml_chars)]
 """EN 16931 Text (also used for Document reference and for identifiers without a scheme).
 
-Strict: a ``bytes`` or number is refused instead of being converted. Empty text is accepted: the CEN
-rules only test non-emptiness for the mandatory terms that use :data:`NonBlankText`.
+Strict: a ``bytes`` or number is refused instead of being converted. Only characters of the XML 1.0
+``Char`` production are accepted. Every model string type (codes, identifiers and their schemes,
+binary object filename and mime code) builds on this type. Empty text is accepted: the CEN rules only
+test non-emptiness for the mandatory terms that use :data:`NonBlankText`.
 """
 
 
