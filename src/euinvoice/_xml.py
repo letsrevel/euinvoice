@@ -67,6 +67,18 @@ XSLT: t.Final = "http://www.w3.org/1999/XSL/Transform"
 FACTURX_XMP: t.Final = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
 """The Factur-X 1.0 / ZUGFeRD 2.1+ XMP extension schema (prefix ``fx``; plan §5), as declared in the XMP of the
 Factur-X PDFs of the pinned ZUGFeRD corpus (e.g. ``ZUGFeRDv2/correct/symtrax/Beispiele``, ``XML-Rechnung/FX``)."""
+# XMP / PDF/A namespaces, as declared in the XMP of all 74 Factur-X PDFs of the pinned ZUGFeRD corpus
+# (``ZUGFeRDv2/correct``, ``XML-Rechnung/FX``; e.g. ``FNFE-factur-x-examples/Facture_FR_BASICWL.pdf``).
+RDF: t.Final = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+"""RDF, the syntax of an XMP packet (``rdf:RDF`` / ``rdf:Description``)."""
+PDFAID: t.Final = "http://www.aiim.org/pdfa/ns/id/"
+"""PDF/A identification schema (prefix ``pdfaid``): ``pdfaid:part`` and ``pdfaid:conformance``."""
+PDFA_EXTENSION: t.Final = "http://www.aiim.org/pdfa/ns/extension/"
+"""PDF/A extension schema container (prefix ``pdfaExtension``): ``pdfaExtension:schemas``."""
+PDFA_SCHEMA: t.Final = "http://www.aiim.org/pdfa/ns/schema#"
+"""PDF/A schema value type (prefix ``pdfaSchema``): one declared extension schema."""
+PDFA_PROPERTY: t.Final = "http://www.aiim.org/pdfa/ns/property#"
+"""PDF/A property value type (prefix ``pdfaProperty``): one property of an extension schema."""
 VEFA: t.Final = "http://difi.no/xsd/vefa/validator/1.0"
 """vefa-validator test sets: the format of the Peppol rules' unit tests (``rules/unit-*/*.xml``, ``testSet``)."""
 
