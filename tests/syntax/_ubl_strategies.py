@@ -23,6 +23,7 @@ from euinvoice.model import (
     Invoice,
     InvoiceLine,
     InvoiceLinePeriod,
+    InvoiceNote,
     InvoicingPeriod,
     PriceDetails,
 )
@@ -83,7 +84,7 @@ def ubl_expressible(invoice: Invoice) -> Invoice:
     if purchase_order == "NA" and invoice.sales_order_reference is not None:
         purchase_order = None
     notes = tuple(
-        note.model_copy(update={"note": note.note or None})
+        InvoiceNote.model_validate({**dict(note), "note": note.note or None})
         for note in invoice.notes
         if (note.note or note.subject_code) and not (note.subject_code is None and _LEADING_CODE.match(note.note or ""))
     )

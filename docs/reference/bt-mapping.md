@@ -335,9 +335,11 @@ syntax's writer reports the gap.
   `ram:HeaderTradeSettlementType` declares `ram:InvoiceReferencedDocument` with `minOccurs="0"` and the
   default `maxOccurs` 1 (D16B `CrossIndustryInvoice_ReusableAggregateBusinessInformationEntity_100pD16B.xsd`).
   The CII writer raises `ModelError` for a second one.
-* **CII gap · BT-150 without BT-149.** CII writes BT-150 as the `@unitCode` of `ram:BasisQuantity` (BT-149),
-  a `udt:QuantityType` whose content is an `xs:decimal` (D16B `..._UnqualifiedDataType_100pD16B.xsd`), so a
-  unit without a quantity has no element to sit on. The CII writer raises `ModelError`.
+* **Gap in both syntaxes · BT-150 without BT-149.** CII writes BT-150 as the `@unitCode` of `ram:BasisQuantity`
+  (BT-149), a `udt:QuantityType` whose content is an `xs:decimal` (D16B `..._UnqualifiedDataType_100pD16B.xsd`); UBL
+  writes it as `cac:Price/cbc:BaseQuantity/@unitCode`, a `QuantityType` that extends `xsd:decimal` (UBL 2.1
+  `common/CCTS_CCT_SchemaModule-2.1.xsd`). A unit without a quantity has no element to sit on in either syntax, so
+  both writers raise `ModelError`.
 * **CII gap · BT-111 without BT-6.** BT-111's only binding is
   `ram:TaxTotalAmount[@currencyID = ../../ram:TaxCurrencyCode]` (KoSIT binding, BR-53, BR-DEC-15); without
   BT-6 the amount has no currency to carry. The CII writer raises `ModelError`.

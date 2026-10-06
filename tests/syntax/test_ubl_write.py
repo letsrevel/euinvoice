@@ -133,6 +133,7 @@ def test_invoice_writes_tender_reference_before_contract_reference() -> None:
     ("note", "text"),
     [
         (InvoiceNote(subject_code="AAI"), "#AAI#"),
+        (InvoiceNote(subject_code="AAI", note=""), "#AAI#"),  # empty BT-22: bt-mapping.md "Normalizations"
         (InvoiceNote(subject_code="AAI", note="body"), "#AAI#body"),
         (InvoiceNote(note="#not a code"), "#not a code"),
     ],
