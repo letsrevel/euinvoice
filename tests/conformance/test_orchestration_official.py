@@ -248,3 +248,44 @@ def test_every_xrechnung_testsuite_instance_validates_under_xrechnung(path: Path
     blocking = {f.rule_id for f in report.findings if f.severity in BLOCKING}
     assert blocking == CUSTOM_LEVEL_GAP.get(relative, set()), report.findings
     assert {f.source for f in report.findings} <= {"cen-ubl", "cen-cii", "xrechnung-schematron"}
+
+
+# Upgrades: CEN 1.3.16 flags these rules ``warning``, so the raw-flag report is ok, while KoSIT's
+# scenarios.xml sets them to <customLevel level="error"> and rejects the document: CII-SR-452 / CII-SR-453
+# (EN16931-CII-syntax.sch, "Only one SpecifiedTradePaymentTerms [Description] should be present") in the
+# XRechnung CII scenario; UBL-CR-646 (EN16931-UBL-syntax.sch, "should not include the InvoiceLine
+# SubInvoiceLine") in the XRechnung UBL Invoice scenario.
+CAC = f"{{{_xml.UBL_CAC}}}"
+
+
+def with_repeated_payment_terms() -> etree._Element:
+    root = _xml.parse(member("xrechnung-testsuite", "instances/standard/01.01a-INVOICE_uncefact.xml"))
+    return repeated(root, f".//{RAM}SpecifiedTradePaymentTerms")
+
+
+def with_sub_invoice_line() -> etree._Element:
+    root = _xml.parse(member("xrechnung-testsuite", XR_UBL))
+    line = found(root.find(f"{CAC}InvoiceLine"))
+    sub = copy.deepcopy(line)
+    sub.tag = f"{CAC}SubInvoiceLine"
+    # cac:SubInvoiceLine follows cac:Price (and cac:DeliveryTerms) in the UBL 2.1 InvoiceLineType sequence.
+    found(line.find(f"{CAC}Price")).addnext(sub)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("document", "upgraded"),
+    [
+        (with_repeated_payment_terms, {("CII-SR-452", "cen-cii"), ("CII-SR-453", "cen-cii")}),
+        (with_sub_invoice_line, {("UBL-CR-646", "cen-ubl")}),
+    ],
+    ids=["cii-repeated-payment-terms", "ubl-sub-invoice-line"],
+)
+def test_upgraded_warnings_are_not_blocking_under_raw_flags(
+    document: t.Callable[[], etree._Element], upgraded: set[tuple[str, str]]
+) -> None:
+    report = validate(etree.tostring(document()), XRECHNUNG)
+
+    warnings = {(f.rule_id, f.source) for f in report.findings if f.severity is Severity.WARNING}
+    assert upgraded <= warnings, report.findings
+    assert report.ok, [f for f in report.findings if f.severity in BLOCKING]

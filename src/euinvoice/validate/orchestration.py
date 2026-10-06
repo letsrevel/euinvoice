@@ -20,10 +20,12 @@ Severities are the raw official flags. KoSIT's ``customLevel`` overrides in ``sc
 (xrechnung-validator-configuration 2026-08-31) are not applied (open question, issue #49), and they move
 the verdict in both directions:
 
-* Downgrades (``level="information"``) of fatal CEN rules, so the raw flags reject what KoSIT accepts:
+* Downgrades of CEN ``fatal`` rules, so the raw flags reject what KoSIT accepts. To ``information``:
   BR-CL-13 (CVD scenarios); BR-CL-10, BR-CL-11, BR-CL-21, BR-CL-24, BR-CL-25, BR-CL-26 (Extension
-  scenarios); BR-CO-16, UBL-CR-470, UBL-CR-646 (Extension UBL); CII-SR-475, CII-SR-476 (XRechnung,
-  Extension and CVD CII). BR-CL-21 and BR-CL-23 become ``warning`` in the other XRechnung scenarios.
+  scenarios); BR-CO-16 (Extension UBL). To ``warning``: BR-CL-23 (every XRechnung scenario) and BR-CL-21
+  (every non-Extension XRechnung scenario).
+* Downgrades of CEN ``warning`` rules to ``information`` (no verdict change): UBL-CR-470, UBL-CR-646
+  (Extension UBL); CII-SR-475, CII-SR-476 (XRechnung, Extension and CVD CII).
 * Upgrades (``level="error"``) of CEN ``warning`` rules, so the raw flags accept what KoSIT rejects:
   UBL-CR-646 (XRechnung UBL Invoice, CVD UBL Invoice and CreditNote); CII-SR-452, CII-SR-453,
   CII-SR-454, CII-SR-465, CII-SR-466 (XRechnung, Extension and CVD CII).
