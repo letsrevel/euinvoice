@@ -8,6 +8,7 @@ import typing as t
 from collections.abc import Callable
 from decimal import Decimal
 
+from _calc_drafts import not_subject_to_vat
 from _invoices import TEST_IBAN, minimal_invoice, rebuild
 from euinvoice import profiles
 from euinvoice.model import (
@@ -62,6 +63,25 @@ def xrechnung_invoice(**changes: t.Any) -> Invoice:
         "payment_instructions": payment(),
     }
     return minimal_invoice(**{**data, **changes})
+
+
+def xrechnung_o_invoice(**changes: t.Any) -> Invoice:
+    """A "Not subject to VAT" (O) invoice with the XRechnung terms of :func:`xrechnung_invoice`, from ``complete()``.
+
+    Its O breakdown has no BT-119, so it fails BR-DE-14 until :meth:`~euinvoice.profiles.Profile.prepare` (#75).
+    The seller has a legal registration id (BR-CO-26) and no VAT id (BR-O-02).
+    """
+    data: dict[str, t.Any] = {
+        "buyer_reference": "04011000-12345-34",
+        "process_control": ProcessControl(
+            business_process_type=PEPPOL_BILLING_01,
+            specification_identifier=profiles.XRECHNUNG.specification_identifier,
+        ),
+        "seller": seller(vat_identifier=None, legal_registration_identifier=Identifier(value="HRB 00000")),
+        "buyer": buyer(),
+        "payment_instructions": payment(),
+    }
+    return not_subject_to_vat(**{**data, **changes})
 
 
 def seller(**changes: t.Any) -> Seller:

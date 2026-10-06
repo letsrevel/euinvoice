@@ -2,13 +2,15 @@
 
 import dataclasses
 from collections.abc import Callable
+from decimal import Decimal
 
 import pydantic
 import pytest
 
+from _calc_drafts import not_subject_to_vat
 from euinvoice import profiles
 from euinvoice.errors import UnsupportedDocumentError
-from euinvoice.model import Invoice, ProcessControl
+from euinvoice.model import Invoice, ProcessControl, VatBreakdown
 from euinvoice.profiles import EN16931, Profile, registry
 from euinvoice.syntax import Syntax
 
@@ -108,6 +110,9 @@ class TestEn16931:
         assert EN16931.facturx_filename is None
         assert EN16931.facturx_conformance_level is None
 
+    def test_never_requires_bt119(self) -> None:
+        assert EN16931.vat_breakdown_rate_required is None
+
 
 class TestPrepare:
     def test_sets_the_profile_bt24(self, make_invoice: MakeInvoice) -> None:
@@ -144,6 +149,49 @@ class TestPrepare:
         invoice = make_full_invoice()
         assert invoice.process_control.specification_identifier == "urn:cen.eu:en16931:2017"
         assert EN16931.prepare(invoice) == invoice
+
+    def test_core_leaves_an_o_breakdown_without_bt119(self) -> None:
+        # BR-48 exempts category O from BT-119, so neither complete() nor the core profile writes one (#75).
+        invoice = not_subject_to_vat()
+        assert invoice.vat_breakdown[0].rate is None
+        assert EN16931.prepare(invoice).vat_breakdown == invoice.vat_breakdown
+
+    def test_writes_bt119_zero_on_an_o_breakdown_when_the_profile_requires_bt119(self) -> None:
+        invoice = not_subject_to_vat()
+        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(invoice)
+        (breakdown,) = prepared.vat_breakdown
+        assert breakdown.rate == Decimal("0")
+        assert breakdown.model_dump(exclude={"rate"}) == invoice.vat_breakdown[0].model_dump(exclude={"rate"})
+        assert prepared.model_dump(exclude={"process_control", "vat_breakdown"}) == invoice.model_dump(
+            exclude={"process_control", "vat_breakdown"}
+        )
+
+    def test_asks_the_profile_with_the_invoice(self) -> None:
+        invoice = not_subject_to_vat()
+        seen: list[Invoice] = []
+
+        def not_required(asked: Invoice) -> bool:
+            seen.append(asked)
+            return False
+
+        prepared = _profile(vat_breakdown_rate_required=not_required).prepare(invoice)
+        assert seen == [invoice]
+        assert prepared.vat_breakdown[0].rate is None
+
+    def test_writes_no_rate_for_another_category(self, make_invoice: MakeInvoice) -> None:
+        # Only O has a rate that follows from the category; a missing S rate is the caller's error (BR-S-09).
+        (s_group,) = make_invoice().vat_breakdown
+        groups = (VatBreakdown.model_validate({**dict(s_group), "rate": None}),)
+        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(make_invoice(vat_breakdown=groups))
+        assert prepared.vat_breakdown == groups
+
+    def test_keeps_a_bt119_the_caller_set_on_an_o_breakdown(self) -> None:
+        invoice = not_subject_to_vat()
+        groups = (VatBreakdown.model_validate({**dict(invoice.vat_breakdown[0]), "rate": Decimal("0.00")}),)
+        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(
+            Invoice.model_validate({**dict(invoice), "vat_breakdown": groups})
+        )
+        assert format(prepared.vat_breakdown[0].rate, "f") == "0.00"
 
     def test_validates_the_values_it_sets(self, make_invoice: MakeInvoice) -> None:
         # BT-24 is NonBlankText: a blank identifier must fail model validation, not slip through.

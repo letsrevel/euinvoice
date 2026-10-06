@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 import pytest
 
-from _xrechnung_cases import CVD_VIOLATIONS, EDGES, VIOLATIONS, xrechnung_invoice
+from _xrechnung_cases import CVD_VIOLATIONS, EDGES, VIOLATIONS, xrechnung_invoice, xrechnung_o_invoice
 from euinvoice import profiles
 from euinvoice.model import Invoice
 from euinvoice.profiles import xrechnung
@@ -89,3 +89,19 @@ def test_binding_edges_agree_with_the_schematron(name: str, syntax: Syntax) -> N
     ids, _ = agreement(profiles.XRECHNUNG, make(), syntax)
 
     assert ids == expected[syntax]
+
+
+@pytest.mark.parametrize("syntax", list(WRITERS))
+@pytest.mark.parametrize("profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id)
+def test_prepared_o_invoice_passes_cen_and_xrechnung(profile: profiles.Profile, syntax: Syntax) -> None:
+    # Issue #75: complete() leaves BT-119 off the O breakdown (BR-48 allows it), BR-DE-14 requires it, and
+    # prepare() writes 0 there, which CEN and XRechnung accept.
+    invoice = xrechnung_o_invoice()
+    unprepared = validate(WRITERS[syntax](invoice))
+    assert {f.rule_id for f in unprepared.findings if f.severity in BLOCKING} == {"BR-DE-14"}
+
+    ids, report = agreement(profile, invoice, syntax)
+
+    assert ids == set()
+    assert report.ok, [f for f in report.findings if f.severity in BLOCKING]
+    assert {f.rule_id for f in report.findings} <= {"BR-DE-TMP-32"}

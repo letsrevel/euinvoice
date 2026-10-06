@@ -3,8 +3,10 @@
 import dataclasses
 import typing as t
 from collections.abc import Callable
+from decimal import Decimal
 
-from euinvoice.model import Invoice, ProcessControl
+from euinvoice.model import Invoice, ProcessControl, VatBreakdown
+from euinvoice.model.codes import VatCategory
 from euinvoice.report import Finding
 from euinvoice.syntax import Syntax
 
@@ -73,6 +75,10 @@ class Profile:
             pre-flight never reports a ``fatal`` official rule id that the oracle would not raise for
             the written document; extra semantic checks use ``EUINV-*`` ids at ``warning`` severity.
             Defaults to :func:`no_preflight`.
+        vat_breakdown_rate_required: Whether the profile's rules require the VAT category rate (BT-119) on
+            every VAT breakdown of the given invoice, e.g. XRechnung BR-DE-14 or Peppol DE-R-014. When it
+            returns ``True``, :meth:`prepare` writes BT-119 = 0 on each "Not subject to VAT" (O) breakdown
+            that has none. ``None`` (EN 16931 core: BR-48 exempts category O) never asks.
     """
 
     id: str
@@ -84,6 +90,7 @@ class Profile:
     facturx_filename: str | None = None
     facturx_conformance_level: str | None = None
     preflight: Preflight = no_preflight
+    vat_breakdown_rate_required: Callable[[Invoice], bool] | None = None
 
     def __post_init__(self) -> None:
         """Reject declarations no syntax module or validator could serve.
@@ -118,8 +125,13 @@ class Profile:
 
         Sets PROCESS CONTROL (BG-2): BT-24 always becomes :attr:`specification_identifier`, because
         the profile the caller writes under decides what the document claims; BT-23 gets
-        :attr:`business_process_type` only when the invoice has none. The result is built through
-        model validation (never ``model_copy(update=...)``, which skips it).
+        :attr:`business_process_type` only when the invoice has none. When
+        :attr:`vat_breakdown_rate_required` says so, a "Not subject to VAT" (O) VAT breakdown without
+        BT-119 gets BT-119 = 0, the value of the official XRechnung instance ``standard/01.04a-INVOICE_ubl.xml``
+        (``cbc:Percent`` 0) and ``01.04a-INVOICE_uncefact.xml`` (``ram:RateApplicablePercent`` 0). The CEN rules
+        accept it: BR-O-05/06/07 forbid a rate on O lines, allowances and charges only, and BR-CO-17 holds with
+        BT-117 = 0 (BR-O-09). A breakdown of another category keeps a missing rate, which has no default. The
+        result is built through model validation (never ``model_copy(update=...)``, which skips it).
 
         Args:
             invoice: The invoice to prepare.
@@ -135,5 +147,13 @@ class Profile:
             business_process_type=self.business_process_type if bt23 is None else bt23,
             specification_identifier=self.specification_identifier,
         )
+        breakdown = invoice.vat_breakdown
+        if self.vat_breakdown_rate_required is not None and self.vat_breakdown_rate_required(invoice):
+            breakdown = tuple(
+                VatBreakdown.model_validate({**dict(group), "rate": Decimal(0)})
+                if group.category_code == VatCategory.NOT_SUBJECT_TO_VAT and group.rate is None
+                else group
+                for group in breakdown
+            )
         # ``dict(invoice)`` holds the top-level field values; nested models are already validated.
-        return Invoice.model_validate({**dict(invoice), "process_control": process_control})
+        return Invoice.model_validate({**dict(invoice), "process_control": process_control, "vat_breakdown": breakdown})

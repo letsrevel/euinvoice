@@ -1,8 +1,18 @@
 """Unit tests for the XRechnung profiles and their pre-flight checks (offline)."""
 
+from decimal import Decimal
+
 import pytest
 
-from _xrechnung_cases import CVD_VIOLATIONS, EDGES, VIOLATIONS, cvd_invoice, seller, xrechnung_invoice
+from _xrechnung_cases import (
+    CVD_VIOLATIONS,
+    EDGES,
+    VIOLATIONS,
+    cvd_invoice,
+    seller,
+    xrechnung_invoice,
+    xrechnung_o_invoice,
+)
 from euinvoice import profiles
 from euinvoice.model import (
     Invoice,
@@ -56,6 +66,31 @@ class TestDeclarations:
         prepared = profile.prepare(xrechnung_invoice())
         assert prepared.process_control.specification_identifier == profile.specification_identifier
         assert profiles.get(prepared.process_control.specification_identifier) is profile
+
+
+class TestNotSubjectToVat:
+    """BR-DE-14 requires BT-119 on every VAT breakdown, an O one included (issue #75)."""
+
+    @pytest.mark.parametrize("profile", [*XRECHNUNG_PROFILES, profiles.FACTURX_XRECHNUNG], ids=lambda p: p.id)
+    def test_prepare_writes_bt119_zero_on_the_o_breakdown(self, profile: profiles.Profile) -> None:
+        invoice = xrechnung_o_invoice()
+        assert invoice.vat_breakdown[0].rate is None  # as calc.complete builds it
+
+        prepared = profile.prepare(invoice)
+
+        assert [g.rate for g in prepared.vat_breakdown] == [Decimal("0")]
+
+    @pytest.mark.parametrize("profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id)
+    def test_prepared_o_invoice_has_no_findings(self, profile: profiles.Profile) -> None:
+        assert rule_ids(profile, profile.prepare(xrechnung_o_invoice())) == set()
+
+    def test_unprepared_o_invoice_fails_br_de_14(self) -> None:
+        assert rule_ids(profiles.XRECHNUNG, xrechnung_o_invoice()) == {"BR-DE-14"}
+
+    def test_a_missing_s_rate_is_still_reported(self) -> None:
+        invoice = profiles.XRECHNUNG.prepare(VIOLATIONS["BR-DE-14"]())
+        assert invoice.vat_breakdown[0].rate is None
+        assert rule_ids(profiles.XRECHNUNG, invoice) == {"BR-DE-14"}
 
 
 class TestPreflight:
