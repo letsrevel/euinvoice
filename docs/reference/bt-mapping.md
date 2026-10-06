@@ -364,6 +364,10 @@ terms. A model → syntax → model round trip then gains that value.
   whose terms (including BG-14) are all absent and a BG-19 whose BT-89, BT-90 and BT-91 are all absent, so a
   model → CII → model round trip drops them. It writes BT-29 identifiers without a scheme first (`ram:ID` precedes
   `ram:GlobalID` in the D16B `TradePartyType` sequence), so their order may change.
+* **Empty groups and notes are not written in UBL.** The UBL writer writes nothing for a BG-1 note with neither
+  BT-21 nor BT-22, a BG-13 with no term set, a BG-19 with none of BT-89..BT-91, and an empty `cac:InvoicePeriod` for
+  a BG-14 / BG-26 without dates reads back as absent; a model → UBL → model round trip drops such empty groups. A
+  BT-21 note whose BT-22 is empty is written `#CODE#` and reads back with no BT-22.
 
 ### The CII reader (#14)
 
@@ -395,3 +399,40 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
 * Content the model cannot hold (e.g. a line-level `ram:ExemptionReason`, Factur-X EXTENDED elements, a second card)
   is unmapped. A model that cannot be built (a missing required term, a code outside its list) is a `ParseError`
   naming the BT/BG and located at the element being read; Factur-X MINIMUM / BASIC WL subsets are #22's job.
+
+
+### The UBL reader (#11)
+
+The reader (`euinvoice.syntax.ubl.read`) is the inverse of the writer and accepts both roots (`Invoice`,
+`CreditNote` with `cac:CreditNoteLine` / `cbc:CreditedQuantity`). Anything it cannot map to a business term is
+listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
+
+* **BT-21** is taken only from a leading `#CODE#` whose CODE has exactly three characters and is in UNTDID 4451; the
+  rest is BT-22. Any other note is BT-22 verbatim (issue #11; CEN BR-CL-08 accepts more, so nothing it accepts is
+  refused). A BT-22 without BT-21 that itself starts with such a pair reads back as BT-21 + BT-22. An empty
+  `cbc:Note` is unmapped.
+* **BT-13**: `cac:OrderReference/cbc:ID` `NA` next to a `cbc:SalesOrderID` is the writer's placeholder and reads as
+  no BT-13. Known ambiguity: a genuine purchase order reference "NA" together with a BT-14 cannot be told apart.
+* **Credit notes**: BT-9 is `cac:PaymentMeans/cbc:PaymentDueDate` (in an `Invoice` that element is unmapped), BT-11
+  is `cac:AdditionalDocumentReference` with `cbc:DocumentTypeCode` 50 (in an `Invoice` such a reference is unmapped,
+  CEN UBL-SR-43). An `Invoice` with BT-3 = 81 reads like a `CreditNote` (see the code 81 normalization).
+* `cac:AdditionalDocumentReference` is BT-18 (code 130, the first), BT-11 (code 50, credit note) or BG-24 (no code);
+  any other is unmapped. A line `cac:DocumentReference` is BT-128 only with code 130 (the table's binding; Peppol
+  PEPPOL-EN16931-R101); one without a code, as in CEN `ubl-tc434-example5.xml`, is unmapped.
+* **BT-90** is `cac:PartyIdentification/cbc:ID[@schemeID='SEPA']` of the Payee, else of the Seller (issue #10); a
+  copy with the same value under the other party is taken too, a different one is unmapped, and so is a SEPA id
+  when there is no `cac:PaymentMeans` (BG-16 needs BT-81, BR-49).
+* **BG-16 / BG-17**: every `cac:PaymentMeans/cac:PayeeFinancialAccount` is a BG-17. BT-81, BT-82, BT-83 and the
+  credit note BT-9 come from their first occurrence; a repeat equal to it (codes and dates under
+  `normalize-space`, BT-83 exactly, as UBL-SR-44) or absent is taken, a different one is unmapped (UBL-SR-44..47).
+  The first `cac:CardAccount` and `cac:PaymentMandate` are BG-18 and BG-19.
+* **BT-110 / BT-111** are the `cac:TaxTotal/cbc:TaxAmount` whose `@currencyID` is BT-5 / BT-6; BG-23 is read from
+  the BT-110 `cac:TaxTotal` only; another `cac:TaxTotal` is unmapped. Every other amount's `@currencyID` is taken
+  only when it is BT-5; another currency is unmapped.
+* Consumed without a business term, and only with exactly the value the writer itself writes (any other value is
+  unmapped): `cac:CardAccount/cbc:NetworkID` `NA` (note N2), the `cac:TaxScheme/cbc:ID` `FC` of BT-32, and
+  `VAT` (under `normalize-space`, upper-cased, as the CEN rules select it) of VAT identifiers and categories.
+* Dates are `xs:date` `YYYY-MM-DD` (surrounding whitespace allowed); one with a time zone, or not a calendar date,
+  is a `ParseError` (`BT-n: cannot interpret the date …`), since the model keeps a calendar date only. A model that
+  cannot be built (a missing required term, a code outside its list) is a `ParseError` naming the BT/BG and located
+  at the element being read.
