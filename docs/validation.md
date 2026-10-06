@@ -20,8 +20,8 @@ extracts them into `$EUINVOICE_ARTIFACTS_DIR` (default `~/.cache/euinvoice`). Ru
 message is the command to run. Without the `[validate]` extra it raises the same error naming the extra.
 
 !!! note "Command-line interface"
-    `python -m euinvoice artifacts fetch` is the only CLI command so far. `validate`, `convert` and `info`
-    subcommands are planned ([#28](https://github.com/letsrevel/euinvoice/issues/28)).
+    `python -m euinvoice` has four commands: `validate`, `convert`, `info` and `artifacts fetch`. See
+    [Command line](https://github.com/letsrevel/euinvoice#command-line) in the README.
 
 ## 2. Validate a document
 

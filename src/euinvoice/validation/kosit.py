@@ -38,16 +38,17 @@ a ``flag`` (a conformance test checks it), so KoSIT's ``@role`` fallbacks never 
 XRECHNUNG_CVD, a scenario matches, and that scenario's ``validateWithSchematron`` steps are the rule sets
 ``validate()`` ran, compared by stylesheet file stem (``EN16931-UBL-validation``, ``XRechnung-CII-validation``,
 ...). The pinned configuration names the same CEN 1.3.16 and XRechnung Schematron 2.6.0 releases as the
-``cen-*`` and ``xrechnung-schematron`` pins (its ``scenarios.xml`` description). ponytail: the compiled CEN CII
-stylesheets still differ in one assert. Upstream ``EN16931-CII-syntax.sch`` defines the param ``CII-SR-282`` twice
-(lines 427 and 429); our ``cen-cii`` XSLT tests ``not(ram:SellerTaxRepresentativeTradeParty/ram:ID)`` and KoSIT's
-bundled ``resources/cii/16b/xsl/EN16931-CII-validation.xsl`` tests ``not(ram:BuyerTaxRepresentativeTradeParty)``.
-CII-SR-282 is a ``warning`` that no scenario overrides, so raw warnings can differ from KoSIT's report, but the
-verdict cannot. Upgrade path: compare the assert sets of both builds on
-each pin bump. With an explicit profile,
+``cen-*`` and ``xrechnung-schematron`` pins (its ``scenarios.xml`` description). With an explicit profile,
 KoSIT's choice of scenario still follows the document: XRECHNUNG on an Extension document gets the Extension
 scenario (same rule sets), while XRECHNUNG on a plain EN 16931 document matches a CEN-only scenario and gets
 ``None``, because that verdict would not be about the XRechnung rules that ran.
+
+ponytail: the compiled CEN CII stylesheets still differ in one assert. Upstream ``EN16931-CII-syntax.sch`` defines
+the param ``CII-SR-282`` twice (lines 427 and 429); our ``cen-cii`` XSLT tests
+``not(ram:SellerTaxRepresentativeTradeParty/ram:ID)`` and KoSIT's bundled
+``resources/cii/16b/xsl/EN16931-CII-validation.xsl`` tests ``not(ram:BuyerTaxRepresentativeTradeParty)``.
+CII-SR-282 is a ``warning`` that no scenario overrides, so raw warnings can differ from KoSIT's report, but the
+verdict cannot. Upgrade path: compare the assert sets of both builds on each pin bump.
 """
 
 import dataclasses

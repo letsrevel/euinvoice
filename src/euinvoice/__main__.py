@@ -105,13 +105,14 @@ def _kosit_json(kosit: KositAssessment) -> dict[str, t.Any]:
     def entry(finding: Finding, effective: Severity) -> dict[str, str]:
         return {"rule_id": finding.rule_id, "severity": finding.severity, "effective_severity": effective}
 
-    # A blocking finding's effective severity is its override if one applies (matched by identity), else its own.
-    overridden = {id(o.finding): o.severity for o in kosit.overrides}
+    # A blocking finding's effective severity is its override if one applies, else its own (Finding is frozen and
+    # hashable, so equal findings match even when a KositAssessment is built by hand).
+    overridden = {o.finding: o.severity for o in kosit.overrides}
     return {
         "scenario": kosit.scenario,
         "accepted": kosit.accepted,
         "overrides": [entry(o.finding, o.severity) for o in kosit.overrides],
-        "blocking": [entry(f, overridden.get(id(f), f.severity)) for f in kosit.blocking],
+        "blocking": [entry(f, overridden.get(f, f.severity)) for f in kosit.blocking],
     }
 
 
