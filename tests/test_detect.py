@@ -7,6 +7,7 @@ import pytest
 from euinvoice import _xml, profiles
 from euinvoice.detect import Detection, detect, detect_root
 from euinvoice.errors import ParseError, UnsupportedDocumentError
+from euinvoice.syntax import Syntax
 
 CORE = "urn:cen.eu:en16931:2017"
 PEPPOL = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
@@ -35,7 +36,7 @@ def cii(*bt24: str) -> bytes:
 
 def test_a_ubl_invoice_with_the_core_bt24_resolves_to_en16931() -> None:
     assert detect(ubl()) == Detection(
-        syntax="ubl", root="Invoice", specification_identifier=CORE, profile=profiles.EN16931
+        syntax=Syntax.UBL, root="Invoice", specification_identifier=CORE, profile=profiles.EN16931
     )
 
 
@@ -46,7 +47,7 @@ def test_a_ubl_credit_note_is_told_apart_by_its_root() -> None:
 
 def test_a_cii_invoice_with_the_core_bt24_resolves_to_en16931() -> None:
     assert detect(cii(CORE)) == Detection(
-        syntax="cii", root="CrossIndustryInvoice", specification_identifier=CORE, profile=profiles.EN16931
+        syntax=Syntax.CII, root="CrossIndustryInvoice", specification_identifier=CORE, profile=profiles.EN16931
     )
 
 
@@ -79,14 +80,14 @@ def test_a_cius_id_never_falls_back_to_the_core_profile() -> None:
 
 def test_detection_is_immutable() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
-        detect(ubl()).syntax = "cii"  # type: ignore[misc]  # asserting the frozen dataclass rejects this
+        detect(ubl()).syntax = Syntax.CII  # type: ignore[misc]  # asserting the frozen dataclass rejects this
 
 
 @pytest.mark.parametrize("bt24", [None, "", "   "])
 def test_a_ubl_document_without_bt24_is_classified_without_bt24_or_profile(bt24: str | None) -> None:
     # An invalid invoice, not garbage: validate() must still run the official rules (BR-01) on it.
     assert detect(ubl(bt24=bt24)) == Detection(
-        syntax="ubl", root="Invoice", specification_identifier=None, profile=None
+        syntax=Syntax.UBL, root="Invoice", specification_identifier=None, profile=None
     )
 
 
@@ -96,7 +97,7 @@ def test_a_cii_document_without_exactly_one_bt24_is_classified_without_bt24_or_p
 ) -> None:
     # The CEN rules report these (BR-01, CII-SR-009/010); detection picks no profile.
     assert detect(cii(*bt24)) == Detection(
-        syntax="cii", root="CrossIndustryInvoice", specification_identifier=None, profile=None
+        syntax=Syntax.CII, root="CrossIndustryInvoice", specification_identifier=None, profile=None
     )
 
 
@@ -131,7 +132,7 @@ def test_pdf_magic_inside_xml_text_is_not_a_pdf() -> None:
     data = ubl().replace(b"<cbc:ID>", b"<cbc:Note>%PDF-1.7 attached</cbc:Note><cbc:ID>")
     assert data.find(b"%PDF-") < 1024
     assert detect(data) == Detection(
-        syntax="ubl", root="Invoice", specification_identifier=CORE, profile=profiles.EN16931
+        syntax=Syntax.UBL, root="Invoice", specification_identifier=CORE, profile=profiles.EN16931
     )
 
 

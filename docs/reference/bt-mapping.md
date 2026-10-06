@@ -280,8 +280,21 @@ is unbounded.
   (`ram:TypeCode` 50) and BT-18 (130); a BG-24 entry has `ram:TypeCode` 916. The mappers must filter by
   type code.
 * **N2 · UBL `cac:CardAccount/cbc:NetworkID`** is mandatory in the UBL 2.1 XSD
-  (`UBL-CommonAggregateComponents-2.1.xsd:3122`, `CardAccountType`) but carries no business term. The UBL writer
-  (#10) has to supply a value whenever BG-18 is present.
+  (`UBL-CommonAggregateComponents-2.1.xsd:3122`, `CardAccountType`, minOccurs=1 maxOccurs=1) but carries no
+  business term; the CEN rules only forbid its `@schemeID` (UBL-CR-675, warning). The UBL writer (#10)
+  writes `NA` whenever BG-18 is present, the example value of the Peppol upstream structure docs
+  (peppol-bis-invoice-3 commit 806866b, not a pinned artifact), `structure/syntax/part/card-payment.xml`
+  ("Syntax required element not related to a business term"); the reader ignores it.
+* **N3 · UBL credit notes.** `CreditNoteType` has neither `cbc:DueDate` nor `cac:ProjectReference`. BT-9 is
+  `/CreditNote/cac:PaymentMeans/cbc:PaymentDueDate` and BT-11 is
+  `/CreditNote/cac:AdditionalDocumentReference/cbc:ID[following-sibling::cbc:DocumentTypeCode='50']`
+  (Peppol upstream structure docs, commit 806866b, `ubl-creditnote.xml`; KoSIT `ubl-creditnote-xr.xsl`;
+  CEN UBL-SR-43 allows code 50 only in a credit note). BT-9 in a credit note therefore needs BG-16 (whose
+  BT-81 is mandatory, BR-49); the writer refuses it otherwise.
+* **N4 · UBL writer fill-ins.** `cac:OrderReference/cbc:ID` is mandatory, so BT-14 without BT-13 writes
+  `NA` there (Peppol upstream structure docs, commit 806866b, `ubl-invoice.xml`, BT-13). BT-32 is written
+  with `cac:TaxScheme/cbc:ID` `FC`, as in the XRechnung test suite (CEN only requires a value other than
+  `VAT`, UBL-SR-13). BT-90 is written under `cac:PayeeParty` when BG-10 is present, else under the Seller.
 
 ## Library conventions
 
@@ -338,3 +351,12 @@ terms. A model → syntax → model round trip then gains that value.
   `ubl-tc434-example2.xml` carries BT-147 only and `CII_example2.xml` writes gross 1498 = net 1273 +
   allowance 225. A derived BT-148 below zero would break BR-28 (fatal), so the writer raises `ModelError`
   then and asks for an explicit BT-148.
+* **BT-147 derived from BT-148 − BT-146 in UBL.** UBL writes BT-147 and BT-148 as `cbc:Amount` and
+  `cbc:BaseAmount` of `cac:Price/cac:AllowanceCharge`, and `cbc:Amount` is mandatory there (UBL 2.1 XSD
+  `AllowanceChargeType`). When BT-148 is set without BT-147, the UBL writer writes BT-147 = BT-148 − BT-146
+  (`0.00` when they are equal), the identity of PEPPOL-EN16931-R046 (`rules/sch/PEPPOL-EN16931-UBL.sch:363`);
+  the same TOSL108 pair shows the binding. A BT-148 below BT-146 would need a negative discount, i.e. a
+  price-level charge, which PEPPOL-EN16931-R044 forbids, so the writer raises `ModelError` then.
+* **Code 81 written as a UBL `CreditNote`.** BT-3 = 81 is in both CEN UBL lists (BR-CL-01); the UBL writer
+  always writes it as `CreditNote` (Peppol accepts it only there, P0101; issue #10), so a UBL `Invoice` with
+  code 81 is read back and written again as a `CreditNote`. The model stores no root hint (D4).

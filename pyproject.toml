@@ -78,6 +78,8 @@ ignore = ["undocumented-public-module", "undocumented-public-package", "undocume
 "scripts/**" = ["print"]
 # The Syntax enum lives in the package root (IMPLEMENTATION_PLAN.md §4: "Syntax enum {UBL, CII}").
 "src/euinvoice/syntax/__init__.py" = ["non-empty-init-module"]
+# One row per business term (keyed by BT id for the coverage gate #32): long XPaths, kept one row per line.
+"tests/syntax/test_*_write_bts.py" = ["line-too-long"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
