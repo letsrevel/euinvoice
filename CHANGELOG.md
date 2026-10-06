@@ -24,6 +24,11 @@ All notable changes to this project are documented here. The format follows
   its model path and back. `docs/reference/bt-mapping.md` lists every id with its UBL and CII XPath
   and the source of each fact. `InvoiceDraft` / `LineDraft` share every field with `Invoice` /
   `InvoiceLine` except the derived BG-22, BG-23 and BT-131 (the input of `calc`).
+- `euinvoice.syntax.cii.read()`: reads a parsed CII D16B `rsm:CrossIndustryInvoice` into an `Invoice` and returns
+  a `euinvoice.syntax.result.ParseResult` whose `unmapped` lists the XPath of every element or attribute no
+  business term took (out-of-model content is reported, never dropped). Model errors become `ParseError` with the
+  BT/BG id and the element's XPath. Every CII file of the CEN examples, the KoSIT XRechnung testsuite and the
+  ZUGFeRD corpus round-trips and validates, except five that break fatal CEN code-list rules.
 - `euinvoice.syntax.cii.write()`: serializes an `Invoice` (invoice or credit note) as UN/CEFACT CII
   D16B `rsm:CrossIndustryInvoice`, in XSD element order, every date as `format="102"`, BT-8 mapped to
   UNTDID 2475, empty notes skipped, and BT-148 derived as BT-146 + BT-147 when only the discount is

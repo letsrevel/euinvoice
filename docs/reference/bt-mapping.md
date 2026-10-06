@@ -360,3 +360,29 @@ terms. A model → syntax → model round trip then gains that value.
 * **Code 81 written as a UBL `CreditNote`.** BT-3 = 81 is in both CEN UBL lists (BR-CL-01); the UBL writer
   always writes it as `CreditNote` (Peppol accepts it only there, P0101; issue #10), so a UBL `Invoice` with
   code 81 is read back and written again as a `CreditNote`. The model stores no root hint (D4).
+* **Empty groups are not written in CII.** The CII writer skips a BG-1 note with neither BT-21 nor BT-22, a BG-13
+  whose terms (including BG-14) are all absent and a BG-19 whose BT-89, BT-90 and BT-91 are all absent, so a
+  model → CII → model round trip drops them. It writes BT-29 identifiers without a scheme first (`ram:ID` precedes
+  `ram:GlobalID` in the D16B `TradePartyType` sequence), so their order may change.
+
+### The CII reader (#14)
+
+The reader (`euinvoice.syntax.cii.read`) is the inverse of the writer. Anything it cannot map to a business term is
+listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
+
+* Dates are read only with `@format='102'` (CCYYMMDD); another format, or an invalid date, is a `ParseError` (binding
+  note on #13). BT-8 is mapped back from UNTDID 2475 (5, 29, 72) to 2005 (3, 35, 432); another code is a
+  `ParseError` (CII BR-CL-06).
+* BT-7 and BT-8 are read from whichever `ram:ApplicableTradeTax` carries them (one distinct value, CII-SR-461/462).
+* BT-84 is `ram:IBANID`, else `ram:ProprietaryID`. Each `ram:SpecifiedTradeSettlementPaymentMeans` with the first one's
+  BT-81 and BT-82 adds its account as a BG-17; a means with another BT-81/BT-82 is unmapped. BT-83, BT-89 and BT-90
+  without any payment means are unmapped (BG-16 needs BT-81, BR-49).
+* BT-41 / BT-56 is `ram:PersonName`, else `ram:DepartmentName`. A party identifier is `ram:ID` or `ram:GlobalID`, each
+  with its `@schemeID` if present.
+* `ram:TaxTotalAmount` is BT-110 or BT-111 by its `@currencyID` (BT-5 or BT-6); one with neither is unmapped.
+* Consumed without a business term: `ram:SpecifiedProcuringProject/ram:Name`, a gross price `ram:BasisQuantity` equal
+  to the net one (a different one is unmapped), the `ram:TypeCode` of VAT taxes and of BG-24 / BT-17 / BT-18
+  documents, empty `ram:IncludedNote` elements, and the `@format` of dates.
+* Content the model cannot hold (e.g. a line-level `ram:ExemptionReason`, Factur-X EXTENDED elements, a second card)
+  is unmapped. A model that cannot be built (a missing required term, a code outside its list) is a `ParseError`
+  naming the BT/BG and located at the element being read; Factur-X MINIMUM / BASIC WL subsets are #22's job.
