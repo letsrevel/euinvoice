@@ -41,7 +41,7 @@ def test_our_own_bug_is_not_reported_as_a_broken_pdf(monkeypatch: pytest.MonkeyP
     def broken(*args: object, **kwargs: object) -> None:
         raise AttributeError("bug in our XMP code")
 
-    monkeypatch.setattr("euinvoice.facturx._extract.xmp.values", broken)
+    monkeypatch.setattr("euinvoice.facturx._extract.xmp._values", broken)
 
     with pytest.raises(AttributeError, match="bug in our XMP code"):
         facturx.extract(_source())

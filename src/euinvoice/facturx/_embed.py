@@ -33,7 +33,6 @@ import typing as t
 
 try:
     import pypdf
-    from pypdf.errors import PyPdfError
     from pypdf.generic import ArrayObject, NameObject, NumberObject, TextStringObject
 except ImportError as exc:
     raise ImportError("Factur-X embedding needs pypdf: install the extra with `pip install 'euinvoice[pdf]'`.") from exc
@@ -42,6 +41,7 @@ from lxml import etree
 from euinvoice import _xml, detect, profiles
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.facturx import xmp
+from euinvoice.facturx._pypdf import PYPDF_FAILURES, metadata_bytes
 from euinvoice.model import Invoice
 from euinvoice.profiles import Profile
 from euinvoice.syntax import Syntax, cii
@@ -103,7 +103,7 @@ def embed(
     # reported as a broken PDF.
     try:
         reader, metadata, attachments = _read(pdf)
-    except _PYPDF_FAILURES as exc:
+    except PYPDF_FAILURES as exc:
         raise PdfError(f"cannot read the PDF: {type(exc).__name__}: {exc}") from exc
     packet = _packet(metadata)
     if filename in attachments:
@@ -117,12 +117,8 @@ def embed(
     packet_bytes = etree.tostring(packet.getroottree(), encoding="UTF-8")
     try:
         return _write(reader, xml, filename=filename, relationship=relationship, metadata=packet_bytes)
-    except _PYPDF_FAILURES as exc:
+    except PYPDF_FAILURES as exc:
         raise PdfError(f"cannot read the PDF: {type(exc).__name__}: {exc}") from exc
-
-
-_PYPDF_FAILURES: t.Final = (PyPdfError, ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError)
-"""What pypdf raises on malformed input besides its own ``PyPdfError`` hierarchy (found by byte-mutation fuzzing)."""
 
 
 def _read(pdf: bytes) -> tuple[pypdf.PdfReader, bytes, frozenset[str]]:
@@ -134,13 +130,8 @@ def _read(pdf: bytes) -> tuple[pypdf.PdfReader, bytes, frozenset[str]]:
     identifier = reader.trailer.get("/ID")
     if identifier is not None and len(t.cast(ArrayObject, identifier.get_object())) != 2:
         raise PdfError("the trailer /ID must hold two file identifiers (ISO 32000-1 §14.4, PDF/A 6.1.3)")
-    metadata = reader.root_object.get("/Metadata")
-    if metadata is None:
-        raise PdfError("the PDF has no XMP metadata, so it is not PDF/A-3 (plan §5)")
-    stream = metadata.get_object()
-    if not isinstance(stream, pypdf.generic.StreamObject):
-        raise PdfError("the catalog /Metadata is not a stream")
-    return reader, stream.get_data(), frozenset(reader.attachments)
+    metadata = metadata_bytes(reader, missing="the PDF has no XMP metadata, so it is not PDF/A-3 (plan §5)")
+    return reader, metadata, frozenset(reader.attachments)
 
 
 def _write(reader: pypdf.PdfReader, xml: bytes, *, filename: str, relationship: Relationship, metadata: bytes) -> bytes:

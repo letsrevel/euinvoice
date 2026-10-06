@@ -70,7 +70,8 @@ def test_the_xmp_level_selects_the_profile_of_the_embedded_xml() -> None:
     mismatches: dict[str, str] = {}
     for pdf in facturx_pdfs():
         profile = profiles.by_conformance_level(pdf.level)
-        assert pdf.xmp_filename == profile.facturx_filename, pdf.name
+        # pdf.xmp_filename == profile.facturx_filename is enforced by facturx.extract (test_facturx_extract_corpus.py);
+        # the attachment names here are an independent pypdf listing.
         assert profile.facturx_filename in pdf.attachments, pdf.name
         bt24 = _bt24(pdf.xml)
         if bt24 != profile.specification_identifier:

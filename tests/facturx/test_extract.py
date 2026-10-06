@@ -271,14 +271,55 @@ def test_doctype_in_xmp_is_refused() -> None:
         facturx.extract(pdf(packet))
 
 
-def test_two_attachments_with_the_invoice_name_are_refused() -> None:
+def _bomb() -> pypdf.generic.StreamObject:
+    """A FlateDecode stream that decodes to one byte over pypdf's default ``zlib_maximum_output_length``."""
+    limit = pypdf.Configuration().zlib_maximum_output_length
+    plain = pypdf.generic.DecodedStreamObject()
+    plain.set_data(bytes(limit + 1))
+    return plain.flate_encode()
+
+
+@pytest.mark.parametrize("duplicate", ["plain", "bomb", "corrupt"])
+def test_two_attachments_with_the_invoice_name_are_refused_before_decoding(duplicate: str) -> None:
+    # Entries are counted before any is decoded: a duplicate that is a decompression bomb or unreadable gives the
+    # "2 attachments" refusal, not pypdf's LimitReachedError (or another decoding failure).
     writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(_build([_fx()], {"factur-x.xml": _core_xml()}))))
-    writer.add_attachment("factur-x.xml", b"<other/>")
+    embedded = writer.add_attachment("factur-x.xml", b"<other/>")
+    ef = t.cast(pypdf.generic.DictionaryObject, embedded.pdf_object["/EF"])
+    if duplicate == "bomb":
+        ef[NameObject("/F")] = writer._add_object(_bomb())
+    elif duplicate == "corrupt":
+        ef[NameObject("/F")] = NameObject("/NotAStream")
     out = io.BytesIO()
     writer.write(out)
 
     with pytest.raises(PdfError, match=r"2 attachments named 'factur-x\.xml'"):
         facturx.extract(out.getvalue())
+
+
+def test_the_bomb_alone_hits_the_pypdf_limit() -> None:
+    # The control for the test above: decoding the bomb does raise LimitReachedError, mapped to PdfError.
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(_build([_fx()], {"factur-x.xml": b"<x/>"}))))
+    for embedded in writer.attachment_list:
+        t.cast(pypdf.generic.DictionaryObject, embedded.pdf_object["/EF"])[NameObject("/F")] = writer._add_object(
+            _bomb()
+        )
+    out = io.BytesIO()
+    writer.write(out)
+
+    with pytest.raises(PdfError, match="LimitReachedError"):
+        facturx.extract(out.getvalue())
+
+
+def test_attachment_matches_by_its_file_spec_name() -> None:
+    # pypdf lists an attachment under its name-tree key and its /UF (else /F) name; extract matches either.
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(_build([_fx()], {"key.bin": _core_xml()}))))
+    for embedded in writer.attachment_list:
+        embedded.alternative_name = pypdf.generic.TextStringObject("factur-x.xml")
+    out = io.BytesIO()
+    writer.write(out)
+
+    assert facturx.extract(out.getvalue()).xml == _core_xml()
 
 
 def test_non_stream_metadata_is_refused() -> None:

@@ -126,7 +126,11 @@ def _xml_samples(source: artifacts.SourceName) -> list[Sample]:
 
 
 def _read_pdf(path: pathlib.Path, name: str) -> FacturXPdf | None:
-    """The Factur-X view of a PDF, or ``None`` when its XMP does not declare the Factur-X schema."""
+    """The Factur-X view of a PDF, or ``None`` when its XMP declares a ZUGFeRD 1.0 / 2.0 schema instead.
+
+    A PDF in scope that :func:`euinvoice.facturx.extract` refuses (no invoice XMP, an ambiguous or unattested
+    attachment) fails collection loudly with its ``PdfError``: every PDF under :data:`PDF_SCOPE` is an e-invoice.
+    """
     data = path.read_bytes()
     extracted = facturx.extract(data)
     if extracted.container != "factur-x":
