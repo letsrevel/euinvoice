@@ -101,7 +101,7 @@ All notable changes to this project are documented here. The format follows
   shadowing). `check(invoice, syntax=Syntax.UBL | Syntax.CII)` reports that binding's failures as
   `fatal`; without a syntax, a rule is `fatal` when both bindings reject it and a `warning`
   `EUINV-CALC-PORTABILITY` naming the rule and binding when only one does. A conformance test
-  cross-checks `check()` against the official CEN CII Schematron on mutated invoices.
+  cross-checks `check()` against the official CEN UBL and CII Schematron on mutated invoices.
   `ExemptionReason` carries BT-120/BT-121 per category. `complete()` reproduces the totals of every
   CEN 1.3.16 and Peppol 3.0.21 example (except one HUF example that rounds VAT to whole forints).
 

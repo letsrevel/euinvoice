@@ -1,16 +1,17 @@
-"""``calc.check`` agrees with the official CEN CII Schematron on mutated invoices (``make conformance``).
+"""``calc.check`` agrees with the official CEN Schematron of each syntax on mutated invoices.
 
-Each invoice in :data:`CASES` breaks one rule (or sits on one UBL/CII asymmetry). It is written with
-:func:`euinvoice.syntax.cii.write` and validated with the pinned ``CEN_CII`` rule set; then:
+Each invoice in :data:`CASES` breaks one rule (or sits on one UBL/CII asymmetry). For each syntax it is
+written with :func:`euinvoice.syntax.cii.write` / :func:`euinvoice.syntax.ubl.write` and validated with
+the pinned ``CEN_CII`` / ``CEN_UBL`` rule set; then:
 
-* every ``fatal`` id of ``check(invoice)`` is reported by CEN CII;
-* every CII-only portability warning names a rule CEN CII reports;
-* no UBL-only portability warning names a rule CEN CII reports;
-* ``check(invoice, syntax=Syntax.CII)`` reports only ids CEN CII reports.
+* every ``fatal`` id of ``check(invoice)`` is reported by that rule set;
+* every portability warning against that syntax names a rule the rule set reports;
+* no portability warning against the other syntax names a rule the rule set reports;
+* ``check(invoice, syntax=...)`` reports only ids the rule set reports.
+
+The UBL writer refuses an invoice without BT-110 or with BT-6 = BT-5 (UBL cannot express it); for those
+``check(invoice, syntax=Syntax.UBL)`` must report the rejection instead.
 """
-
-# ponytail: CII only. Add the same cross-check against CEN_UBL once the UBL writer (#58) merges: UBL-only
-# warnings must then appear in CEN UBL, CII-only ones must not.
 
 import typing as t
 from collections.abc import Callable
@@ -20,9 +21,10 @@ import pytest
 
 from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
 from euinvoice import calc
+from euinvoice.errors import ModelError
 from euinvoice.model import Invoice, VatBreakdown
 from euinvoice.report import Severity
-from euinvoice.syntax import Syntax, cii
+from euinvoice.syntax import Syntax, cii, ubl
 from euinvoice.validate import schematron
 
 pytestmark = pytest.mark.conformance
@@ -167,23 +169,34 @@ CASES: dict[str, Callable[[], Invoice]] = {
 }
 
 
+RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] = {
+    Syntax.CII: (cii.write, schematron.CEN_CII),
+    Syntax.UBL: (ubl.write, schematron.CEN_UBL),
+}
+CLEAN: t.Final = {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate"}
+
+
+@pytest.mark.parametrize("syntax", list(Syntax))
 @pytest.mark.parametrize("name", list(CASES))
-def test_check_agrees_with_cen_cii(name: str) -> None:
+def test_check_agrees_with_the_official_cen_schematron(name: str, syntax: Syntax) -> None:
     invoice = CASES[name]()
-    official = {
-        f.rule_id
-        for f in schematron.run(schematron.CEN_CII, cii.write(invoice))
-        if f.severity in {Severity.FATAL, Severity.ERROR}
-    }
+    serialize, rule_set = RULE_SETS[syntax]
     findings = calc.check(invoice)
+    assert bool(findings) == (name not in CLEAN)
+    try:
+        document = serialize(invoice)
+    except ModelError:
+        assert syntax is Syntax.UBL
+        assert calc.check(invoice, syntax=syntax), name  # the writer's refusal is a UBL rejection
+        return
+    official = {f.rule_id for f in schematron.run(rule_set, document) if f.severity in {Severity.FATAL, Severity.ERROR}}
 
     fatal = {f.rule_id for f in findings if f.severity is Severity.FATAL}
     warned = {f.message.split(" fails in the ", 1)[0]: f.message for f in findings if f.rule_id == calc.PORTABILITY}
-    cii_only = {rule for rule, message in warned.items() if " the CII binding only " in message}
-    ubl_only = {rule for rule, message in warned.items() if " the UBL binding only " in message}
+    this_only = {rule for rule, message in warned.items() if f" the {syntax.name} binding only " in message}
+    other_only = set(warned) - this_only
 
     assert fatal <= official, (name, fatal - official, official)
-    assert cii_only <= official, (name, cii_only - official, official)
-    assert not ubl_only & official, (name, ubl_only & official)
-    assert {f.rule_id for f in calc.check(invoice, syntax=Syntax.CII)} <= official
-    assert bool(findings) == (name not in {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate"})
+    assert this_only <= official, (name, this_only - official, official)
+    assert not other_only & official, (name, other_only & official)
+    assert {f.rule_id for f in calc.check(invoice, syntax=syntax)} <= official
