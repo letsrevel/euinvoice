@@ -45,18 +45,16 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.detect import Detection, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
+from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.validate import schematron, xsd
 
-__all__ = ["EUINVOICE_SOURCE", "FACTURX_RULE_SET", "PROFILE_FALLBACK_RULE_ID", "validate"]
+__all__ = ["EUINVOICE_SOURCE", "PROFILE_FALLBACK_RULE_ID", "validate"]
 
 PROFILE_FALLBACK_RULE_ID: t.Final = "EUINVOICE-PROFILE-FALLBACK"
 """Rule id of the ``information`` finding added when an auto-detected profile falls back to EN 16931 core."""
 EUINVOICE_SOURCE: t.Final = "euinvoice"
 """``source`` of findings euinvoice itself adds (not produced by an official rule set)."""
-
-FACTURX_RULE_SET: t.Final = "facturx"
-"""The rule-set name of the Factur-X / ZUGFeRD per-profile Schematron, not pinned yet (issue #42)."""
 
 # (Profile.rule_sets name, syntax) → compiled rule set. Lives here, not in profiles: profiles must not
 # import euinvoice.validate (dependency direction, plan §4).

@@ -13,6 +13,7 @@ import pytest
 
 from euinvoice import _xml, detect, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
+from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.syntax import cii
 from euinvoice.validate import artifacts, schematron, validate
 
@@ -107,7 +108,7 @@ def test_every_cii_file_reads_and_round_trips(source: artifacts.SourceName) -> N
         written = cii.write(first.invoice)
         if cii.read(_xml.parse(written)).invoice != first.invoice:
             failures.append(f"{name}: read(write(read(X))) != read(X)")
-        if "facturx" in (profile := detect.detect(data).profile or profiles.EN16931).rule_sets:
+        if FACTURX_RULE_SET in (profile := detect.detect(data).profile or profiles.EN16931).rule_sets:
             # Factur-X levels without pinned rules (#42) refuse validation; the CEN core rules still run.
             with pytest.raises(ArtifactsNotAvailableError, match="issues/42"):
                 validate(written)

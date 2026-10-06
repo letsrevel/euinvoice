@@ -140,10 +140,13 @@ All notable changes to this project are documented here. The format follows
   container fields. EN 16931 and XRECHNUNG are generated with `prepare()` and the CII writer and validated with the CEN
   (and XRechnung) rules. BASIC, EN 16931, EXTENDED and XRECHNUNG documents read into the model, with EXTENDED
   content beyond EN 16931 listed in `unmapped`; MINIMUM and BASIC WL have no lines and raise a `ParseError`
-  naming BG-25 / BR-16 and #69. `validate()` raises `ArtifactsNotAvailableError` for MINIMUM, BASIC WL, BASIC and EXTENDED,
+  naming the missing terms (reading them is open, #69). `validate()` raises `ArtifactsNotAvailableError` for MINIMUM, BASIC WL, BASIC and EXTENDED,
   whose official Schematron is in the Factur-X package, not pinned yet (#42).
 
 ### Changed
+- `validate()` no longer falls back to EN 16931 core for auto-detected Factur-X MINIMUM, BASIC WL, BASIC and
+  EXTENDED documents (now registered by their BT-24): it raises `ArtifactsNotAvailableError` until their
+  Factur-X Schematron is pinned (#42). Pass `profile=profiles.EN16931` to run the core rules.
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.

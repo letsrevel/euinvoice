@@ -13,6 +13,9 @@ the BT-24 registry (:func:`euinvoice.profiles.get`) does not hold them.
 Rule sets: EN 16931 runs the CEN rules and XRECHNUNG the CEN and XRechnung rules, which are pinned. MINIMUM,
 BASIC WL, BASIC and EXTENDED declare ``"facturx"``: their official per-profile Schematron ships only in the
 Factur-X package (plan §3), so ``validate()`` raises ``ArtifactsNotAvailableError`` for them until #42 pins it.
+For EN 16931 and XRECHNUNG, the Factur-X package's own XSD and Schematron are not run either (#42): validation
+uses the D16B CII XSD and the pinned CEN (and XRechnung) rules, so an ``ok`` report is the EN 16931 / XRechnung
+verdict, not a full Factur-X one.
 """
 
 import dataclasses
@@ -20,7 +23,7 @@ import typing as t
 from collections.abc import Mapping
 
 from euinvoice.errors import UnsupportedDocumentError
-from euinvoice.profiles._base import Profile
+from euinvoice.profiles._base import FACTURX_RULE_SET, Profile
 from euinvoice.profiles.xrechnung import XRECHNUNG
 from euinvoice.syntax import Syntax
 
@@ -39,7 +42,7 @@ _FILENAME: t.Final = "factur-x.xml"
 """The embedded file name of every level but XRECHNUNG: XMP ``fx:DocumentFileName`` and attachment name of every
 Factur-X-namespace PDF of the corpus except ``XML-Rechnung/FX/XRECHNUNG_*.pdf`` (and the deliberately wrong
 ``ZUGFeRDv2/fail/Mustangproject/wrongFilename.pdf``); plan §5."""
-_FACTURX_RULES: t.Final = ("facturx",)
+_FACTURX_RULES: t.Final = (FACTURX_RULE_SET,)
 
 FACTURX_MINIMUM: t.Final = Profile(
     id="facturx-minimum",
@@ -82,6 +85,9 @@ FACTURX_BASIC: t.Final = Profile(
 )
 """Factur-X BASIC, an EN 16931 CIUS (``#compliant#``): reads into the full model."""
 
+# ponytail: the Factur-X EN16931 XSD and Schematron are not run until #42 pins them. Validation uses the D16B CII
+# XSD and the CEN CII rules, so ``ok`` is the EN 16931 verdict, not a full Factur-X one; add the Factur-X rule set
+# here once it is pinned.
 FACTURX_EN16931: t.Final = Profile(
     id="facturx-en16931",
     title="Factur-X / ZUGFeRD EN 16931 (COMFORT)",
@@ -124,7 +130,7 @@ FACTURX_EXTENDED: t.Final = Profile(
 )
 """Factur-X EXTENDED, an EN 16931 extension (``#conformant#``): reads into the model plus ``unmapped``."""
 
-LEVELS: t.Final = (
+_LEVELS: t.Final = (
     FACTURX_MINIMUM,
     FACTURX_BASIC_WL,
     FACTURX_BASIC,
@@ -132,8 +138,11 @@ LEVELS: t.Final = (
     FACTURX_EXTENDED,
     FACTURX_XRECHNUNG,
 )
-"""Every Factur-X level, from the smallest to the largest data set; XRECHNUNG last."""
-_BY_LEVEL: t.Final[Mapping[str, Profile]] = {p.facturx_conformance_level or "": p for p in LEVELS}
+"""Every Factur-X level, from the smallest to the largest data set; XRECHNUNG last. Each declares a distinct XMP
+conformance level (``tests/profiles/test_facturx.py`` checks the lookup finds every one)."""
+_BY_LEVEL: t.Final[Mapping[str, Profile]] = {
+    p.facturx_conformance_level: p for p in _LEVELS if p.facturx_conformance_level is not None
+}
 
 
 def by_conformance_level(level: str) -> Profile:

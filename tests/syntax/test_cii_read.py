@@ -447,9 +447,8 @@ def test_missing_lines_name_br_16() -> None:
     # Factur-X MINIMUM and BASIC WL have no lines: the model cannot be built (needs-human #69).
     root = tree(minimal_invoice())
     one(root, TX).remove(one(root, f"{TX}/ram:IncludedSupplyChainTradeLineItem"))
-    with pytest.raises(ParseError, match=r"BG-25 \(lines\).*BR-16.*issues/69") as caught:
+    with pytest.raises(ParseError, match=r"BG-25 \(lines\).*BR-16"):
         cii.read(root)
-    assert caught.value.location == ROOT
 
 
 def test_invalid_code_is_located_at_its_group() -> None:

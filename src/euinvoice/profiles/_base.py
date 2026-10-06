@@ -8,12 +8,15 @@ from euinvoice.model import Invoice, ProcessControl
 from euinvoice.report import Finding
 from euinvoice.syntax import Syntax
 
-__all__ = ["RULE_SETS", "SYNTAXES", "Preflight", "Profile", "no_preflight"]
+__all__ = ["FACTURX_RULE_SET", "RULE_SETS", "SYNTAXES", "Preflight", "Profile", "no_preflight"]
 
 SYNTAXES: t.Final[frozenset[Syntax]] = frozenset(Syntax)
 """The syntaxes a profile can support: UBL 2.1 (``Syntax.UBL``) and UN/CEFACT CII D16B (``Syntax.CII``)."""
 
-RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung", "facturx"})
+FACTURX_RULE_SET: t.Final = "facturx"
+"""The rule-set name of the Factur-X / ZUGFeRD per-profile Schematron, not pinned yet (issue #42)."""
+
+RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung", FACTURX_RULE_SET})
 """The official Schematron rule-set names a profile can declare (see :attr:`Profile.rule_sets`).
 
 ``"facturx"`` is the per-profile Schematron of the Factur-X / ZUGFeRD package (plan §3), which is not pinned yet

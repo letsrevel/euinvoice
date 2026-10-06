@@ -28,6 +28,7 @@ from lxml import etree
 
 from euinvoice import _xml, detect, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError
+from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import Finding
 from euinvoice.syntax import cii
 from euinvoice.validate import artifacts, validate
@@ -82,9 +83,10 @@ EXCLUDED: t.Final[dict[str, str]] = {
 """In-scope PDFs of a readable level the model refuses, with the fatal CEN rule the ParseError and the CEN
 Schematron (run on the upstream XML) both name (D8)."""
 
-NOT_IN_MODEL: t.Final = {"MINIMUM": r"BR-16.*issues/69", "BASIC WL": r"BR-16.*issues/69"}
+NOT_IN_MODEL: t.Final = {"MINIMUM": "BT-106", "BASIC WL": "BR-16"}
 """Levels without lines (BG-25, BR-16; MINIMUM also lacks BT-106 and BG-23): no EN 16931 invoice, so no model
-instance (needs-human #69)."""
+instance (needs-human #69). The reader stops at the first group it cannot build: for MINIMUM that is BG-22
+(BT-106 missing), read before the lines."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -190,7 +192,7 @@ def _added(profile: profiles.Profile, original: bytes, written: bytes) -> set[st
     """Fatal or error findings the round trip adds, under the level's runnable rules."""
     if profile is profiles.FACTURX_EN16931:
         return _blocking(validate(written, profile).findings)  # the corpus EN 16931 files are valid: none at all
-    if "facturx" in profile.rule_sets:
+    if FACTURX_RULE_SET in profile.rule_sets:
         with pytest.raises(ArtifactsNotAvailableError, match="issues/42"):
             validate(written, profile)
         profile = profiles.EN16931  # the pinned rules that do run: the CEN core rules

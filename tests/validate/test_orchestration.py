@@ -245,8 +245,8 @@ def test_missing_artifacts_surface(monkeypatch: pytest.MonkeyPatch, tmp_path: pa
 
 def test_every_rule_set_name_maps_for_every_syntax() -> None:
     # "facturx" has no pinned artifact (#42): validate() refuses it before any step instead of mapping it.
-    runnable = profiles_base.RULE_SETS - {orchestration.FACTURX_RULE_SET}
-    assert orchestration.FACTURX_RULE_SET in profiles_base.RULE_SETS
+    runnable = profiles_base.RULE_SETS - {profiles_base.FACTURX_RULE_SET}
+    assert profiles_base.FACTURX_RULE_SET in profiles_base.RULE_SETS
     assert set(orchestration._RULE_SETS) == set(itertools.product(runnable, profiles_base.SYNTAXES))
 
 

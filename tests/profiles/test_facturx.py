@@ -6,6 +6,7 @@ from euinvoice import _xml, detect, profiles
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles import facturx
+from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.syntax import Syntax, cii
 
 CORE = "urn:cen.eu:en16931:2017"
@@ -14,14 +15,14 @@ XRECHNUNG = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3
 # (profile, BT-24, XMP fx:ConformanceLevel, embedded file name, rule sets): the evidence is cited per value in
 # src/euinvoice/profiles/facturx.py; tests/conformance/test_facturx_corpus.py checks it against the corpus PDFs.
 DECLARED = [
-    (profiles.FACTURX_MINIMUM, "urn:factur-x.eu:1p0:minimum", "MINIMUM", "factur-x.xml", ("facturx",)),
-    (profiles.FACTURX_BASIC_WL, "urn:factur-x.eu:1p0:basicwl", "BASIC WL", "factur-x.xml", ("facturx",)),
+    (profiles.FACTURX_MINIMUM, "urn:factur-x.eu:1p0:minimum", "MINIMUM", "factur-x.xml", (FACTURX_RULE_SET,)),
+    (profiles.FACTURX_BASIC_WL, "urn:factur-x.eu:1p0:basicwl", "BASIC WL", "factur-x.xml", (FACTURX_RULE_SET,)),
     (
         profiles.FACTURX_BASIC,
         "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic",
         "BASIC",
         "factur-x.xml",
-        ("facturx",),
+        (FACTURX_RULE_SET,),
     ),
     (profiles.FACTURX_EN16931, CORE, "EN 16931", "factur-x.xml", ("cen",)),
     (
@@ -29,7 +30,7 @@ DECLARED = [
         "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended",
         "EXTENDED",
         "factur-x.xml",
-        ("facturx",),
+        (FACTURX_RULE_SET,),
     ),
     (profiles.FACTURX_XRECHNUNG, XRECHNUNG, "XRECHNUNG", "xrechnung.xml", ("cen", "xrechnung")),
 ]
@@ -60,8 +61,8 @@ def test_declares_its_identifiers(
 
 
 def test_levels_lists_every_level_once() -> None:
-    assert tuple(row[0] for row in DECLARED) == facturx.LEVELS
-    assert len({p.id for p in facturx.LEVELS}) == len(facturx.LEVELS)
+    assert tuple(row[0] for row in DECLARED) == facturx._LEVELS
+    assert len({p.id for p in facturx._LEVELS}) == len(facturx._LEVELS)
 
 
 class TestByConformanceLevel:
