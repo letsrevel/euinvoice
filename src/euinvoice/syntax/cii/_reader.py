@@ -15,10 +15,12 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.errors import ParseError
 from euinvoice.model import Identifier
-from euinvoice.model._base import EuInvoiceModel, bt_id
+from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.cii._build import DATE_FORMAT
 
-_XML_SPACE: t.Final = " \t\r\n"
+XML_SPACE: t.Final = " \t\r\n"
+"""The characters XPath ``normalize-space`` treats as whitespace (#x20, #x9, #xD, #xA)."""
+_XML_SPACE_RUN: t.Final = re.compile(r"[ \t\r\n]+")
 _DATE_102: t.Final = re.compile(r"[0-9]{8}")
 _TRUE: t.Final = frozenset({"true", "1"})
 _FALSE: t.Final = frozenset({"false", "0"})
@@ -65,6 +67,16 @@ class Reader:
         """The first child element called ``name``, marked; later ones stay unmapped (the model has room for one)."""
         found = self.children(parent, name, namespace)
         return self.use(found[0]) if found else None
+
+    def first_text(self, parent: etree._Element | None, name: str, *, normalized: bool = False) -> str | None:
+        """The text of the first ``ram:<name>`` child, without marking it (``None`` without one).
+
+        ``normalized`` applies XPath ``normalize-space``, as the CEN rules compare codes.
+        """
+        found = self.children(parent, name)
+        if not found:
+            return None
+        return normalize_space(content(found[0])) if normalized else content(found[0])
 
     def text(self, parent: etree._Element | None, name: str) -> str | None:
         """The text of the first ``ram:<name>`` child, ``None`` without one (an empty element reads as ``""``)."""
@@ -115,7 +127,7 @@ class Reader:
         if element is None:
             raise ParseError(f"{term}: ram:{name} has no {string}", location=self.path(holder))
         code = self.attribute(element, "format")
-        text = content(element).strip(_XML_SPACE)
+        text = content(element).strip(XML_SPACE)
         if code == DATE_FORMAT and _DATE_102.fullmatch(text):
             try:
                 return datetime.date(int(text[:4]), int(text[4:6]), int(text[6:]))
@@ -127,49 +139,33 @@ class Reader:
             location=self.path(element),
         )
 
-    def indicator(self, parent: etree._Element, name: str, term: str) -> bool:
-        """Read ``ram:<name>/udt:Indicator`` (``xs:boolean``; CII-SR-183 forbids ``udt:IndicatorString``).
-
-        Raises:
-            ParseError: The indicator is missing or not an ``xs:boolean``.
-        """
-        element = self.one(self.one(parent, name), "Indicator", _xml.CII_UDT)
-        text = None if element is None else content(element).strip(_XML_SPACE)
-        if text in _TRUE:
-            return True
-        if text in _FALSE:
-            return False
-        raise ParseError(
-            f"{term}: ram:{name}/udt:Indicator must be 'true' or 'false', got {text!r}",
-            location=self.path(parent if element is None else element),
-        )
-
-    def model[M: EuInvoiceModel](
-        self, cls: type[M], element: etree._Element, term: str | None = None, /, **values: object
-    ) -> M:
-        """Build ``cls`` from ``values``, turning model errors into a located :class:`ParseError`.
-
-        Args:
-            cls: The model class.
-            element: The element the values were read from (the error location).
-            term: The business term id of a class whose fields carry none (``ItemClassificationIdentifier``).
-            **values: The field values.
+    def indicator(self, parent: etree._Element, name: str) -> bool | None:
+        """Read ``ram:<name>/udt:Indicator`` (``xs:boolean``), marking it only when it is one.
 
         Returns:
-            The validated model.
+            The value, or ``None`` when the indicator is missing or not an ``xs:boolean`` (the D16B XSD makes
+            ``ram:ChargeIndicator`` optional, CII-SR-119 allows a price allowance without it, and the CEN rules
+            select allowances and charges by ``udt:Indicator``, so such an element is no BG-20/21/27/28 and no
+            BT-147: the caller leaves it unmapped instead of refusing the invoice).
+        """
+        holder = self.children(parent, name)
+        found = self.children(holder[0] if holder else None, "Indicator", _xml.CII_UDT)
+        text = normalize_space(content(found[0])) if found else None
+        value = True if text in _TRUE else False if text in _FALSE else None
+        if value is not None:
+            self.use(holder[0])
+            self.use(found[0])
+        return value
+
+    def model[M: pydantic.BaseModel](
+        self, cls: type[M], element: etree._Element, term: str | None = None, /, **values: object
+    ) -> M:
+        """Build ``cls`` from ``values`` read at ``element`` (:func:`euinvoice.syntax._read_errors.build`).
 
         Raises:
-            ParseError: The values do not form a valid ``cls``; the message names each failing BT/BG id. A
-                :class:`~euinvoice.errors.ModelError` raised by a model check arrives inside pydantic's
-                ``ValidationError`` (it subclasses ``ValueError``), so it is covered too.
+            ParseError: The values do not form a valid ``cls``; located at ``element``, naming each BT/BG id.
         """
-        try:
-            # None means "absent": a missing required term then reads as pydantic's "Field required".
-            return cls(**{name: value for name, value in values.items() if value is not None})
-        except pydantic.ValidationError as exc:
-            problems = "; ".join(_problem(cls, error) for error in exc.errors())
-            label = cls.__name__ if term is None else f"{term} {cls.__name__}"
-            raise ParseError(f"cannot read {label}: {problems}", location=self.path(element)) from exc
+        return build(cls, self.path(element), values, term)
 
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the input no business term took (``ParseResult.unmapped``), in document order.
@@ -198,6 +194,11 @@ class Reader:
                 found.append(self.path(child))
 
 
+def normalize_space(text: str) -> str:
+    """XPath ``normalize-space``: XML whitespace stripped and inner runs collapsed to one space."""
+    return " ".join(_XML_SPACE_RUN.split(text.strip(XML_SPACE)))
+
+
 def content(element: etree._Element) -> str:
     """The text of a leaf element (``""`` when empty)."""
     return element.text or ""
@@ -211,13 +212,3 @@ def _attribute_name(element: etree._Element, name: str) -> str:
     prefixes = {uri: prefix for prefix, uri in element.nsmap.items() if prefix is not None}
     prefix = prefixes.get(qname.namespace)
     return name if prefix is None else f"{prefix}:{qname.localname}"
-
-
-def _problem(cls: type[EuInvoiceModel], error: t.Any) -> str:
-    """One pydantic error as ``BT-n (field): message``."""
-    location = tuple(error["loc"])
-    field = location[0] if location and isinstance(location[0], str) else None
-    ident = bt_id(cls, field) if field is not None and field in cls.model_fields else None
-    where = ".".join(str(part) for part in location)
-    label = f"{ident} ({where})" if ident is not None else where or cls.__name__
-    return f"{label}: {error['msg']}"

@@ -8,14 +8,6 @@ from euinvoice.model import Identifier
 from euinvoice.syntax.cii._build import OBJECT_TYPE_CODE, VAT
 from euinvoice.syntax.cii._reader import Reader, content
 
-_XML_SPACE = " \t\r\n"
-
-
-def code_of(reader: Reader, element: etree._Element) -> str | None:
-    """The ``ram:TypeCode`` of ``element`` stripped of XML whitespace, without marking it."""
-    found = reader.children(element, "TypeCode")
-    return content(found[0]).strip(_XML_SPACE) if found else None
-
 
 def vat_category(
     reader: Reader, parent: etree._Element | None, name: str
@@ -26,26 +18,25 @@ def vat_category(
     other tax stays unmapped.
     """
     for element in reader.children(parent, name):
-        if code_of(reader, element) == VAT:
+        if reader.first_text(element, "TypeCode", normalized=True) == VAT:
             reader.use(element)
             reader.one(element, "TypeCode")
             return element, reader.text(element, "CategoryCode"), reader.text(element, "RateApplicablePercent")
     return None
 
 
-def allowance_charge_values(reader: Reader, element: etree._Element, term: str) -> tuple[bool, dict[str, str | None]]:
+def allowance_charge_values(reader: Reader, element: etree._Element) -> tuple[bool, dict[str, str | None]] | None:
     """A ``ram:SpecifiedTradeAllowanceCharge``: its ``ChargeIndicator`` and the fields shared by BG-20/21/27/28.
-
-    Args:
-        reader: The reader.
-        element: The allowance or charge.
-        term: The group ids, for an error message.
 
     Returns:
         ``True`` for a charge, and the ``amount``, ``base_amount``, ``percentage``, ``reason_code`` and ``reason``
-        model fields.
+        model fields; ``None``, leaving the element unmapped, when it has no ``xs:boolean`` ``udt:Indicator``
+        (the CEN rules select BG-20/21/27/28 by ``ram:ChargeIndicator/udt:Indicator``, see ``Reader.indicator``).
     """
-    charge = reader.indicator(element, "ChargeIndicator", term)
+    charge = reader.indicator(element, "ChargeIndicator")
+    if charge is None:
+        return None
+    reader.use(element)
     return charge, {
         "percentage": reader.text(element, "CalculationPercent"),
         "base_amount": reader.text(element, "BasisAmount"),
@@ -71,7 +62,7 @@ def object_identifier(reader: Reader, parent: etree._Element | None) -> Identifi
     """
     for element in reader.children(parent, "AdditionalReferencedDocument"):
         value = reader.children(element, "IssuerAssignedID")
-        if code_of(reader, element) == OBJECT_TYPE_CODE and value:
+        if reader.first_text(element, "TypeCode", normalized=True) == OBJECT_TYPE_CODE and value:
             reader.use(element)
             reader.one(element, "TypeCode")
             return Identifier(value=content(reader.use(value[0])), scheme_id=reader.text(element, "ReferenceTypeCode"))

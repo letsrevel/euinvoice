@@ -266,18 +266,86 @@ def test_gross_basis_quantity_different_from_the_net_one_is_unmapped() -> None:
     assert result.unmapped == (f"{LAGR}/ram:GrossPriceProductTradePrice/ram:BasisQuantity",)
 
 
-def test_gross_price_charge_and_second_allowance_are_unmapped() -> None:
+def test_gross_price_charge_is_unmapped_and_the_next_allowance_is_bt_147() -> None:
     root = tree(full_invoice())
     gross = one(root, f"{LAGR}/ram:GrossPriceProductTradePrice")
     second = add(gross, "AppliedTradeAllowanceCharge")
     add(add(second, "ChargeIndicator"), "udt:Indicator", "false")
+    add(second, "ActualAmount", "0.25")
     one(root, f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge[1]//udt:Indicator").text = "true"
     result = cii.read(root)
+    assert result.invoice.lines[0].price_details.item_price_discount == Decimal("0.25")
+    assert result.unmapped == (f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge[1]",)
+
+
+def test_second_gross_price_allowance_is_unmapped() -> None:
+    root = tree(full_invoice())
+    second = add(one(root, f"{LAGR}/ram:GrossPriceProductTradePrice"), "AppliedTradeAllowanceCharge")
+    add(add(second, "ChargeIndicator"), "udt:Indicator", "false")
+    add(second, "ActualAmount", "0.25")
+    result = cii.read(root)
+    assert result.invoice == full_invoice()
+    assert result.unmapped == (f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge[2]",)
+
+
+@pytest.mark.parametrize("indicator", [None, "yes"])
+def test_gross_price_allowance_without_boolean_indicator_is_unmapped(indicator: str | None) -> None:
+    # The D16B XSD makes ram:ChargeIndicator optional and CII-SR-119 (a warning) accepts a price allowance without
+    # it: no BT-147 can be read from it, and the invoice is not refused.
+    root = tree(full_invoice())
+    path = f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge"
+    if indicator is None:
+        _remove(root, f"{path}/ram:ChargeIndicator")
+    else:
+        one(root, f"{path}/ram:ChargeIndicator/udt:Indicator").text = indicator
+    result = cii.read(root)
     assert result.invoice.lines[0].price_details.item_price_discount is None
-    assert result.unmapped == (
-        f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge[1]",
-        f"{LAGR}/ram:GrossPriceProductTradePrice/ram:AppliedTradeAllowanceCharge[2]",
-    )
+    assert result.unmapped == (path,)
+
+
+def test_second_payment_means_without_information_adds_a_credit_transfer() -> None:
+    # CII-SR-467/468 compare only the TypeCode / Information elements present (normalize-space); a missing one
+    # does not differ (EN16931-CII-syntax.sch), as in KoSIT 03.07a and CEN CII_example5.xml.
+    root = tree(full_invoice())
+    means = one(root, f"{STL}/ram:SpecifiedTradeSettlementPaymentMeans")
+    other = etree.Element(means.tag)
+    add(other, "TypeCode", " 58 ")
+    account = add(other, "PayeePartyCreditorFinancialAccount")
+    add(account, "ProprietaryID", "ACCOUNT-2")
+    means.addnext(other)
+    result = cii.read(root)
+    instructions = result.invoice.payment_instructions
+    assert instructions is not None
+    assert [c.payment_account_identifier for c in instructions.credit_transfers] == [TEST_IBAN, "ACCOUNT-2"]
+    assert result.unmapped == ()
+
+
+def test_information_of_a_later_means_is_bt_82_when_the_first_has_none() -> None:
+    root = tree(full_invoice())
+    means = one(root, f"{STL}/ram:SpecifiedTradeSettlementPaymentMeans")
+    information = one(means, "ram:Information")
+    means.remove(information)
+    other = etree.Element(means.tag)
+    add(other, "TypeCode", "58")
+    other.append(information)
+    means.addnext(other)
+    result = cii.read(root)
+    assert result.invoice == full_invoice()
+    assert result.unmapped == ()
+
+
+def test_procuring_project_with_another_name_is_unmapped() -> None:
+    root = tree(full_invoice())
+    one(root, f"{AGR}/ram:SpecifiedProcuringProject/ram:Name").text = "Projekt"
+    result = cii.read(root)
+    assert result.invoice == full_invoice()
+    assert result.unmapped == (f"{AGR}/ram:SpecifiedProcuringProject/ram:Name",)
+
+
+def test_note_with_bare_text_is_unmapped() -> None:
+    root = tree(minimal_invoice())
+    add(one(root, DOC), "IncludedNote", "text outside ram:Content")
+    assert cii.read(root).unmapped == (f"{DOC}/ram:IncludedNote",)
 
 
 def test_payment_means_with_another_code_is_unmapped() -> None:
@@ -413,15 +481,17 @@ def test_invalid_base64_is_a_parse_error() -> None:
 
 
 @pytest.mark.parametrize("text", ["yes", None])
-def test_invalid_charge_indicator_is_a_parse_error(text: str | None) -> None:
+def test_allowance_without_boolean_indicator_is_unmapped(text: str | None) -> None:
+    # The CEN rules select BG-20/21 by ram:ChargeIndicator/udt:Indicator; without one it is neither, and unmapped.
     root = tree(full_invoice())
-    indicator = one(root, f"{STL}/ram:SpecifiedTradeAllowanceCharge[1]/ram:ChargeIndicator/udt:Indicator")
+    path = f"{STL}/ram:SpecifiedTradeAllowanceCharge[1]"
     if text is None:
-        _remove(root, f"{STL}/ram:SpecifiedTradeAllowanceCharge[1]/ram:ChargeIndicator/udt:Indicator")
+        _remove(root, f"{path}/ram:ChargeIndicator/udt:Indicator")
     else:
-        indicator.text = text
-    with pytest.raises(ParseError, match="BG-20/BG-21: ram:ChargeIndicator/udt:Indicator must be"):
-        cii.read(root)
+        one(root, f"{path}/ram:ChargeIndicator/udt:Indicator").text = text
+    result = cii.read(root)
+    assert result.invoice.allowances == ()
+    assert result.unmapped == (path,)
 
 
 def _remove(root: etree._Element, xpath: str) -> None:
@@ -478,3 +548,13 @@ def test_invalid_net_basis_quantity_is_a_parse_error() -> None:
     one(root, f"{LAGR}/ram:NetPriceProductTradePrice/ram:BasisQuantity").text = "x"
     with pytest.raises(ParseError, match=r"BT-149 \(base_quantity\)"):
         cii.read(root)
+
+
+def test_line_allowance_without_indicator_is_unmapped() -> None:
+    root = tree(full_invoice())
+    line_settlement = f"{TX}/ram:IncludedSupplyChainTradeLineItem[1]/ram:SpecifiedLineTradeSettlement"
+    path = f"{line_settlement}/ram:SpecifiedTradeAllowanceCharge[1]"
+    _remove(root, f"{path}/ram:ChargeIndicator")
+    result = cii.read(root)
+    assert result.invoice.lines[0].allowances == ()
+    assert result.unmapped == (path,)

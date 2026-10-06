@@ -20,12 +20,12 @@ from euinvoice.model import (
     InvoicingPeriod,
     ProcessControl,
 )
-from euinvoice.syntax.cii._build import SUPPORTING_DOCUMENT_TYPE_CODE, TENDER_TYPE_CODE
-from euinvoice.syntax.cii._read_common import code_of, object_identifier
+from euinvoice.syntax.cii._build import PROJECT_NAME, SUPPORTING_DOCUMENT_TYPE_CODE, TENDER_TYPE_CODE
+from euinvoice.syntax.cii._read_common import object_identifier
 from euinvoice.syntax.cii._read_lines import line
 from euinvoice.syntax.cii._read_parties import address, buyer, seller, single_id, tax_representative
 from euinvoice.syntax.cii._read_settlement import settlement
-from euinvoice.syntax.cii._reader import Reader, content
+from euinvoice.syntax.cii._reader import XML_SPACE, Reader, content
 from euinvoice.syntax.result import ParseResult
 
 _ROOT = f"{{{_xml.CII_RSM}}}CrossIndustryInvoice"
@@ -36,10 +36,12 @@ def read(root: etree._Element) -> ParseResult:
 
     ``root`` must come from :func:`euinvoice._xml.parse` (D10); the reader never parses. Every element and
     attribute that no business term takes is listed in :attr:`ParseResult.unmapped` instead of being dropped. The
-    only content consumed without a business term is what the writer adds for the syntax: the ``ram:TypeCode``
-    ``VAT`` of each tax, the BG-24 / BT-17 / BT-18 type codes, ``ram:SpecifiedProcuringProject/ram:Name`` (required
-    by the D16B XSD, no business term), a gross price ``ram:BasisQuantity`` equal to the net price's, empty
-    ``ram:IncludedNote`` elements (they carry nothing; the writer skips empty notes) and the ``@format`` of dates.
+    only content consumed without a business term is what the writer itself adds for the syntax, and only when it
+    has exactly the writer's value: the ``ram:TypeCode`` ``VAT`` of each tax, the type codes 916 / 50 / 130 of BG-24
+    / BT-17 / BT-18 documents, a ``ram:SpecifiedProcuringProject/ram:Name`` equal to ``PROJECT_NAME`` (required by
+    the D16B XSD, no business term; any other name stays unmapped), a gross price ``ram:BasisQuantity`` equal to the
+    net price's, empty ``ram:IncludedNote`` elements (no child, no text: they carry nothing; the writer skips them)
+    and ``@format='102'`` of dates.
 
     Args:
         root: The ``rsm:CrossIndustryInvoice`` element.
@@ -77,11 +79,14 @@ def _document(reader: Reader, root: etree._Element) -> dict[str, object]:
     context = reader.one(root, "ExchangedDocumentContext", _xml.CII_RSM)
     document = reader.one(root, "ExchangedDocument", _xml.CII_RSM)
     notes = []
-    for element in reader.each(document, "IncludedNote"):
+    for element in reader.children(document, "IncludedNote"):
+        if len(element) == 0 and not content(element).strip(XML_SPACE):
+            reader.use(element)  # empty: it carries nothing (the writer skips empty notes)
+            continue
         note = reader.text(element, "Content")
         subject = reader.text(element, "SubjectCode")
         if note is not None or subject is not None:
-            notes.append(reader.model(InvoiceNote, element, note=note, subject_code=subject))
+            notes.append(reader.model(InvoiceNote, reader.use(element), note=note, subject_code=subject))
     return {
         "process_control": None
         if context is None
@@ -109,8 +114,11 @@ def _reference(reader: Reader, parent: etree._Element | None, name: str) -> str 
 def _agreement(reader: Reader, agreement: etree._Element | None) -> dict[str, object]:
     """``ram:ApplicableHeaderTradeAgreement``: BT-10..BT-14, BT-17, BT-18, the parties and BG-24."""
     project = reader.one(agreement, "SpecifiedProcuringProject")
-    # ram:Name is required by the D16B XSD but carries no business term (the writer's PROJECT_NAME).
-    reader.one(project, "Name")
+    # ram:Name is required by the D16B XSD but carries no business term: the writer's own PROJECT_NAME is consumed,
+    # any other name is content the model cannot hold and stays unmapped.
+    names = reader.children(project, "Name")
+    if names and content(names[0]) == PROJECT_NAME:
+        reader.use(names[0])
     return {
         "buyer_reference": reader.text(agreement, "BuyerReference"),
         "seller": seller(reader, agreement),
@@ -133,7 +141,7 @@ def _referenced_documents(reader: Reader, agreement: etree._Element | None) -> d
     supporting: list[AdditionalSupportingDocument] = []
     tender: str | None = None
     for element in reader.children(agreement, "AdditionalReferencedDocument"):
-        code = code_of(reader, element)
+        code = reader.first_text(element, "TypeCode", normalized=True)
         if code == SUPPORTING_DOCUMENT_TYPE_CODE:
             reader.use(element)
             reader.one(element, "TypeCode")

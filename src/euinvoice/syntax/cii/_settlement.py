@@ -93,7 +93,7 @@ def _payment_means(parent: etree._Element, payment: PaymentInstructions) -> None
                 opt(financial_card, "CardholderName", card.holder_name)
             debit = payment.direct_debit
             if debit is not None and debit.debited_account_identifier is not None:
-                # BT-91: IBANID only (CII-SR-444 forbids ProprietaryID, CII-SR-382 AccountName).
+                # BT-91: IBANID only (CII-SR-444 warns against ProprietaryID, CII-SR-382 against AccountName).
                 sub(sub(element, "PayerPartyDebtorFinancialAccount"), "IBANID", debit.debited_account_identifier)
         if transfer is None:
             continue

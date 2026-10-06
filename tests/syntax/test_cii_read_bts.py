@@ -5,6 +5,11 @@ Each row is ``(id, changes, expected)``. ``changes`` are model overrides applied
 writer and read back. ``expected`` is the tuple of values found at the term's model path (``BT_INDEX``) in the read
 invoice, or, for a group, the number of its instances. The BT id comes first so the BT coverage gate (#32) can read
 the table; the XPath each term is read from is in ``test_cii_write_bts.py`` and ``docs/reference/bt-mapping.md``.
+
+The rows are write→read: they prove the reader inverts the writer, not that both bind a term to the right XPath. A
+symmetric bug (writer and reader agreeing on a wrong XPath) is caught by the writer's per-term XPath table and by the
+conformance suite, which reads every upstream CII example and validates what is written back
+(``tests/conformance/test_cii_read_conformance.py``).
 """
 
 import datetime

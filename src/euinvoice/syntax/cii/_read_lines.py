@@ -108,8 +108,8 @@ def _price(reader: Reader, agreement: etree._Element | None) -> PriceDetails | N
 
     The gross price's ``ram:BasisQuantity`` has no business term of its own: the writer repeats BT-149/BT-150 there
     (as CEN's ``CII_example2.xml`` does), so it is consumed when it equals the net price's and left unmapped when
-    it differs. BT-147 is the gross price's ``ram:AppliedTradeAllowanceCharge`` with ``ChargeIndicator`` false
-    (CII-SR-119); a charge there has no business term and stays unmapped.
+    it differs. BT-147 is the first gross price ``ram:AppliedTradeAllowanceCharge`` with ``ChargeIndicator`` false
+    (CII-SR-119); a charge or an allowance without an indicator has no business term and stays unmapped.
     """
     net = reader.one(agreement, "NetPriceProductTradePrice")
     if net is None:
@@ -123,9 +123,11 @@ def _price(reader: Reader, agreement: etree._Element | None) -> PriceDetails | N
         if _same_quantity(candidate, base_quantity, unit):
             reader.use(candidate)
             reader.attribute(candidate, "unitCode")
-    for allowance in reader.children(gross, "AppliedTradeAllowanceCharge")[:1]:
-        # Marking the indicator of a charge is harmless: its unmarked parent is listed as a whole.
-        if not reader.indicator(allowance, "ChargeIndicator", "BT-147"):
+    for allowance in reader.children(gross, "AppliedTradeAllowanceCharge"):
+        # BT-147 is the first allowance with ChargeIndicator false. A charge, an allowance without an xs:boolean
+        # indicator (CII-SR-119 allows one without amount) and any later allowance stay unmapped as a whole
+        # (marking the indicator inside an unmarked parent is harmless).
+        if discount is None and reader.indicator(allowance, "ChargeIndicator") is False:
             discount = reader.text(reader.use(allowance), "ActualAmount")
     return reader.model(
         PriceDetails,
@@ -154,8 +156,11 @@ def _allowances_and_charges(
     """``ram:SpecifiedTradeAllowanceCharge`` of a line: BG-27 (``ChargeIndicator`` false) and BG-28 (true)."""
     allowances: list[InvoiceLineAllowance] = []
     charges: list[InvoiceLineCharge] = []
-    for element in reader.each(settlement, "SpecifiedTradeAllowanceCharge"):
-        charge, values = allowance_charge_values(reader, element, "BG-27/BG-28")
+    for element in reader.children(settlement, "SpecifiedTradeAllowanceCharge"):
+        read = allowance_charge_values(reader, element)
+        if read is None:
+            continue
+        charge, values = read
         if charge:
             charges.append(reader.model(InvoiceLineCharge, element, **values))
         else:

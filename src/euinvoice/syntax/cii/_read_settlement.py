@@ -4,7 +4,6 @@ The inverse of ``_settlement.py``; XPaths per business term are those of ``docs/
 """
 
 import datetime
-import typing as t
 
 from lxml import etree
 
@@ -22,12 +21,10 @@ from euinvoice.model import (
     PrecedingInvoiceReference,
     VatBreakdown,
 )
-from euinvoice.syntax.cii._build import VAT_POINT_DATE_CODES_FROM_CII
-from euinvoice.syntax.cii._read_common import allowance_charge_values, code_of, period_dates, vat_category
+from euinvoice.syntax.cii._build import VAT, VAT_POINT_DATE_CODES_FROM_CII
+from euinvoice.syntax.cii._read_common import allowance_charge_values, period_dates, vat_category
 from euinvoice.syntax.cii._read_parties import payee
-from euinvoice.syntax.cii._reader import Reader, content
-
-_XML_SPACE: t.Final = " \t\r\n"
+from euinvoice.syntax.cii._reader import XML_SPACE, Reader, content, normalize_space
 
 
 def settlement(reader: Reader, transaction: etree._Element | None) -> tuple[dict[str, object], InvoicingPeriod | None]:
@@ -69,8 +66,11 @@ def settlement(reader: Reader, transaction: etree._Element | None) -> tuple[dict
     }
     allowances: list[DocumentLevelAllowance] = []
     charges: list[DocumentLevelCharge] = []
-    for item in reader.each(element, "SpecifiedTradeAllowanceCharge"):
-        charge, values = allowance_charge_values(reader, item, "BG-20/BG-21")
+    for item in reader.children(element, "SpecifiedTradeAllowanceCharge"):
+        read = allowance_charge_values(reader, item)
+        if read is None:
+            continue
+        charge, values = read
         tax = vat_category(reader, item, "CategoryTradeTax")
         category, rate = (None, None) if tax is None else tax[1:]
         if charge:
@@ -96,7 +96,9 @@ def _vat_breakdown(
     """Every ``ram:ApplicableTradeTax`` with type ``VAT`` (BG-23), plus the document level BT-7 and BT-8.
 
     BT-7 (``ram:TaxPointDate``) and BT-8 (``ram:DueDateTypeCode``) may sit on any breakdown, with one distinct value
-    each (CII-SR-461, CII-SR-462); the writer puts them on the first. A later different value stays unmapped.
+    each: CII-SR-461 allows at most one ``ram:TaxPointDate`` per breakdown and CII-SR-462 one distinct
+    ``ram:DueDateTypeCode`` across them. The writer puts both on the first breakdown. A later value that differs
+    from the first one read stays unmapped.
     BT-8 is translated from UNTDID 2475 back to the model's UNTDID 2005 (``VAT_POINT_DATE_CODES_FROM_CII``).
 
     Raises:
@@ -106,7 +108,7 @@ def _vat_breakdown(
     point_date: datetime.date | None = None
     point_code: str | None = None
     for element in reader.children(settlement, "ApplicableTradeTax"):
-        if code_of(reader, element) != "VAT":
+        if reader.first_text(element, "TypeCode", normalized=True) != VAT:
             continue
         reader.use(element)
         reader.one(element, "TypeCode")
@@ -140,7 +142,7 @@ def _vat_breakdown(
 
 def _vat_point_date_code(reader: Reader, element: etree._Element) -> str:
     """BT-8: a UNTDID 2475 ``ram:DueDateTypeCode`` as the model's UNTDID 2005 code."""
-    text = content(element).strip(_XML_SPACE)
+    text = normalize_space(content(element))
     code = VAT_POINT_DATE_CODES_FROM_CII.get(text)
     if code is None:
         raise ParseError(
@@ -156,28 +158,30 @@ def _payment(
 ) -> PaymentInstructions | None:
     """BG-16 with BG-17, BG-18 and BG-19, from every ``ram:SpecifiedTradeSettlementPaymentMeans``.
 
-    The writer repeats the payment means once per credit transfer with the same BT-81 and BT-82 (CII-SR-467,
-    CII-SR-468), so each means adds its ``ram:PayeePartyCreditorFinancialAccount`` (BT-84 from ``ram:IBANID``, else
-    ``ram:ProprietaryID``) as one BG-17; a means with another BT-81 or BT-82 stays unmapped as a whole. The first card
-    (BG-18) and the first debited account (BT-91) are mapped. BT-83, BT-89 and BT-90 belong to BG-16, which needs
-    BT-81 (BR-49): without any payment means they stay unmapped instead of being invented or refused.
+    BT-81 and BT-82 are the first ``ram:TypeCode`` and the first ``ram:Information`` across the payment means, as
+    CII-SR-467 and CII-SR-468 (``EN16931-CII-syntax.sch``) take them: each present one must equal it under
+    ``normalize-space``, and a missing one does not count. The writer repeats the payment means once per credit
+    transfer, so each matching means adds its ``ram:PayeePartyCreditorFinancialAccount`` (BT-84 from
+    ``ram:IBANID``, else ``ram:ProprietaryID``) as one BG-17; a means whose own code or text differs stays unmapped
+    as a whole. The first card (BG-18) and the first debited account (BT-91) are mapped. BT-83, BT-89 and BT-90
+    belong to BG-16, which needs BT-81 (BR-49): without any payment means they stay unmapped instead of being
+    invented or refused.
     """
     means = reader.children(settlement, "SpecifiedTradeSettlementPaymentMeans")
     if not means:
         return None
-    first = means[0]
-    code = reader.text(first, "TypeCode")
-    text = reader.text(first, "Information")
+    code = next((c for m in means if (c := reader.first_text(m, "TypeCode")) is not None), None)
+    text = next((i for m in means if (i := reader.first_text(m, "Information")) is not None), None)
     card: PaymentCardInformation | None = None
     debited: str | None = None
     transfers: list[CreditTransfer] = []
+    accepted: list[etree._Element] = []
     for element in means:
-        if element is not first:
-            if (_first_text(reader, element, "TypeCode"), _first_text(reader, element, "Information")) != (code, text):
-                continue
-            reader.one(element, "TypeCode")
-            reader.one(element, "Information")
-        reader.use(element)
+        if not (_matches(reader, element, "TypeCode", code) and _matches(reader, element, "Information", text)):
+            continue
+        reader.one(element, "TypeCode")
+        reader.one(element, "Information")
+        accepted.append(reader.use(element))
         financial_card = reader.children(element, "ApplicableTradeSettlementFinancialCard")
         if card is None and financial_card:
             reader.use(financial_card[0])
@@ -189,7 +193,7 @@ def _payment(
             )
         debtor = reader.children(element, "PayerPartyDebtorFinancialAccount")
         if debited is None and debtor:
-            # BT-91: IBANID only (CII-SR-444 forbids ProprietaryID).
+            # BT-91: IBANID only (CII-SR-444 warns that ProprietaryID should not be present; one stays unmapped).
             debited = reader.text(reader.use(debtor[0]), "IBANID")
         account = reader.one(element, "PayeePartyCreditorFinancialAccount")
         if account is not None:
@@ -213,14 +217,14 @@ def _payment(
     if (mandate, creditor, debited) != (None, None, None):
         debit = reader.model(
             DirectDebit,
-            first,
+            accepted[0],
             mandate_reference_identifier=mandate,
             bank_assigned_creditor_identifier=creditor,
             debited_account_identifier=debited,
         )
     return reader.model(
         PaymentInstructions,
-        first,
+        accepted[0],
         payment_means_type_code=code,
         payment_means_text=text,
         # BT-83: one ram:PaymentReference (CII-SR-469).
@@ -231,10 +235,10 @@ def _payment(
     )
 
 
-def _first_text(reader: Reader, parent: etree._Element, name: str) -> str | None:
-    """The text of the first ``ram:<name>`` child without marking it."""
-    found = reader.children(parent, name)
-    return content(found[0]) if found else None
+def _matches(reader: Reader, means: etree._Element, name: str, first: str | None) -> bool:
+    """Whether the ``ram:<name>`` of a payment means is absent or equals ``first`` under ``normalize-space``."""
+    own = reader.first_text(means, name, normalized=True)
+    return own is None or first is None or own == normalize_space(first)
 
 
 def _totals(
@@ -279,4 +283,4 @@ def _totals(
 
 def _same_code(left: str | None, right: str | None) -> bool:
     """Whether two codes are present and equal once stripped of XML whitespace (as the model stores codes)."""
-    return left is not None and right is not None and left.strip(_XML_SPACE) == right.strip(_XML_SPACE)
+    return left is not None and right is not None and left.strip(XML_SPACE) == right.strip(XML_SPACE)

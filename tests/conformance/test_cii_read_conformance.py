@@ -48,6 +48,18 @@ EXCLUDED: t.Final[dict[str, dict[str, str]]] = {
 }
 
 
+TWO_CREDIT_TRANSFERS: t.Final[dict[str, tuple[str, ...]]] = {
+    # A second payment means without ram:Information is the same BG-16 (CII-SR-467/468 count only present
+    # elements), so its account is a second BG-17; the UBL twin of 03.07a carries both accounts too.
+    "xrechnung-testsuite:instances/standard/03.07a-INVOICE_uncefact.xml": (
+        "DE79000000001234567890",
+        "DE16000000002345678901",
+    ),
+    "cen-cii:CII_example5.xml": ("DK1212341234123412", "A"),
+}
+"""Upstream files whose payment means carry two credit transfers (BG-17), with their BT-84 values."""
+
+
 def _cii_files(source: artifacts.SourceName) -> list[tuple[str, bytes]]:
     directory: pathlib.Path = artifacts.fetch([source])[source] / _DIRECTORIES[source]
     found = []
@@ -78,10 +90,18 @@ def test_every_cii_file_reads_and_round_trips(source: artifacts.SourceName) -> N
     failures: list[str] = []
     for name, data in files:
         if name in excluded:
+            # D8: the model refuses only what the official CEN rules refuse, so the rule is fatal upstream too.
+            fatal = {f.rule_id for f in validate(data).findings if f.severity == "fatal"}
+            assert excluded[name] in fatal, (name, sorted(fatal))
             with pytest.raises(ParseError, match=excluded[name]):
                 cii.read(_xml.parse(data))
             continue
         first = cii.read(_xml.parse(data))
+        transfers = TWO_CREDIT_TRANSFERS.get(f"{source}:{name}")
+        if transfers is not None:
+            instructions = first.invoice.payment_instructions
+            found = () if instructions is None else instructions.credit_transfers
+            assert tuple(c.payment_account_identifier for c in found) == transfers, name
         # The per-file report of out-of-model content asked for by plan §4 (shown with -rP or -s).
         print(f"{source}:{name}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print]
         written = cii.write(first.invoice)
