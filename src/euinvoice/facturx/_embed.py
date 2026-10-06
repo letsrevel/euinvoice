@@ -12,7 +12,7 @@ invoice XML). The XMP values are cited in :mod:`euinvoice.facturx.xmp`. Per invo
 * ``/F`` and ``/UF`` are the level's file name (``Profile.facturx_filename``, cited in
   :mod:`euinvoice.profiles.facturx`): 74 of 74. ``/Desc`` is present on 87 of 87; its text varies, and the file
   name is the variant of the ZUGFeRD examples (``ZUGFeRDv2/correct/symtrax/Beispiele``, 38 files).
-* ``/AFRelationship``: ``/Data`` for 70 of the 74 invoice files at every level but XRECHNUNG, ``/Alternative`` for
+* ``/AFRelationship``: ``/Data`` for 46 of the 74 invoice files, at every level but XRECHNUNG, ``/Alternative`` for
   24 EN 16931 ones (``XML-Rechnung/FX``, Mustang) and ``/Source`` for all 4 XRECHNUNG ones. :func:`embed` writes
   the attested per-level default (``Source`` for XRECHNUNG, ``Data`` otherwise) unless told otherwise; which
   values the spec allows per level is open (#42).
