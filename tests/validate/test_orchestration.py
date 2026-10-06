@@ -10,8 +10,8 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.profiles import _base as profiles_base
+from euinvoice.report import Finding, Severity
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
-from euinvoice.validate.report import Finding, Severity
 
 CORE = "urn:cen.eu:en16931:2017"
 CIUS = "urn:cen.eu:en16931:2017#compliant#urn:example.com:cius"
