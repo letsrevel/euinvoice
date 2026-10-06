@@ -15,6 +15,7 @@ Document-level element order follows ``InvoiceType`` (``maindoc/UBL-Invoice-2.1.
 
 import base64
 import typing as t
+from decimal import Decimal
 
 from lxml import etree
 
@@ -91,7 +92,7 @@ def write(invoice: Invoice) -> bytes:
 
     Raises:
         ModelError: The invoice holds something UBL cannot express: BT-87 or the BT-125 mime code or
-            filename missing (decisions M2, M3 in bt-mapping.md), BT-110 missing, BT-111 without BT-6,
+            filename missing (decisions M2, M3 in bt-mapping.md), BT-110 missing with VAT, BT-111 without BT-6,
             BT-6 equal to BT-5, BT-9 in a credit note without PAYMENT INSTRUCTIONS (BG-16), BT-148 below
             BT-146, or BT-150 without BT-149. The message starts with the BT id.
     """
@@ -293,7 +294,8 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
     BR-DEC-13/15); only the BT-5 one carries ``cac:TaxSubtotal`` (bt-mapping.md BG-23).
 
     Raises:
-        ModelError: BT-6 equals BT-5 while BT-111 is set, BT-110 is missing, or BT-111 is set without BT-6.
+        ModelError: BT-6 equals BT-5 while BT-111 is set, BT-110 is missing and not implied as 0.00 (see
+            :func:`_total_vat`), or BT-111 is set without BT-6.
     """
     totals = invoice.totals
     if (
@@ -306,14 +308,8 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
             "cac:TaxTotal/cbc:TaxAmount with the same currencyID, which CEN BR-CO-15 (exactly one in the invoice "
             "currency) rejects",
         )
-    if totals.total_vat is None:
-        raise cannot_express(
-            "BT-110",
-            "the invoice total VAT amount is required: the VAT BREAKDOWN (BG-23) lives in cac:TaxTotal, whose "
-            "cbc:TaxAmount is mandatory (UBL 2.1 XSD TaxTotalType; CEN BR-CO-15)",
-        )
     tax_total = aggregate(root, "TaxTotal")
-    amount(tax_total, "TaxAmount", totals.total_vat, invoice.currency_code)
+    amount(tax_total, "TaxAmount", _total_vat(invoice), invoice.currency_code)
     for breakdown in invoice.vat_breakdown:
         subtotal = aggregate(tax_total, "TaxSubtotal")
         amount(subtotal, "TaxableAmount", breakdown.taxable_amount, invoice.currency_code)
@@ -335,6 +331,37 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
             )
         accounting = aggregate(root, "TaxTotal")
         amount(accounting, "TaxAmount", totals.total_vat_in_accounting_currency, invoice.vat_accounting_currency_code)
+
+
+def _total_vat(invoice: Invoice) -> Decimal:
+    """BT-110, or ``0.00`` when it is absent and both identities that define it give 0.
+
+    UBL needs it: ``cbc:TaxAmount`` is mandatory in ``cac:TaxTotal`` (UBL 2.1 XSD ``TaxTotalType``, minOccurs 1)
+    and CEN UBL BR-CO-15 requires exactly one in BT-5 (``UBL/EN16931-UBL-model.sch``). CII may omit it when
+    BT-112 = BT-109 (second disjunct of CII BR-CO-15). When moreover Σ BT-117 = 0, BR-CO-15 (BT-112 = BT-109 +
+    BT-110) and BR-CO-14 (BT-110 = Σ BT-117) both give BT-110 = 0, which is what CEN's twin examples write
+    (``ubl-tc434-example7.xml`` 0.00 vs ``CII_example7.xml`` absent; KoSIT ``01.05_minimal_test_ubl.xml`` 0 vs
+    ``_uncefact.xml`` absent). bt-mapping.md "Normalizations".
+
+    Raises:
+        ModelError: BT-110 is absent and BT-112 differs from BT-109 or Σ BT-117 is not 0.
+    """
+    totals = invoice.totals
+    if totals.total_vat is not None:
+        return totals.total_vat
+    if totals.total_with_vat != totals.total_without_vat:
+        raise cannot_express(
+            "BT-110",
+            "UBL needs the invoice total VAT amount (UBL 2.1 XSD TaxTotalType; CEN BR-CO-15) and it is only implied "
+            "(as 0.00) when BT-112 equals BT-109, which it does not here (BR-CO-15: BT-112 = BT-109 + BT-110)",
+        )
+    if sum((group.tax_amount for group in invoice.vat_breakdown), Decimal(0)) != 0:
+        raise cannot_express(
+            "BT-110",
+            "UBL needs the invoice total VAT amount (UBL 2.1 XSD TaxTotalType; CEN BR-CO-15) and 0.00 would contradict "
+            "the VAT category tax amounts (BR-CO-14: BT-110 = Σ BT-117)",
+        )
+    return Decimal("0.00")
 
 
 def _monetary_total(root: etree._Element, invoice: Invoice) -> None:

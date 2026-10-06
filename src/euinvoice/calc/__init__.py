@@ -28,7 +28,8 @@ both) reports too. The output of :func:`complete` passes both bindings. The asym
 document level allowances and charges and ``b`` VAT breakdowns of one category:
 
 * BR-CO-15. UBL: exactly one VAT total in BT-5 and BT-112 = BT-109 + BT-110. CII: the same, *or*
-  BT-112 = BT-109 (which accepts an absent or ignored BT-110). BT-6 = BT-5 with BT-111 puts two VAT
+  BT-112 = BT-109 (which accepts an absent or ignored BT-110). An absent BT-110 with BT-112 = BT-109 and
+  Σ BT-117 = 0 passes UBL too, where the UBL writer states it as 0.00. BT-6 = BT-5 with BT-111 puts two VAT
   totals in BT-5, so only CII's second disjunct can pass.
 * BR-CO-17. Both: \|BT-117\| within 1 of the rounded product; UBL with strict ``<`` / ``>``, CII with
   ``<=`` / ``>=``.

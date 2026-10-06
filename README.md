@@ -149,7 +149,7 @@ once the maintainer enables Pages for the repository and sets the repository var
 
 ## Known limitations
 
-Open questions waiting for a maintainer decision (`needs-human`) and one parked enhancement:
+Open questions waiting for a maintainer decision (`needs-human`):
 
 - [#42](https://github.com/letsrevel/euinvoice/issues/42): the Factur-X / ZUGFeRD XSD and Schematron have no
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
@@ -165,8 +165,6 @@ Open questions waiting for a maintainer decision (`needs-human`) and one parked 
   false `SCHEMATRON-RUNTIME` fatal for such invoices.
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
-- [#87](https://github.com/letsrevel/euinvoice/issues/87) (parked): the UBL writer refuses an invoice without
-  BT-110 (no VAT, BT-112 = BT-109), which CII can express, instead of writing `0.00`.
 
 ## Development
 

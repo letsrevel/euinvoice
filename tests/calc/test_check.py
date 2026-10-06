@@ -8,7 +8,17 @@ from decimal import Decimal
 
 import pytest
 
-from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
+from _calc_drafts import (
+    allowance,
+    charge,
+    draft,
+    group,
+    line,
+    not_subject_to_vat,
+    replace,
+    with_breakdown,
+    with_totals,
+)
 from euinvoice import calc
 from euinvoice.model import DocumentLevelAllowance, DocumentLevelCharge, Invoice, LineDraft, VatBreakdown
 from euinvoice.report import Finding, Severity
@@ -132,6 +142,20 @@ def test_paid_and_rounding_amounts_enter_the_amount_due(invoice: Invoice) -> Non
     paid = with_totals(invoice, paid_amount="100.00", rounding_amount="0.01", amount_due="88.51")
 
     assert calc.check(paid) == ()
+
+
+@pytest.mark.parametrize("syntax", [None, *Syntax])
+def test_absent_bt110_without_any_vat_passes_both_bindings(syntax: Syntax | None) -> None:
+    # The UBL writer states BT-110 = 0.00 when BT-112 = BT-109 and Σ BT-117 = 0 (bt-mapping.md "Normalizations")
+    invoice = with_totals(not_subject_to_vat(), total_vat=None)
+    assert calc.check(invoice, syntax=syntax) == ()
+
+
+def test_absent_bt110_with_breakdown_vat_says_why_it_is_not_implied(invoice: Invoice) -> None:
+    changed = with_totals(invoice, total_vat=None, total_with_vat="165.00", amount_due="165.00")
+    (finding,) = calc.check(changed, syntax=Syntax.UBL)
+    assert finding.rule_id == "BR-CO-15"
+    assert finding.message.endswith("; BT-110 is not implied as 0.00 because Σ BT-117 = 23.50 (BR-CO-14).")
 
 
 @pytest.mark.parametrize(

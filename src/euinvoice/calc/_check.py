@@ -116,7 +116,8 @@ def _with_vat(invoice: Invoice) -> Iterator[Verdict]:
     UBL: exactly one ``cbc:TaxAmount`` in BT-5 and BT-112 = BT-109 + BT-110. CII: exactly one
     ``ram:TaxTotalAmount`` in BT-5 and that sum, or BT-112 = BT-109 (its second disjunct, which also
     accepts an absent BT-110). BT-6 = BT-5 with BT-111 puts a second amount in BT-5, so then only the
-    second disjunct can pass.
+    second disjunct can pass. An absent BT-110 with BT-112 = BT-109 and Σ BT-117 = 0 passes UBL too: the UBL
+    writer states it as 0.00 there (bt-mapping.md "Normalizations").
     """
     totals = invoice.totals
     second_in_bt5 = (
@@ -128,13 +129,21 @@ def _with_vat(invoice: Invoice) -> Iterator[Verdict]:
         and totals.total_vat is not None
         and totals.total_with_vat == totals.total_without_vat + totals.total_vat
     )
+    breakdown_vat = total(group.tax_amount for group in invoice.vat_breakdown)
+    no_vat_total = totals.total_vat is None and totals.total_with_vat == totals.total_without_vat
+    implied_zero = not second_in_bt5 and no_vat_total and breakdown_vat == 0
     yield from verdict(
         "BR-CO-15",
         at("BT-112"),
         f"Invoice total amount with VAT (BT-112) {fmt(totals.total_with_vat)} != BT-109 "
         f"{fmt(totals.total_without_vat)} + BT-110 {fmt(totals.total_vat)}"
+        + (
+            f"; BT-110 is not implied as 0.00 because Σ BT-117 = {fmt(breakdown_vat)} (BR-CO-14)"
+            if no_vat_total and breakdown_vat != 0
+            else ""
+        )
         + (", or a second VAT total in the invoice currency (BT-6 = BT-5 with BT-111)." if second_in_bt5 else "."),
-        ubl=adds_up,
+        ubl=adds_up or implied_zero,
         cii=adds_up or totals.total_with_vat == totals.total_without_vat,
     )
 

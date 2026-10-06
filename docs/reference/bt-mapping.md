@@ -343,10 +343,11 @@ syntax's writer reports the gap.
 * **CII gap · BT-111 without BT-6.** BT-111's only binding is
   `ram:TaxTotalAmount[@currencyID = ../../ram:TaxCurrencyCode]` (KoSIT binding, BR-53, BR-DEC-15); without
   BT-6 the amount has no currency to carry. The CII writer raises `ModelError`.
-* **UBL gap · no BT-110.** CEN UBL BR-CO-15 requires exactly one `cac:TaxTotal/cbc:TaxAmount` in the invoice
-  currency (`UBL/EN16931-UBL-model.sch`), and BG-23 sits in that `cac:TaxTotal`, whose `cbc:TaxAmount` the UBL 2.1
-  XSD requires (`TaxTotalType`, minOccurs 1). CII can omit it (CEN `CII_example7.xml`, `XRechnung-O.xml`). The UBL
-  writer raises `ModelError`.
+* **UBL gap · no BT-110 with VAT.** CEN UBL BR-CO-15 requires exactly one `cac:TaxTotal/cbc:TaxAmount` in the
+  invoice currency (`UBL/EN16931-UBL-model.sch`), and BG-23 sits in that `cac:TaxTotal`, whose `cbc:TaxAmount` the
+  UBL 2.1 XSD requires (`TaxTotalType`, minOccurs 1). CII can omit BT-110 (second disjunct of CII BR-CO-15). Without
+  VAT the UBL writer writes 0.00 (see "Normalizations"); when BT-112 ≠ BT-109 or Σ BT-117 ≠ 0 no value follows
+  from the other terms, and the UBL writer raises `ModelError`.
 * **Gap in both syntaxes · BT-6 = BT-5 with BT-111.** BT-110 and BT-111 are told apart only by `@currencyID`, so
   equal currencies give two amounts in BT-5 that no reader can tell apart, and the CEN Schematron rejects every
   such document: CII BR-53 requires `ram:TaxCurrencyCode` to differ from `ram:InvoiceCurrencyCode`, UBL BR-CO-15
@@ -385,6 +386,15 @@ terms. A model → syntax → model round trip then gains that value.
   (`0.00` when they are equal), the identity of PEPPOL-EN16931-R046 (`rules/sch/PEPPOL-EN16931-UBL.sch:363`);
   the same TOSL108 pair shows the binding. A BT-148 below BT-146 would need a negative discount, i.e. a
   price-level charge, which PEPPOL-EN16931-R044 forbids, so the writer raises `ModelError` then.
+* **BT-110 = 0.00 when absent without VAT, in UBL (#87).** UBL needs BT-110 (see "UBL gap · no BT-110 with VAT").
+  When it is absent, BT-112 = BT-109 and Σ BT-117 = 0, the UBL writer writes `cbc:TaxAmount` 0.00 in BT-5: both
+  identities that define BT-110 give 0, BR-CO-15 (BT-112 = BT-109 + BT-110) and BR-CO-14 (BT-110 = Σ BT-117;
+  CEN 1.3.16 `UBL/EN16931-UBL-model.sch:73-74`). CII may leave it out then (`CII/EN16931-CII-model.sch:92-115`,
+  the BT-112 = BT-109 disjunct; its BR-CO-14 fires only on a present `ram:TaxTotalAmount`, `$Tax_Total`). The
+  upstream twins write it the same way: CEN `ubl-tc434-example7.xml:89` has `cbc:TaxAmount` 0.00 where
+  `CII_example7.xml` has none, and KoSIT `01.05_minimal_test_ubl.xml` has 0 where `01.05_minimal_test_uncefact.xml`
+  has none. A CII → model → UBL → model round trip therefore reads BT-110 back as 0.00 instead of absent.
+  `calc.check` follows the writer: such an invoice passes BR-CO-15 in both bindings.
 * **Code 81 written as a UBL `CreditNote`.** BT-3 = 81 is in both CEN UBL lists (BR-CL-01); the UBL writer
   always writes it as `CreditNote` (Peppol accepts it only there, P0101; issue #10), so a UBL `Invoice` with
   code 81 is read back and written again as a `CreditNote`. The model stores no root hint (D4).
