@@ -417,8 +417,10 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
   is `cac:AdditionalDocumentReference` with `cbc:DocumentTypeCode` 50 (in an `Invoice` such a reference is unmapped,
   CEN UBL-SR-43). An `Invoice` with BT-3 = 81 reads like a `CreditNote` (see the code 81 normalization).
 * `cac:AdditionalDocumentReference` is BT-18 (code 130, the first), BT-11 (code 50, credit note) or BG-24 (no code);
-  any other is unmapped. A line `cac:DocumentReference` is BT-128 only with code 130 (the table's binding; Peppol
-  PEPPOL-EN16931-R101); one without a code, as in CEN `ubl-tc434-example5.xml`, is unmapped.
+  any other is unmapped. A line `cac:DocumentReference` is BT-128 only with code 130 (the table's binding; CEN
+  BR-CL-07 is checked in the context `cac:DocumentReference[cbc:DocumentTypeCode = '130']/cbc:ID[@schemeID]`,
+  `codelist/EN16931-UBL-codes.sch:43`;
+  Peppol PEPPOL-EN16931-R101); one without a code, as in CEN `ubl-tc434-example5.xml`, is unmapped.
 * **BT-90** is `cac:PartyIdentification/cbc:ID[@schemeID='SEPA']` of the Payee, else of the Seller (issue #10); a
   copy with the same value under the other party is taken too, a different one is unmapped, and so is a SEPA id
   when there is no `cac:PaymentMeans` (BG-16 needs BT-81, BR-49).
@@ -432,7 +434,11 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
 * Consumed without a business term, and only with exactly the value the writer itself writes (any other value is
   unmapped): `cac:CardAccount/cbc:NetworkID` `NA` (note N2), the `cac:TaxScheme/cbc:ID` `FC` of BT-32, and
   `VAT` (under `normalize-space`, upper-cased, as the CEN rules select it) of VAT identifiers and categories.
-* Dates are `xs:date` `YYYY-MM-DD` (surrounding whitespace allowed); one with a time zone, or not a calendar date,
-  is a `ParseError` (`BT-n: cannot interpret the date …`), since the model keeps a calendar date only. A model that
+* Dates are `xs:date` (surrounding whitespace allowed). A time zone (`2013-04-10Z`, `2013-04-10+01:00`) is valid
+  `xs:date` and no CEN rule restricts it, so the calendar date is read and the zone, which the model cannot hold, is
+  reported as `<element path>/text()` in `unmapped`: a `/text()` suffix means part of that element's text was not
+  mapped. Text that is not an `xs:date` (with a four-digit year) or not a calendar date is a `ParseError`
+  (`BT-n: cannot interpret the date …`). An invalid `cbc:ChargeIndicator` is a `ParseError` naming BG-20/BG-21,
+  BG-27/BG-28 or BT-147: it is typed `xs:boolean`, so the UBL XSD rejects the document anyway. A model that
   cannot be built (a missing required term, a code outside its list) is a `ParseError` naming the BT/BG and located
   at the element being read.

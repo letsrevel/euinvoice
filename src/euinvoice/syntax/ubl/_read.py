@@ -35,8 +35,9 @@ from euinvoice.model import (
     VatBreakdown,
 )
 from euinvoice.model.codes import UNTDID_4451_TEXT_SUBJECT
+from euinvoice.syntax._marks import XML_SPACE, normalize_space
 from euinvoice.syntax.result import ParseResult
-from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build, normalize_space
+from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build, type_code
 from euinvoice.syntax.ubl._read_lines import (
     read_allowance_charge,
     read_line,
@@ -53,7 +54,6 @@ _ROOTS: t.Final = {
     f"{{{_xml.UBL_INVOICE}}}Invoice": False,
     f"{{{_xml.UBL_CREDIT_NOTE}}}CreditNote": True,
 }
-_XML_SPACE: t.Final = " \t\r\n"
 
 
 def read(root: etree._Element) -> ParseResult:
@@ -81,12 +81,12 @@ def read(root: etree._Element) -> ParseResult:
             f"expected the UBL root Invoice or CreditNote, got {root.tag}", location=root.getroottree().getpath(root)
         )
     cursor = Cursor(root)
-    currency = (cursor.text(root, CBC + "DocumentCurrencyCode") or "").strip(_XML_SPACE)
+    currency = (cursor.text(root, CBC + "DocumentCurrencyCode") or "").strip(XML_SPACE)
     accounting_currency = cursor.text(root, CBC + "TaxCurrencyCode")
     parties = read_parties(cursor)
     period = cursor.first(root, CAC + "InvoicePeriod")  # BG-14 and BT-8; UBL-SR-08: at most one
     total_vat, accounting_vat, breakdown = _tax_totals(
-        cursor, currency, None if accounting_currency is None else accounting_currency.strip(_XML_SPACE)
+        cursor, currency, None if accounting_currency is None else accounting_currency.strip(XML_SPACE)
     )
     instructions, credit_note_due_date = _payment_instructions(cursor, parties, credit_note)
     references = _references(cursor, credit_note)
@@ -189,7 +189,7 @@ def _references(cursor: Cursor, credit_note: bool) -> dict[str, t.Any]:
     additional = cursor.children(root, CAC + "AdditionalDocumentReference")
     project = cursor.first(cursor.root, CAC + "ProjectReference")
     if credit_note:
-        project = next((ref for ref in additional if _type_code(ref) == PROJECT_DOCUMENT_TYPE), None)
+        project = next((ref for ref in additional if type_code(ref) == PROJECT_DOCUMENT_TYPE), None)
         cursor.text(project, CBC + "DocumentTypeCode")
     return {
         "purchase_order_reference": purchase_order,
@@ -206,14 +206,9 @@ def _references(cursor: Cursor, credit_note: bool) -> dict[str, t.Any]:
         "project_reference": cursor.text(project, CBC + "ID"),
         "invoiced_object_identifier": read_object_identifier(cursor, additional),
         "additional_supporting_documents": tuple(
-            _supporting_document(cursor, element) for element in additional if _type_code(element) is None
+            _supporting_document(cursor, element) for element in additional if type_code(element) is None
         ),
     }
-
-
-def _type_code(reference: etree._Element) -> str | None:
-    code = next(reference.iterchildren(CBC + "DocumentTypeCode"), None)
-    return None if code is None else (code.text or "")
 
 
 def _reference_id(cursor: Cursor, name: str) -> str | None:
@@ -268,9 +263,9 @@ def _same(cursor: Cursor, elements: list[etree._Element], *, text: bool = False)
     Codes and dates are compared after ``normalize-space`` (the model normalizes them); free ``text`` (BT-83)
     exactly, as UBL-SR-44 does. A repeat that differs is information the model cannot hold and stays unmapped.
     """
-    key: t.Callable[[str | None], str] = (lambda value: value or "") if text else normalize_space
+    key: t.Callable[[str], str] = (lambda value: value) if text else normalize_space
     for element in elements[1:]:
-        if key(element.text) == key(elements[0].text):
+        if key(element.text or "") == key(elements[0].text or ""):
             cursor.take(element)
 
 
@@ -289,7 +284,7 @@ def _payment_instructions(
     if not means:
         return None, None
     codes = [code for element in means if (code := cursor.first(element, CBC + "PaymentMeansCode")) is not None]
-    type_code = cursor.value(codes[0]) if codes else None
+    means_code = cursor.value(codes[0]) if codes else None
     _same(cursor, codes)
     names = [code for code in codes if "name" in code.attrib]
     text = cursor.attribute(names[0], "name") if names else None
@@ -310,7 +305,7 @@ def _payment_instructions(
         PaymentInstructions,
         means[0],
         "BG-16",
-        payment_means_type_code=type_code,
+        payment_means_type_code=means_code,
         payment_means_text=text,
         remittance_information=remittance,
         credit_transfers=tuple(

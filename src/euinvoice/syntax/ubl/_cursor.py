@@ -1,10 +1,11 @@
 """Element access shared by the UBL reader modules, with the bookkeeping behind ``ParseResult.unmapped``.
 
-Every element and attribute the reader maps to a business term is *taken* through :class:`Cursor`. What
-was never taken is reported by :meth:`Cursor.unmapped`, so nothing in the input is dropped silently
-(IMPLEMENTATION_PLAN.md §4). Values are handed to the model as read: the model's types convert and check
-them (Decimal-only numbers, code lists), and :func:`build` turns a model error into a
-:class:`~euinvoice.errors.ParseError` that names the business term and the element (shared with the CII reader).
+Every element and attribute the reader maps to a business term is *taken* through :class:`Cursor`, which
+records it in the shared :class:`~euinvoice.syntax._marks.Marks`; what was never taken is reported by
+:meth:`Cursor.unmapped`, so nothing in the input is dropped silently (IMPLEMENTATION_PLAN.md §4). Values are
+handed to the model as read: the model's types convert and check them (Decimal-only numbers, code lists), and
+:func:`build` turns a model error into a :class:`~euinvoice.errors.ParseError` that names the business term and
+the element (shared with the CII reader).
 """
 
 import datetime
@@ -18,35 +19,33 @@ from euinvoice.errors import ParseError
 from euinvoice.model import Identifier
 from euinvoice.model._base import EuInvoiceModel
 from euinvoice.syntax import _read_errors as read_errors
+from euinvoice.syntax._marks import XML_SPACE, Marks
 
-__all__ = ["CAC", "CBC", "Cursor", "build", "normalize_space"]
+__all__ = ["CAC", "CBC", "Cursor", "build", "type_code"]
 
 CAC: t.Final = f"{{{_xml.UBL_CAC}}}"
 """Clark prefix of the UBL common aggregate components (``cac``)."""
 CBC: t.Final = f"{{{_xml.UBL_CBC}}}"
 """Clark prefix of the UBL common basic components (``cbc``)."""
 
-_XML_SPACE: t.Final = " \t\r\n"
-"""XML whitespace, stripped from ``xs:date`` and ``xs:boolean`` values (both have ``whiteSpace=collapse``)."""
-
-_XML_NAMESPACE: t.Final = "http://www.w3.org/XML/1998/namespace"
-_XML_SPACE_RUN: t.Final = re.compile(r"[ \t\r\n]+")
-_DATE: t.Final = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_DATE: t.Final = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?")
+"""``xs:date`` (XML Schema 1.1 Part 2, §3.3.9) with a four-digit year: the date, then an optional time zone."""
 
 _BOOLEANS: t.Final = {"true": True, "1": True, "false": False, "0": False}
 """The ``xs:boolean`` lexical space (XML Schema 1.1 Part 2, §3.3.2)."""
 
 
-def normalize_space(text: str | None) -> str:
-    """XPath ``normalize-space``: XML whitespace runs collapsed to one space and stripped (``None`` is ``""``).
+def type_code(reference: etree._Element) -> str | None:
+    """The ``cbc:DocumentTypeCode`` text of a document reference without taking it (``None`` without one).
 
     Args:
-        text: The text.
+        reference: A ``cac:AdditionalDocumentReference`` or ``cac:DocumentReference``.
 
     Returns:
-        The normalized text.
+        The code, or ``None``.
     """
-    return " ".join(part for part in _XML_SPACE_RUN.split(text or "") if part)
+    code = next(reference.iterchildren(CBC + "DocumentTypeCode"), None)
+    return None if code is None else code.text or ""
 
 
 def _path(element: etree._Element) -> str:
@@ -86,8 +85,7 @@ class Cursor:
             root: The ``Invoice`` or ``CreditNote`` element.
         """
         self.root = root
-        self._taken: set[etree._Element] = {root}
-        self._taken_attributes: set[tuple[etree._Element, str]] = set()
+        self._marks = Marks(root)
 
     def take(self, element: etree._Element) -> etree._Element:
         """Mark ``element`` and its ancestors as mapped.
@@ -99,8 +97,8 @@ class Cursor:
             ``element``.
         """
         node: etree._Element | None = element
-        while node is not None and node not in self._taken:
-            self._taken.add(node)
+        while node is not None and not self._marks.is_marked(node):
+            self._marks.mark(node)
             node = node.getparent()
         return element
 
@@ -173,8 +171,9 @@ class Cursor:
     def parse_date(self, element: etree._Element, term: str) -> datetime.date:
         """Take ``element`` and read its ``xs:date`` (``whiteSpace=collapse``, so surrounding whitespace is fine).
 
-        ``xs:date`` may carry a time zone (``2026-01-15Z``); the model keeps a calendar date only, so such a
-        value is refused instead of losing the zone silently.
+        ``xs:date`` may carry a time zone (``2026-01-15Z``, ``2026-01-15+01:00``); no CEN rule restricts it. The
+        model keeps the calendar date only, so the date is read and the time zone, which has no business term,
+        is reported as ``<element path>/text()`` in ``unmapped`` (part of the element's text was not mapped).
 
         Args:
             element: The date element.
@@ -184,17 +183,21 @@ class Cursor:
             The date.
 
         Raises:
-            ParseError: The text is not a calendar date ``YYYY-MM-DD``.
+            ParseError: The text is not an ``xs:date`` with a four-digit year, or not a calendar date.
         """
-        text = (self.value(element) or "").strip(_XML_SPACE)
-        if _DATE.fullmatch(text):
+        text = (self.value(element) or "").strip(XML_SPACE)
+        match = _DATE.fullmatch(text)
+        if match:
             try:
-                return datetime.date.fromisoformat(text)
+                value = datetime.date.fromisoformat(match.group(1))
             except ValueError:
                 pass
+            else:
+                if match.group(2) is not None:
+                    self._marks.mark_partial_text(element)
+                return value
         raise ParseError(
-            f"{term}: cannot interpret the date {text!r}; EN 16931 UBL dates are xs:date YYYY-MM-DD without a "
-            "time zone (the model keeps a calendar date)",
+            f"{term}: cannot interpret the date {text!r}; expected an xs:date YYYY-MM-DD, optionally with a time zone",
             location=_path(element),
         )
 
@@ -211,7 +214,7 @@ class Cursor:
         value = None if element is None else element.get(name)
         if element is None or value is None:
             return None
-        self._taken_attributes.add((element, name))
+        self._marks.mark_attribute(element, name)
         return value
 
     def identifier(self, parent: etree._Element | None, tag: str) -> Identifier | None:
@@ -251,12 +254,17 @@ class Cursor:
             self.attribute(element, "currencyID")
         return self.value(element)
 
-    def boolean(self, parent: etree._Element | None, tag: str) -> bool | None:
+    def boolean(self, parent: etree._Element | None, tag: str, term: str) -> bool | None:
         """Read an ``xs:boolean`` (``true``, ``false``, ``1``, ``0``, surrounding whitespace allowed).
+
+        Unlike the CII reader, which leaves a bad ``udt:Indicator`` unmapped, this raises: UBL's
+        ``cbc:ChargeIndicator`` is typed ``xs:boolean`` (``IndicatorType``, UBL 2.1 XSD), so a document carrying
+        anything else is not valid UBL and the XSD rejects it anyway.
 
         Args:
             parent: The parent element, or ``None``.
             tag: The Clark name.
+            term: The BT/BG id(s) the value decides between, for the error message (e.g. ``"BG-20/BG-21"``).
 
         Returns:
             The value, or ``None`` if the element is missing.
@@ -267,42 +275,18 @@ class Cursor:
         element = self.first(parent, tag)
         if element is None:
             return None
-        value = _BOOLEANS.get((self.value(element) or "").strip(_XML_SPACE))
+        value = _BOOLEANS.get((self.value(element) or "").strip(XML_SPACE))
         if value is None:
             raise ParseError(
-                f"expected an xs:boolean (true, false, 1, 0), got {element.text!r}", location=_path(element)
+                f"{term}: expected an xs:boolean (true, false, 1, 0), got {element.text!r}", location=_path(element)
             )
         return value
 
     def unmapped(self) -> tuple[str, ...]:
-        """List what the reader did not map, in document order.
+        """List what the reader did not map, in document order (see :class:`~euinvoice.syntax._marks.Marks`).
 
         Returns:
-            The XPath (lxml ``getpath``) of each element that was not taken under a taken parent, and
-            ``<element path>/@<name>`` of each attribute that was not taken on a taken element. Comments
-            and processing instructions carry no data and are not listed.
+            The XPath of each element not taken under a taken parent, ``…/@name`` of each attribute not taken on a
+            taken element, and ``…/text()`` of each element whose text was only partly mapped.
         """
-        found: list[str] = []
-        self._collect(self.root, found)
-        return tuple(found)
-
-    def _collect(self, element: etree._Element, found: list[str]) -> None:
-        for name in t.cast(list[str], element.keys()):  # str for parsed documents; the stubs also allow bytes
-            if (element, name) not in self._taken_attributes:
-                found.append(f"{_path(element)}/@{_attribute_name(element, name)}")
-        for child in element.iterchildren("*"):
-            if child in self._taken:
-                self._collect(child, found)
-            else:
-                found.append(_path(child))
-
-
-def _attribute_name(element: etree._Element, name: str) -> str:
-    """``prefix:local`` for a namespaced attribute (``xml:lang``, ``xsi:schemaLocation``); Clark notation otherwise."""
-    qname = etree.QName(name)
-    if not qname.namespace:
-        return name
-    prefixes = {uri: prefix for prefix, uri in element.nsmap.items() if prefix is not None}
-    prefixes[_XML_NAMESPACE] = "xml"  # bound by definition, never declared (Namespaces in XML 1.0, §3)
-    prefix = prefixes.get(qname.namespace)
-    return name if prefix is None else f"{prefix}:{qname.localname}"
+        return self._marks.unmapped()

@@ -103,7 +103,7 @@ def test_every_cii_file_reads_and_round_trips(source: artifacts.SourceName) -> N
             found = () if instructions is None else instructions.credit_transfers
             assert tuple(c.payment_account_identifier for c in found) == transfers, name
         # The per-file report of out-of-model content asked for by plan §4 (shown with -rP or -s).
-        print(f"{source}:{name}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print]
+        print(f"{source}:{name}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print] - the per-file report plan §4 asks for
         written = cii.write(first.invoice)
         if cii.read(_xml.parse(written)).invoice != first.invoice:
             failures.append(f"{name}: read(write(read(X))) != read(X)")

@@ -23,8 +23,9 @@ from euinvoice.model import (
     LineVatInformation,
     PriceDetails,
 )
+from euinvoice.syntax._marks import XML_SPACE, normalize_space
 from euinvoice.syntax.ubl._build import VAT_SCHEME
-from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build, normalize_space
+from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build, type_code
 from euinvoice.syntax.ubl._lines import OBJECT_DOCUMENT_TYPE
 
 __all__ = ["read_allowance_charge", "read_line", "read_object_identifier", "read_period", "take_vat_scheme"]
@@ -60,7 +61,7 @@ def read_allowance_charge(cursor: Cursor, element: etree._Element, currency: str
     Raises:
         ParseError: The entry is not valid (e.g. BR-33: no reason and no reason code).
     """
-    is_charge = cursor.boolean(element, CBC + "ChargeIndicator")
+    is_charge = cursor.boolean(element, CBC + "ChargeIndicator", "BG-27/BG-28" if line else "BG-20/BG-21")
     if is_charge is None:
         return None
     fields: dict[str, t.Any] = {
@@ -96,12 +97,17 @@ def take_vat_scheme(cursor: Cursor, category: etree._Element | None) -> None:
         category: The ``cac:TaxCategory`` or ``cac:ClassifiedTaxCategory``, or ``None``.
     """
     scheme = cursor.first(cursor.first(category, CAC + "TaxScheme"), CBC + "ID")
-    if scheme is not None and normalize_space(scheme.text).upper() == VAT_SCHEME:
+    if scheme is not None and normalize_space(scheme.text or "").upper() == VAT_SCHEME:
         cursor.take(scheme)
 
 
 def read_object_identifier(cursor: Cursor, references: list[etree._Element]) -> Identifier | None:
     """Read the first document reference with ``cbc:DocumentTypeCode`` 130 (BT-18, BT-128; CEN UBL-SR-43).
+
+    At line level the CEN binding selects BT-128 the same way: BR-CL-07 (the object identifier scheme) is checked
+    in the context ``cac:DocumentReference[cbc:DocumentTypeCode = '130']/cbc:ID[@schemeID]``
+    (``codelist/EN16931-UBL-codes.sch:43``), so a line ``cac:DocumentReference`` without code 130 (as in CEN
+    ``ubl-tc434-example5.xml``) is no BT-128 and stays unmapped.
 
     Args:
         cursor: The document cursor.
@@ -111,15 +117,10 @@ def read_object_identifier(cursor: Cursor, references: list[etree._Element]) -> 
         The identifier, or ``None``. Further references with code 130 stay unmapped.
     """
     for reference in references:
-        if _type_code(reference) == OBJECT_DOCUMENT_TYPE:
+        if type_code(reference) == OBJECT_DOCUMENT_TYPE:
             cursor.text(reference, CBC + "DocumentTypeCode")
             return cursor.identifier(reference, CBC + "ID")
     return None
-
-
-def _type_code(reference: etree._Element) -> str | None:
-    code = next(reference.iterchildren(CBC + "DocumentTypeCode"), None)
-    return None if code is None else code.text or ""
 
 
 def read_period(
@@ -220,7 +221,7 @@ def _price(cursor: Cursor, price: etree._Element | None, currency: str) -> Price
         None,
     )
     if allowance is not None:
-        cursor.boolean(allowance, CBC + "ChargeIndicator")
+        cursor.boolean(allowance, CBC + "ChargeIndicator", "BT-147")
     return build(
         PriceDetails,
         price,
@@ -236,7 +237,7 @@ def _price(cursor: Cursor, price: etree._Element | None, currency: str) -> Price
 def _indicator(allowance_charge: etree._Element) -> str | None:
     """The ``cbc:ChargeIndicator`` text without surrounding whitespace, or ``None``."""
     element = next(allowance_charge.iterchildren(CBC + "ChargeIndicator"), None)
-    return None if element is None else (element.text or "").strip(" \t\r\n")
+    return None if element is None else (element.text or "").strip(XML_SPACE)
 
 
 def _item(cursor: Cursor, item: etree._Element) -> ItemInformation:

@@ -359,6 +359,21 @@ def test_out_of_model_content_is_listed_in_document_order() -> None:
     )
 
 
+@pytest.mark.parametrize("zone", ["Z", "+01:00", "-14:00"])
+def test_date_with_a_time_zone_is_read_and_the_zone_reported(zone: str) -> None:
+    # xs:date allows a time zone and no CEN rule restricts it (D8); the model keeps the calendar date only, so the
+    # zone is reported as part of the element's text that was not mapped.
+    invoice = minimal_invoice(payment_due_date=datetime.date(2026, 2, 14))
+
+    def zoned(root: etree._Element) -> None:
+        find(root, "cbc:IssueDate").text = f"2026-01-15{zone}"
+        find(root, "cbc:DueDate").text = f" 2026-02-14{zone}\n"
+
+    result = read_changed(invoice, zoned)
+    assert result.invoice == invoice
+    assert result.unmapped == ("/*/cbc:IssueDate/text()", "/*/cbc:DueDate/text()")
+
+
 def test_namespaced_attributes_are_named_with_their_prefix() -> None:
     def foreign(root: etree._Element) -> None:
         find(root, "cbc:ID").set("{http://www.w3.org/XML/1998/namespace}lang", "en")
@@ -448,8 +463,8 @@ def test_wrong_root_is_a_parse_error() -> None:
             "/*/cac:AccountingCustomerParty/cac:Party/cac:PostalAddress",
         ),
         (
-            lambda root: find(root, "cbc:IssueDate").__setattr__("text", "2026-01-15Z"),
-            r"^BT-2: cannot interpret the date '2026-01-15Z'",
+            lambda root: find(root, "cbc:IssueDate").__setattr__("text", "15.01.2026"),
+            r"^BT-2: cannot interpret the date '15.01.2026'",
             "/*/cbc:IssueDate",
         ),
         (
@@ -470,7 +485,7 @@ def test_wrong_root_is_a_parse_error() -> None:
         "missing-totals",
         "missing-unit",
         "country",
-        "date-zone",
+        "not-xs-date",
         "decimals",
         "no-calendar-date",
     ],
@@ -498,7 +513,7 @@ def test_bad_boolean_is_a_parse_error() -> None:
     def bad(root: etree._Element) -> None:
         find(root, "cac:AllowanceCharge/cbc:ChargeIndicator").text = "yes"
 
-    with pytest.raises(ParseError, match="xs:boolean") as caught:
+    with pytest.raises(ParseError, match=r"^BG-20/BG-21: expected an xs:boolean") as caught:
         read_changed(minimal_invoice(allowances=full_invoice().allowances), bad)
     assert caught.value.location == "/*/cac:AllowanceCharge/cbc:ChargeIndicator"
 

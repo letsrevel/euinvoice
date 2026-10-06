@@ -20,7 +20,6 @@ from euinvoice.validate import artifacts, schematron, validate
 
 pytestmark = pytest.mark.conformance
 
-PEPPOL: t.Final = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
 XRECHNUNG: t.Final = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
 
 _DIRECTORIES: t.Final[dict[artifacts.SourceName, str]] = {
@@ -42,6 +41,11 @@ EXCLUDED: t.Final[dict[str, dict[str, str]]] = {
 }
 
 UPSTREAM_INVALID: t.Final[dict[str, dict[str, set[str]]]] = {
+    "cen-ubl": {
+        # Peppol BT-24: its placeholder Swedish organisation numbers (schemeID 0007, e.g. "1234567890") fail the
+        # check digit of PEPPOL-COMMON-R049 (fatal), which validate() runs under the Peppol profile (#64).
+        "issue116.xml": {"PEPPOL-COMMON-R049"},
+    },
     "xrechnung-testsuite": {
         # XRechnung extension with cac:PrepaidPayment (UBL-CR-470): BT-115 = BT-112 - BT-113 does not hold within
         # EN 16931 core, so the upstream file itself fails BR-CO-16 (fatal) under validate().
@@ -49,8 +53,8 @@ UPSTREAM_INVALID: t.Final[dict[str, dict[str, set[str]]]] = {
     },
 }
 
-_EXTRA_RULES: t.Final = {PEPPOL: schematron.PEPPOL_UBL, XRECHNUNG: schematron.XRECHNUNG_UBL}
-"""The CIUS rule sets that validate() does not run yet (no registered profile, #20 / #21)."""
+_EXTRA_RULES: t.Final = {XRECHNUNG: schematron.XRECHNUNG_UBL}
+"""The CIUS rule sets that validate() does not run yet (no registered profile, #21); Peppol runs since #64."""
 
 
 def _ubl_files(source: artifacts.SourceName) -> list[tuple[str, bytes]]:
@@ -92,7 +96,7 @@ def test_every_ubl_file_reads_and_round_trips(source: artifacts.SourceName) -> N
             continue
         first = ubl.read(_xml.parse(data))
         # The per-file report of out-of-model content asked for by plan §4 (shown with -rP or -s).
-        print(f"{source}:{name}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print]
+        print(f"{source}:{name}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print] - the per-file report plan §4 asks for
         written = ubl.write(first.invoice)
         second = ubl.read(_xml.parse(written))
         if second.invoice != first.invoice:
@@ -107,8 +111,8 @@ def test_every_ubl_file_reads_and_round_trips(source: artifacts.SourceName) -> N
             failures.append(f"{name}: {sorted(found)}")
         extra = _EXTRA_RULES.get(detect.detect(data).specification_identifier or "")
         if extra is not None:
-            # ponytail: validate() runs only the CEN rules for Peppol and XRechnung until #20 / #21 register their
-            # profiles; until then their UBL rules run here, and the round trip must not add a fatal or error.
+            # ponytail: validate() runs only the CEN rules for XRechnung until #21 registers its profile; until then
+            # its UBL rules run here, and the round trip must not add a fatal or error.
             added = _fatal_or_error(schematron.run(extra, written)) - _fatal_or_error(schematron.run(extra, data))
             if added:
                 failures.append(f"{name}: {extra.source} {sorted(added)}")

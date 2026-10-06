@@ -7,7 +7,7 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 
 from _invoices import TEST_IBAN, full_invoice, line, minimal_invoice, payment, price, rebuild
-from _strategies import cii_invoices
+from _strategies import cii_expressible, invoices
 from euinvoice import _xml
 from euinvoice.model import CreditTransfer, Invoice
 from euinvoice.syntax import cii
@@ -54,6 +54,6 @@ def test_output_has_no_cen_findings(name: str) -> None:
 
 
 @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(cii_invoices)
+@given(invoices.map(cii_expressible))
 def test_random_invoices_are_xsd_valid(invoice: Invoice) -> None:
     assert xsd.validate(_xml.parse(cii.write(invoice))) == ()

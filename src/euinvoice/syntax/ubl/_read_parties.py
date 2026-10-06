@@ -21,8 +21,9 @@ from euinvoice.model import (
     TaxRepresentativePostalAddress,
 )
 from euinvoice.model.delivery import DeliveryInformation
+from euinvoice.syntax._marks import normalize_space
 from euinvoice.syntax.ubl._build import VAT_SCHEME
-from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build, normalize_space
+from euinvoice.syntax.ubl._cursor import CAC, CBC, Cursor, build
 from euinvoice.syntax.ubl._parties import SEPA_SCHEME, TAX_REGISTRATION_SCHEME
 
 __all__ = ["Parties", "read_delivery", "read_parties", "take_creditor_id"]
@@ -131,7 +132,7 @@ def _tax_schemes(cursor: Cursor, party: etree._Element, *, other: bool = False) 
         scheme_id = None if scheme is None else next(scheme.iterchildren(CBC + "ID"), None)
         if company is None or scheme_id is None:
             continue
-        scheme_text = normalize_space(scheme_id.text)
+        scheme_text = normalize_space(scheme_id.text or "")
         is_vat = scheme_text.upper() == VAT_SCHEME
         if is_vat in found or not (is_vat or other):
             continue
