@@ -18,6 +18,15 @@ All notable changes to this project are documented here. The format follows
   generated from the manifest). Every Python example runs as a test (`tests/test_docs.py`), and the validation
   examples run against the official rules in `make conformance` (`tests/conformance/test_docs_examples.py`).
   Dev-group dependencies only: `mkdocs-material`, `mkdocstrings[python]`.
+- CLI (#28): `python -m euinvoice validate FILE [--profile ID] [--json]`, `convert FILE --to ubl|cii [--profile ID]
+  [-o OUT]` and `info FILE [--json]` next to `artifacts fetch`. FILE may be XML or a Factur-X / ZUGFeRD PDF (`-`
+  reads stdin); `--profile` takes a profile id (for a PDF, `validate` and `info` default to the profile of its
+  Factur-X level). Exit codes: 0 ok (warnings allowed); 1 document rejected (blocking findings, `convert` refused
+  by the pre-flight / calculation checks with the findings on stderr, unreadable invoice) or an artifact integrity
+  failure; 2 usage or setup (bad arguments, unknown profile, `convert --to` a syntax the profile does not support,
+  unreadable file, a failed artifact download, missing artifacts or extras). Every subcommand's `--help` lists them.
+  `convert` lists every input element it could not map on stderr and writes `-o` only once the conversion succeeded. Text the terminal
+  cannot encode is backslash-escaped. The JSON shapes are documented in `euinvoice/__main__.py`.
 - Top-level API (#27): `euinvoice.to_xml(invoice, *, profile=None, syntax=None)` prepares the invoice for the
   profile (default: the one registered for its BT-24), runs the profile's pre-flight checks and
   `calc.check(prepared, syntax=...)`, and refuses with the new `euinvoice.errors.PreflightError` (carrying the
