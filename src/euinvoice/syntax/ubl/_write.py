@@ -166,7 +166,9 @@ def _document_reference(root: etree._Element, name: str, reference: str | None) 
 def _references(root: etree._Element, invoice: Invoice, credit_note: bool) -> None:
     if invoice.purchase_order_reference is not None or invoice.sales_order_reference is not None:
         order = aggregate(root, "OrderReference")
-        basic(order, "ID", invoice.purchase_order_reference or MISSING_ORDER_REFERENCE)
+        # The placeholder stands in for a missing BT-13 only: an empty BT-13 is written empty (issue #79).
+        purchase_order = invoice.purchase_order_reference
+        basic(order, "ID", MISSING_ORDER_REFERENCE if purchase_order is None else purchase_order)
         basic(order, "SalesOrderID", invoice.sales_order_reference)
     for preceding in invoice.preceding_invoice_references:
         reference = aggregate(aggregate(root, "BillingReference"), "InvoiceDocumentReference")

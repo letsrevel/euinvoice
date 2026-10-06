@@ -283,6 +283,12 @@ class TestPreflight:
         # The CII rules have no R008.
         assert ids(invoice, CII) == []
 
+    def test_r008_on_an_empty_purchase_order_reference(self) -> None:
+        # Issue #79: the "NA" placeholder stands in for a missing BT-13 only, so an empty BT-13 is an empty element.
+        invoice = peppol_invoice(purchase_order_reference="", sales_order_reference="SO-1")
+        findings = PEPPOL.preflight(invoice, UBL)
+        assert [(f.rule_id, f.location) for f in findings] == [("PEPPOL-EN16931-R008", "/*/cac:OrderReference/cbc:ID")]
+
     def test_r008_keeps_non_xml_whitespace(self) -> None:
         # normalize-space() strips only space, tab, CR and LF: a no-break space is content.
         assert ids(peppol_invoice(buyer_reference="\N{NO-BREAK SPACE}"), UBL) == []

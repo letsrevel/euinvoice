@@ -153,6 +153,14 @@ def test_na_order_id_alone_is_a_purchase_order() -> None:
     assert read_back(invoice).invoice.purchase_order_reference == "NA"
 
 
+@pytest.mark.parametrize("sales_order", [None, "SO-1"])
+def test_empty_order_id_round_trips(sales_order: str | None) -> None:
+    # Issue #79: an empty cac:OrderReference/cbc:ID (UBL 2.1 IdentifierType is an xsd:normalizedString; no CEN
+    # rule tests BT-13's content) is BT-13 "", not the "NA" placeholder of a missing BT-13.
+    invoice = minimal_invoice(purchase_order_reference="", sales_order_reference=sales_order)
+    assert read_back(invoice) == ubl.ParseResult(invoice=invoice)
+
+
 def test_project_document_reference_in_an_invoice_is_unmapped() -> None:
     # CEN UBL-SR-43 (fatal): DocumentTypeCode 50 only in a CreditNote; in an Invoice it is no BT-11.
     def add_project(root: etree._Element) -> None:
