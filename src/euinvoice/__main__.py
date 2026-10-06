@@ -48,9 +48,7 @@ import datetime
 import io
 import json
 import logging
-import os
 import sys
-import tempfile
 import typing as t
 from decimal import Decimal
 from pathlib import Path
@@ -105,7 +103,12 @@ def _validate(args: argparse.Namespace) -> int:
     # XRechnung), as in ``info``. A level whose Factur-X Schematron is not pinned (MINIMUM, BASIC WL, BASIC,
     # EXTENDED; issue #42) then makes validate() raise ArtifactsNotAvailableError (exit 2) instead of a verdict.
     profile = args.profile if args.profile is not None or found is None else found.profile
-    report: ValidationReport = validate(xml, profile)
+    try:
+        report: ValidationReport = validate(xml, profile)
+    except ArtifactsNotAvailableError as exc:  # the unpinned Factur-X Schematron (#42) names the Python spelling
+        raise ArtifactsNotAvailableError(
+            str(exc).replace("pass profile=euinvoice.profiles.EN16931", "pass --profile en16931")
+        ) from exc
     if args.json:
         payload = {"ok": report.ok, "findings": [dataclasses.asdict(f) for f in report.findings]}
         sys.stdout.write(json.dumps(payload, indent=2) + "\n")
@@ -141,19 +144,11 @@ def _convert(args: argparse.Namespace) -> int:
         sys.stdout.buffer.write(xml)
         sys.stdout.buffer.flush()
     else:
-        _write_atomically(Path(args.output), xml)
+        # Written only after to_xml succeeded, so a refusal never touches OUT.
+        # ponytail: a write error midway (e.g. disk full) can leave OUT truncated; the upgrade path is a temp file in
+        # the same directory + os.replace that keeps OUT's mode and does not replace a symlink.
+        Path(args.output).write_bytes(xml)
     return 0
-
-
-def _write_atomically(path: Path, data: bytes) -> None:
-    """Write ``data`` to ``path`` through a temporary file in the same directory, so ``path`` is never half-written."""
-    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as tmp:
-        tmp.write(data)
-    try:
-        os.replace(tmp.name, path)
-    except OSError:
-        os.unlink(tmp.name)
-        raise
 
 
 def _plain(value: object) -> str | None:

@@ -293,13 +293,27 @@ def test_convert_profile_without_the_target_syntax_is_a_usage_error(
     assert capsys.readouterr().err == "error: profile 'facturx-en16931' does not support --to ubl; it supports cii\n"
 
 
-def test_convert_output_failure_leaves_no_temporary_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_convert_unwritable_output_exits_2_naming_it(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     source = _write(tmp_path, "a.xml", ubl.write(_core_invoice()))
     target = tmp_path / "out"
-    target.mkdir()  # os.replace cannot put a file over a directory
+    target.mkdir()  # a directory cannot be written as a file
     assert cli.main(["convert", "--to", "cii", "-o", str(target), source]) == 2
-    assert capsys.readouterr().err.startswith("error: ")
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.xml", "out"]
+    err = capsys.readouterr().err
+    assert err.startswith("error: ")
+    assert str(target) in err
+
+
+def test_validate_unpinned_facturx_level_hints_at_the_cli_flag(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The Factur-X BASIC Schematron is not pinned (#42): validate() raises before running anything.
+    invoice = minimal_invoice(
+        process_control=ProcessControl(specification_identifier=profiles.FACTURX_BASIC.specification_identifier)
+    )
+    assert cli.main(["validate", _write(tmp_path, "a.xml", cii.write(invoice))]) == 2
+    err = capsys.readouterr().err
+    assert "issues/42" in err
+    assert err.endswith("pass --profile en16931\n")
 
 
 # --- info -----------------------------------------------------------------------------------------------------------
