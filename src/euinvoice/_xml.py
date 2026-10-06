@@ -143,6 +143,42 @@ def parse(data: bytes) -> etree._Element:
     return root
 
 
+def getpath(element: etree._Element) -> str:
+    """The XPath of ``element`` as lxml's ``ElementTree.getpath`` writes it, for any element name (#90).
+
+    ``getpath`` is libxml2's ``xmlGetNodePath`` (2.14.6 ``tree.c``), which cuts bytes in two places: a
+    ``prefix:name`` step is written with ``snprintf(nametemp, sizeof(nametemp) - 1, "%s:%s", ...)`` into
+    ``char nametemp[100]``, keeping 98 bytes, and each partial path with ``snprintf((char *) buf, buf_len, ...)``,
+    dropping the tail of a path longer than its buffer. A cut can fall inside a UTF-8 character, and lxml decodes
+    the result strictly (``funicode`` in ``apihelpers.pxi``: ``s.decode('UTF-8')``), raising
+    ``UnicodeDecodeError``. Such a path is decoded with :func:`path_text` instead, so a hostile element name
+    cannot turn a located :class:`ParseError` or a finding into a crash.
+
+    Args:
+        element: An element of a parsed tree.
+
+    Returns:
+        ``getpath``'s result whenever lxml can decode it; otherwise libxml2's bytes with each cut character
+        replaced by U+FFFD.
+    """
+    try:
+        return element.getroottree().getpath(element)
+    except UnicodeDecodeError as exc:
+        return path_text(exc.object)
+
+
+def path_text(raw: bytes) -> str:
+    """Decode a node path libxml2 wrote: UTF-8, a character it cut becoming one U+FFFD (see :func:`getpath`).
+
+    Args:
+        raw: The UTF-8 bytes of the path.
+
+    Returns:
+        The same string as ``raw.decode()`` whenever that succeeds.
+    """
+    return raw.decode("utf-8", "replace")
+
+
 def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None) -> etree.XMLSchema:
     """Load an XML Schema from the local artifact cache.
 

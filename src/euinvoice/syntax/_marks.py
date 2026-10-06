@@ -9,6 +9,7 @@ import typing as t
 
 from lxml import etree
 
+from euinvoice import _xml
 from euinvoice.model.datatypes import normalize_space
 
 __all__ = ["XML_SPACE", "Marks", "attribute_name", "normalize_space"]
@@ -61,11 +62,11 @@ class Marks:
         self._partial_text: set[etree._Element] = set()
 
     def path(self, element: etree._Element) -> str:
-        """The XPath of ``element`` (``ElementTree.getpath``).
+        """The XPath of ``element`` (:func:`euinvoice._xml.getpath`).
 
         It costs O(siblings at every ancestor level), so it must not be called once per element.
         """
-        return self._tree.getpath(element)
+        return _xml.getpath(element)
 
     def mark(self, element: etree._Element) -> etree._Element:
         """Mark ``element`` as mapped and return it."""
@@ -91,59 +92,88 @@ class Marks:
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the input no business term took (``ParseResult.unmapped``), in document order."""
         found: list[str] = []
-        self._collect(self.root, self.path(self.root), found)
+        self._collect(self.root, [_step(_name(self.root), 1, 1)], found)
         return tuple(found)
 
-    def _collect(self, element: etree._Element, path: str, found: list[str]) -> None:
-        for key in element.attrib:
-            name = key if isinstance(key, str) else key.decode()
-            if (element, name) not in self._attributes:
-                found.append(f"{path}/@{attribute_name(element, name)}")
-        if element in self._partial_text:
-            found.append(f"{path}/text()")
-        for child, step in self._steps(element):
-            child_path = f"{path}/{step}"
+    def _collect(self, element: etree._Element, steps: list[bytes], found: list[str]) -> None:
+        attributes = [key if isinstance(key, str) else key.decode() for key in element.attrib]
+        unmapped = [name for name in attributes if (element, name) not in self._attributes]
+        if unmapped or element in self._partial_text:
+            path = _join(steps)
+            found.extend(f"{path}/@{attribute_name(element, name)}" for name in unmapped)
+            if element in self._partial_text:
+                found.append(f"{path}/text()")
+        for child, step in _steps(element):
+            steps.append(step)
             if child in self._elements:
-                self._collect(child, child_path, found)
+                self._collect(child, steps, found)
             else:
-                found.append(child_path)
+                found.append(_join(steps))
+            steps.pop()
 
-    def _steps(self, parent: etree._Element) -> list[tuple[etree._Element, str]]:
-        """Each child element of ``parent`` with the last step of its ``getpath`` XPath, in one pass (#80).
 
-        ``getpath`` is libxml2's ``xmlGetNodePath``, which counts the siblings at every level of every call, so
-        one call per element was quadratic in the number of invoice lines. This writes the same steps for every
-        element a reader can list (libxml2 2.14.6 ``tree.c``, ``xmlGetNodePath``, ``XML_ELEMENT_NODE`` branch;
-        libxml2 also truncates the tail of very long no-namespace ancestor paths, which readers never list):
-        ``prefix:name``, ``name`` without a namespace, or ``*`` in a default namespace; then ``[n]``, the
-        1-based position among the siblings it counts, unless it is the only one. A ``*`` step counts every
-        sibling element; any other counts those with the same local name and either no namespace or the same
-        prefix (not the same URI). Comments and PIs carry no data and are neither listed nor counted.
-        """
-        children = list(parent.iterchildren("*"))
-        names: list[str | None] = []
-        for child in children:
-            qname = etree.QName(child)
-            if not qname.namespace:
-                names.append(qname.localname)
-            else:
-                prefix = t.cast(str | None, child.prefix)  # lxml-stubs say str; None in a default namespace
-                names.append(None if prefix is None else f"{prefix}:{qname.localname}")
-        totals: dict[str | None, int] = {}
-        for name in names:
-            totals[name] = totals.get(name, 0) + 1
-        seen: dict[str | None, int] = {}
-        steps: list[tuple[etree._Element, str]] = []
-        for position, (child, name) in enumerate(zip(children, names, strict=True), start=1):
-            seen[name] = seen.get(name, 0) + 1
-            index, count = (position, len(children)) if name is None else (seen[name], totals[name])
-            # libxml2 writes ``prefix:name`` into a 100-byte buffer with snprintf size 99, keeping 98 bytes.
-            # ponytail: such a name falls back to getpath, O(siblings) each, so a crafted invoice with many
-            # long-prefixed siblings is quadratic again. Upgrade path: replicate the byte truncation (cut the
-            # UTF-8 at 98 bytes as libxml2 does, then decode the way lxml decodes the result) and drop the fallback.
-            if name is not None and len(name.encode()) > 98:
-                steps.append((child, self.path(child).rpartition("/")[2]))
-            else:
-                step = "*" if name is None else name
-                steps.append((child, step if count == 1 else f"{step}[{index}]"))
-        return steps
+# libxml2 2.14.6 tree.c, xmlGetNodePath, the bytes behind lxml's getpath (#80, #90):
+#     char nametemp[100];
+#     snprintf(nametemp, sizeof(nametemp) - 1, "%s:%s", (char *)cur->ns->prefix, (char *)cur->name);
+# keeps 98 bytes of a prefixed name, and per step, leaf first:
+#     buf_len = 500;
+#     if (buf_len - len < sizeof(nametemp) + 20) { ... newSize = 2 * buf_len + len + sizeof(nametemp) + 20; ...}
+#     snprintf((char *) buf, buf_len, "%s%s[%d]%s", sep, name, occur, (char *) buffer);
+# so a path longer than its buffer loses its tail.
+_NAME_BYTES: t.Final = 98
+_PATH_BYTES: t.Final = 500
+_ROOM: t.Final = 120
+
+
+def _name(element: etree._Element) -> bytes | None:
+    """The name in ``element``'s step: ``prefix:name`` cut to 98 bytes, ``name``, or ``None`` for a ``*`` step."""
+    qname = etree.QName(element)
+    if not qname.namespace:
+        return qname.localname.encode()
+    prefix = t.cast(str | None, element.prefix)  # lxml-stubs say str; None in a default namespace
+    return None if prefix is None else f"{prefix}:{qname.localname}".encode()[:_NAME_BYTES]
+
+
+def _step(name: bytes | None, index: int, count: int) -> bytes:
+    """``/name``, ``/*`` for ``None``, then ``[index]`` unless it is the only one counted."""
+    step = b"/" + (b"*" if name is None else name)
+    return step if count == 1 else b"%s[%d]" % (step, index)
+
+
+def _join(steps: list[bytes]) -> str:
+    """The path of the steps, root first, as libxml2 assembles it (see above), decoded as :func:`_xml.getpath`."""
+    path = b""
+    size = _PATH_BYTES
+    for step in reversed(steps):
+        if size - len(path) < _ROOM:
+            size = 2 * size + len(path) + _ROOM
+        path = (step + path)[: size - 1]
+    return _xml.path_text(path)
+
+
+def _steps(parent: etree._Element) -> list[tuple[etree._Element, bytes]]:
+    """Each child element of ``parent`` with its step of the ``getpath`` XPath, in one pass (#80).
+
+    ``getpath`` is libxml2's ``xmlGetNodePath``, which counts the siblings at every level of every call, so one
+    call per element was quadratic in the number of invoice lines. Its ``XML_ELEMENT_NODE`` branch writes
+    ``prefix:name`` (cut to 98 bytes), ``name`` without a namespace, or ``*`` in a default namespace; then
+    ``[n]``, the 1-based position among the siblings it counts, unless it is the only one. A ``*`` step counts
+    every sibling element; any other counts those with the same full local name and either no namespace or the
+    same prefix (not the same URI). Comments and PIs carry no data and are neither listed nor counted.
+    """
+    children = list(parent.iterchildren("*"))
+    keys: list[tuple[str | None, str] | None] = []
+    for child in children:
+        qname = etree.QName(child)
+        prefix = t.cast(str | None, child.prefix)  # lxml-stubs say str; None in a default namespace or none
+        keys.append((prefix, qname.localname) if not qname.namespace or prefix is not None else None)
+    totals: dict[tuple[str | None, str] | None, int] = {}
+    for key in keys:
+        totals[key] = totals.get(key, 0) + 1
+    seen: dict[tuple[str | None, str] | None, int] = {}
+    steps: list[tuple[etree._Element, bytes]] = []
+    for position, (child, key) in enumerate(zip(children, keys, strict=True), start=1):
+        seen[key] = seen.get(key, 0) + 1
+        index, count = (position, len(children)) if key is None else (seen[key], totals[key])
+        steps.append((child, _step(_name(child), index, count)))
+    return steps

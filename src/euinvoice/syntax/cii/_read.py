@@ -60,7 +60,7 @@ def read(root: etree._Element) -> ParseResult:
     # they raise ParseError naming the missing terms. Reading them as an EN 16931 subset needs a maintainer decision
     # on D1 (needs-human #69); BASIC, EN 16931, EXTENDED and XRECHNUNG read fully.
     if root.tag != _ROOT:
-        raise ParseError(f"expected the CII root {_ROOT}, got {root.tag}", location=root.getroottree().getpath(root))
+        raise ParseError(f"expected the CII root {_ROOT}, got {root.tag}", location=_xml.getpath(root))
     reader = Reader(root)
     transaction = reader.one(root, "SupplyChainTradeTransaction", _xml.CII_RSM)
     settlement_fields, invoicing_period = settlement(reader, transaction)

@@ -150,5 +150,9 @@ def _finding(error: _LogEntry, source: str) -> Finding:
     gives one. There is no column: libxml2 does not track columns while validating a parsed tree.
     """
     severity = Severity.WARNING if error.level_name == "WARNING" else Severity.FATAL
-    location = f"{error.line} {error.path}" if error.path else str(error.line)
+    try:
+        path = error.path
+    except UnicodeDecodeError as exc:  # libxml2 cut the path inside a character (see _xml.getpath, #90)
+        path = _xml.path_text(exc.object)
+    location = f"{error.line} {path}" if path else str(error.line)
     return Finding(rule_id=RULE_ID, severity=severity, location=location, message=error.message, source=source)

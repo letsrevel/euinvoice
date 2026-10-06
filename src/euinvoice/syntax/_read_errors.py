@@ -9,6 +9,7 @@ import pydantic
 import pydantic_core
 from lxml import etree
 
+from euinvoice import _xml
 from euinvoice.errors import ParseError
 from euinvoice.model import bt_id
 
@@ -40,7 +41,7 @@ def build[M: pydantic.BaseModel](
     except pydantic.ValidationError as exc:
         problems = "; ".join(_problem(cls, error) for error in exc.errors())
         label = cls.__name__ if term is None else f"{term} {cls.__name__}"
-        location = at.getroottree().getpath(at)
+        location = _xml.getpath(at)
         raise ParseError(f"cannot read {label}: {problems}", location=location) from exc
 
 

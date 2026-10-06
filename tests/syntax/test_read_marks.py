@@ -11,6 +11,8 @@ from lxml import etree
 
 from _invoices import minimal_invoice
 from euinvoice import _xml
+from euinvoice._xml import getpath as path
+from euinvoice.errors import ParseError
 from euinvoice.model import ItemAttribute
 from euinvoice.syntax import _read_errors as read_errors
 from euinvoice.syntax import cii, ubl
@@ -39,7 +41,7 @@ def test_xml_lang_is_reported_with_the_xml_prefix(syntax: str) -> None:
     write, read = READERS[syntax]
     root = _xml.parse(write())
     root.set(_XML_LANG, "en")
-    result = read(_xml.parse(etree.tostring(root)))
+    result = read(_xml.parse(etree.tostring(root, encoding="utf-8")))
     path = root.getroottree().getpath(root)
     assert result.unmapped == (f"{path}/@xml:lang",)
 
@@ -60,8 +62,22 @@ _NSMAPS: t.Final[tuple[dict[str | None, str], ...]] = (
     {"a": _URI_B},
     {"b": _URI_A},
 )
-# The last name overflows libxml2's 100-byte step buffer once prefixed.
-_LOCAL_NAMES: t.Final = ("x", "y", "z" * 120)
+# Names at libxml2's edges (tree.c, xmlGetNodePath): a prefixed step keeps 98 bytes of ``prefix:name`` (cut
+# inside a two- or three-byte character for some prefixes), and a long name truncates the tail of the whole path
+# (the 500-byte buffer), also inside a character.
+_LOCAL_NAMES: t.Final = (
+    "x",
+    "y",
+    "z" * 120,
+    "x" * 96,
+    "x" * 97,
+    "x" + "é" * 48,
+    "é" * 49,
+    "€" * 33,
+    "é" * 260,
+    "x" + "é" * 260,
+    "q" * 520,
+)
 
 type Spec = tuple[str | None, str, int, bool, list[Spec]]
 
@@ -96,18 +112,25 @@ def _build(spec: Spec, parent: etree._Element | None = None) -> etree._Element:
     return element
 
 
+def _getpath(element: etree._Element) -> str:
+    """lxml's ``getpath``; a path libxml2 cut inside a character is decoded with U+FFFD for the partial one."""
+    try:
+        return element.getroottree().getpath(element)
+    except UnicodeDecodeError as exc:  # the bytes libxml2 wrote, decoded as documented in _xml.getpath
+        return exc.object.decode("utf-8", "replace")
+
+
 def _getpath_unmapped(root: etree._Element, marked: set[etree._Element]) -> tuple[str, ...]:
     """The ``unmapped`` expected for ``marked``, every XPath from lxml's ``getpath`` (the oracle)."""
-    tree = root.getroottree()
     found: list[str] = []
 
     def walk(element: etree._Element) -> None:
-        found.append(f"{tree.getpath(element)}/@k")
+        found.append(f"{_getpath(element)}/@k")
         for child in element.iterchildren("*"):
             if child in marked:
                 walk(child)
             else:
-                found.append(tree.getpath(child))
+                found.append(_getpath(child))
 
     walk(root)
     return tuple(found)
@@ -131,7 +154,7 @@ def test_reading_does_not_compute_an_xpath_per_element(syntax: str, monkeypatch:
     etree.SubElement(line, f"{{{_URI_A}}}Unmapped", nsmap={"x": _URI_A})
     for _ in range(30):
         line.addnext(copy.deepcopy(line))
-    root = _xml.parse(etree.tostring(root))
+    root = _xml.parse(etree.tostring(root, encoding="utf-8"))
     calls: list[etree._Element] = []
     marks_path, cursor_path = Marks.path, ubl_cursor._path
 
@@ -147,7 +170,7 @@ def test_reading_does_not_compute_an_xpath_per_element(syntax: str, monkeypatch:
     monkeypatch.setattr(ubl_cursor, "_path", count_cursor)
     unmapped = read(root).unmapped
     assert len([path for path in unmapped if path.endswith("/x:Unmapped")]) == 31
-    assert calls == [root]  # every other XPath is built from its parent's
+    assert calls == []  # every XPath is built from its steps
 
 
 def test_build_computes_the_error_location_only_on_failure() -> None:
@@ -159,9 +182,11 @@ def test_build_computes_the_error_location_only_on_failure() -> None:
 @pytest.mark.parametrize(
     "local",
     [
-        "x" * 96,  # a:… is 98 bytes, the most libxml2 keeps: built here
-        "x" * 97,  # 99 bytes, truncated by libxml2: getpath fallback
+        "x" * 96,  # a:… is 98 bytes, the most libxml2 keeps
+        "x" * 97,  # 99 bytes, truncated by libxml2
         "é" * 47 + "x",  # multibyte, 97 bytes
+        "x" + "é" * 48,  # 99 bytes, cut inside an "é"
+        "€" * 33,  # 101 bytes, cut inside a "€"
     ],
 )
 def test_steps_at_the_libxml2_name_buffer_edge(local: str) -> None:
@@ -169,13 +194,71 @@ def test_steps_at_the_libxml2_name_buffer_edge(local: str) -> None:
     assert Marks(root).unmapped() == _getpath_unmapped(root, {root})[1:]  # [1:]: the oracle's root/@k
 
 
-def test_a_name_libxml2_cuts_inside_a_character_fails_as_getpath_does() -> None:
-    # a:… is 99 bytes: libxml2 cuts it inside an "é" and lxml cannot decode getpath's result (unchanged by #80).
+def test_a_name_libxml2_cuts_inside_a_character_ends_in_a_replacement_character() -> None:
+    # a:… is 99 bytes: libxml2 keeps 98, ending in the first byte of an "é" (#90). lxml's getpath raises
+    # UnicodeDecodeError on it; the partial character becomes one U+FFFD instead.
     root = _edge_tree("x" + "é" * 48)
-    with pytest.raises(UnicodeDecodeError):
-        _getpath_unmapped(root, {root})
-    with pytest.raises(UnicodeDecodeError):
-        Marks(root).unmapped()
+    step = "a:x" + "é" * 47 + "\ufffd"
+    assert Marks(root).unmapped() == (f"/a:root/{step}[1]", f"/a:root/{step}[2]", "/a:root/a:y")
+    assert path(root[0]) == f"/a:root/{step}[1]"
+
+
+def test_a_path_libxml2_truncates_inside_a_character_ends_in_a_replacement_character() -> None:
+    # The 500-byte path buffer cuts "/x" + 260 "é" after 499 bytes, the first byte of the 249th "é" (#90).
+    root = etree.Element(f"{{{_URI_A}}}root", nsmap={"a": _URI_A})
+    child = etree.SubElement(root, "x" + "é" * 260)
+    expected = "/a:root/x" + "é" * 248 + "\ufffd"
+    assert Marks(root).unmapped() == (expected,)
+    assert path(child) == expected
+
+
+# A prefix bound to a namespace the readers map, long enough that libxml2 cuts every step it is in inside an "é".
+_HOSTILE: t.Final = "p" + "é" * 60
+
+
+def _rename_prefix(data: bytes, prefix: str) -> bytes:
+    """``data`` with the namespace prefix ``prefix`` renamed to :data:`_HOSTILE`."""
+    hostile = _HOSTILE.encode()
+    data = data.replace(f"xmlns:{prefix}=".encode(), b"xmlns:" + hostile + b"=")
+    return data.replace(f"<{prefix}:".encode(), b"<" + hostile + b":").replace(
+        f"</{prefix}:".encode(), b"</" + hostile + b":"
+    )
+
+
+@pytest.mark.parametrize("syntax", list(READERS))
+def test_an_unmapped_element_libxml2_cuts_inside_a_character_is_listed(syntax: str) -> None:
+    write, read = READERS[syntax]
+    root = _xml.parse(write())
+    etree.SubElement(root, f"{{{_URI_A}}}x" + "é" * 48, nsmap={"a": _URI_A})
+    root = _xml.parse(etree.tostring(root, encoding="utf-8"))
+    unmapped = read(root).unmapped
+    assert unmapped == (f"{path(root)}/a:x" + "é" * 47 + "\ufffd",)
+
+
+@pytest.mark.parametrize(
+    ("syntax", "prefix", "date"),
+    [("ubl", "cbc", f"{{{_xml.UBL_CBC}}}IssueDate"), ("cii", "rsm", f"{{{_xml.CII_UDT}}}DateTimeString")],
+)
+def test_an_error_location_libxml2_cuts_inside_a_character_is_a_parse_error(
+    syntax: str, prefix: str, date: str
+) -> None:
+    write, read = READERS[syntax]
+    root = _xml.parse(_rename_prefix(write(), prefix))
+    next(root.iter(date)).text = "not a date"
+    with pytest.raises(ParseError) as caught:
+        read(_xml.parse(etree.tostring(root, encoding="utf-8")))
+    assert caught.value.location is not None
+    assert f"/{_HOSTILE[:49]}\ufffd" in caught.value.location
+
+
+@pytest.mark.parametrize("syntax", list(READERS))
+def test_a_wrong_root_libxml2_cuts_inside_a_character_is_a_parse_error(syntax: str) -> None:
+    _, read = READERS[syntax]
+    hostile = _HOSTILE.encode()
+    root = _xml.parse(b"<" + hostile + b":Wrong xmlns:" + hostile + b'="urn:example:a"/>')
+    with pytest.raises(ParseError, match="expected the") as caught:
+        read(root)
+    assert caught.value.location == f"/{_HOSTILE[:49]}\ufffd"
 
 
 def _edge_tree(local: str) -> etree._Element:
