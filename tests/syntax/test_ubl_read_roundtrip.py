@@ -9,6 +9,6 @@ from euinvoice.syntax import ubl
 
 
 @settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(ubl_invoices())
+@given(ubl_invoices)
 def test_read_inverts_write(invoice: Invoice) -> None:
     assert ubl.read(_xml.parse(ubl.write(invoice))) == ubl.ParseResult(invoice=invoice)

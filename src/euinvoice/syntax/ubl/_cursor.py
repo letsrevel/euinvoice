@@ -4,20 +4,20 @@ Every element and attribute the reader maps to a business term is *taken* throug
 was never taken is reported by :meth:`Cursor.unmapped`, so nothing in the input is dropped silently
 (IMPLEMENTATION_PLAN.md §4). Values are handed to the model as read: the model's types convert and check
 them (Decimal-only numbers, code lists), and :func:`build` turns a model error into a
-:class:`~euinvoice.errors.ParseError` that names the business term and the element.
+:class:`~euinvoice.errors.ParseError` that names the business term and the element (shared with the CII reader).
 """
 
 import datetime
 import re
 import typing as t
 
-import pydantic
 from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ParseError
 from euinvoice.model import Identifier
-from euinvoice.model._base import EuInvoiceModel, bt_id
+from euinvoice.model._base import EuInvoiceModel
+from euinvoice.syntax import _read_errors as read_errors
 
 __all__ = ["CAC", "CBC", "Cursor", "build", "normalize_space"]
 
@@ -54,39 +54,21 @@ def _path(element: etree._Element) -> str:
 
 
 def build[M: EuInvoiceModel](model: type[M], at: etree._Element, term: str, /, **values: object) -> M:
-    """Build a model from values read at ``at``, turning a validation error into :class:`ParseError`.
-
-    ``None`` means "absent": a missing mandatory term then reads as pydantic's "Field required". The message
-    has the form ``cannot read <term> <Class>: <BT-n> (<field>): <reason>; …``, the same as the CII reader's.
+    """Build a model from values read at ``at`` with the shared :func:`euinvoice.syntax._read_errors.build`.
 
     Args:
         model: The model class.
         at: The element the values were read from; its XPath is the error location.
-        term: The BT/BG id of the model (named for errors that concern no single field, e.g. BR-33).
-        **values: The field values.
+        term: The BT/BG id of the model, named in the error message (``cannot read <term> <Class>: …``).
+        **values: The field values (``None`` means absent).
 
     Returns:
         The model.
 
     Raises:
-        ParseError: The values do not form a valid model. A :class:`~euinvoice.errors.ModelError` raised by a
-            model check arrives inside pydantic's ``ValidationError`` and keeps its CEN rule id.
+        ParseError: The values do not form a valid model; the message names each failing BT/BG id.
     """
-    try:
-        return model(**{name: value for name, value in values.items() if value is not None})
-    except pydantic.ValidationError as exc:
-        problems = "; ".join(_problem(model, error) for error in exc.errors())
-        raise ParseError(f"cannot read {term} {model.__name__}: {problems}", location=_path(at)) from exc
-
-
-def _problem(model: type[EuInvoiceModel], error: t.Any) -> str:
-    """One pydantic error as ``BT-n (field): message``."""
-    location = tuple(error["loc"])
-    field = location[0] if location and isinstance(location[0], str) else None
-    ident = bt_id(model, field) if field is not None and field in model.model_fields else None
-    where = ".".join(str(part) for part in location)
-    label = f"{ident} ({where})" if ident is not None else where or model.__name__
-    return f"{label}: {error['msg']}"
+    return read_errors.build(model, _path(at), values, term)
 
 
 class Cursor:

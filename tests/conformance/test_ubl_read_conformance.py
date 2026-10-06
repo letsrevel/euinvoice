@@ -84,6 +84,9 @@ def test_every_ubl_file_reads_and_round_trips(source: artifacts.SourceName) -> N
     failures: list[str] = []
     for name, data in files:
         if name in excluded:
+            # D8: the model refuses only what the official CEN rules refuse, so the rule is fatal upstream too.
+            fatal = {f.rule_id for f in validate(data).findings if f.severity == "fatal"}
+            assert excluded[name] in fatal, (name, sorted(fatal))
             with pytest.raises(ParseError, match=excluded[name]):
                 ubl.read(_xml.parse(data))
             continue
