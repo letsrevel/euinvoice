@@ -5,7 +5,7 @@ import dataclasses
 import pytest
 
 from euinvoice import _xml, profiles
-from euinvoice.detect import Detection, detect
+from euinvoice.detect import Detection, detect, detect_root
 from euinvoice.errors import ParseError, UnsupportedDocumentError
 
 CORE = "urn:cen.eu:en16931:2017"
@@ -83,19 +83,21 @@ def test_detection_is_immutable() -> None:
 
 
 @pytest.mark.parametrize("bt24", [None, "", "   "])
-def test_a_ubl_document_without_bt24_is_rejected(bt24: str | None) -> None:
-    with pytest.raises(UnsupportedDocumentError, match=r"BT-24.*BR-01"):
-        detect(ubl(bt24=bt24))
+def test_a_ubl_document_without_bt24_is_classified_without_bt24_or_profile(bt24: str | None) -> None:
+    # An invalid invoice, not garbage: validate() must still run the official rules (BR-01) on it.
+    assert detect(ubl(bt24=bt24)) == Detection(
+        syntax="ubl", root="Invoice", specification_identifier=None, profile=None
+    )
 
 
-def test_a_cii_document_without_bt24_is_rejected() -> None:
-    with pytest.raises(UnsupportedDocumentError, match=r"BT-24.*BR-01"):
-        detect(cii())
-
-
-def test_a_cii_document_with_two_bt24_values_is_rejected() -> None:
-    with pytest.raises(UnsupportedDocumentError, match="CII-SR-009"):
-        detect(cii(CORE, PEPPOL))
+@pytest.mark.parametrize("bt24", [(), ("",), (CORE, PEPPOL), (CORE, CORE)])
+def test_a_cii_document_without_exactly_one_bt24_is_classified_without_bt24_or_profile(
+    bt24: tuple[str, ...],
+) -> None:
+    # The CEN rules report these (BR-01, CII-SR-009/010); detection picks no profile.
+    assert detect(cii(*bt24)) == Detection(
+        syntax="cii", root="CrossIndustryInvoice", specification_identifier=None, profile=None
+    )
 
 
 @pytest.mark.parametrize(
@@ -117,6 +119,18 @@ def test_a_pdf_is_rejected_with_a_pointer_to_facturx_extract() -> None:
         detect(b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n")
 
 
+@pytest.mark.parametrize("prefix", [b"\xef\xbb\xbf", b"\n", b"\r\n  ", b"x" * 1018])
+def test_a_pdf_header_after_leading_bytes_is_still_sniffed(prefix: bytes) -> None:
+    # Readers accept leading bytes before %PDF- within the first 1024 bytes; 1018 + len(b"%PDF-") is 1023.
+    with pytest.raises(UnsupportedDocumentError, match=r"facturx\.extract"):
+        detect(prefix + b"%PDF-1.7\n")
+
+
+def test_a_pdf_header_beyond_the_first_1024_bytes_is_not_sniffed() -> None:
+    with pytest.raises(ParseError):
+        detect(b"x" * 1024 + b"%PDF-1.7\n")
+
+
 @pytest.mark.parametrize("data", [b"", b"not xml at all", b"\x00\x01\x02", b"<Invoice>"])
 def test_malformed_input_is_a_parse_error(data: bytes) -> None:
     with pytest.raises(ParseError):
@@ -134,7 +148,16 @@ def test_non_bytes_input_is_a_type_error() -> None:
         detect(ubl().decode())  # type: ignore[arg-type]  # asserting str input is rejected
 
 
-def test_a_ubl_document_with_two_bt24_values_is_rejected() -> None:
-    data = ubl().replace(b"<cbc:ID>", f"<cbc:CustomizationID>{PEPPOL}</cbc:CustomizationID><cbc:ID>".encode())
-    with pytest.raises(UnsupportedDocumentError, match=r"UBL 2\.1 XSD"):
-        detect(data)
+def test_a_ubl_document_with_two_bt24_values_is_classified_without_bt24_or_profile() -> None:
+    data = ubl().replace(b"<cbc:ID>", f"<cbc:CustomizationID>{CORE}</cbc:CustomizationID><cbc:ID>".encode())
+    detection = detect(data)
+    assert (detection.specification_identifier, detection.profile) == (None, None)
+
+
+def test_detect_root_classifies_an_already_parsed_tree() -> None:
+    assert detect_root(_xml.parse(cii(CORE))) == detect(cii(CORE))
+
+
+def test_detect_root_rejects_an_unknown_root() -> None:
+    with pytest.raises(UnsupportedDocumentError, match="root element"):
+        detect_root(_xml.parse(b"<html/>"))

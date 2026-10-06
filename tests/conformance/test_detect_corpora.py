@@ -19,7 +19,7 @@ from euinvoice.validate import artifacts
 
 pytestmark = pytest.mark.conformance
 
-type Bucket = tuple[str, str, str, str | None]
+type Bucket = tuple[str, str, str | None, str | None]
 
 CORE = "urn:cen.eu:en16931:2017"
 PEPPOL = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"

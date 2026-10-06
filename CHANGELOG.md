@@ -68,11 +68,12 @@ All notable changes to this project are documented here. The format follows
   sets BT-24 and a missing BT-23 through model validation; the EN 16931 core profile `EN16931`
   (`urn:cen.eu:en16931:2017`, UBL and CII, CEN rules); and `profiles.get(bt24)`, which raises
   `UnsupportedDocumentError` listing the known identifiers for an unknown BT-24.
-- `euinvoice.detect.detect(data)`: classifies XML bytes as UBL `Invoice` / `CreditNote` or CII
-  `CrossIndustryInvoice`, reads BT-24 (whitespace-normalized) and resolves the registered profile by
-  exact match, or `None` when no profile declares that BT-24. Other roots, a missing or repeated BT-24
-  (BR-01, CII-SR-009/010) and PDF input raise `UnsupportedDocumentError`; malformed XML raises
-  `ParseError`.
+- `euinvoice.detect.detect(data)` / `detect_root(root)`: classify XML bytes (or an already parsed root)
+  as UBL `Invoice` / `CreditNote` or CII `CrossIndustryInvoice`, read BT-24 (XPath `normalize-space`)
+  and resolve the registered profile by exact match, or `None` when no profile declares that BT-24. A
+  missing, empty or repeated BT-24 gives `specification_identifier=None` and `profile=None` (the
+  official rules report it). Only PDF input and an unsupported root raise `UnsupportedDocumentError`;
+  malformed XML raises `ParseError`.
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
