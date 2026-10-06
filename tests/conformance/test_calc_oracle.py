@@ -10,9 +10,10 @@ the pinned ``CEN_CII`` / ``CEN_UBL`` rule set; then:
 * ``check(invoice, syntax=...)`` reports exactly the ids in calc's scope (:data:`IN_SCOPE`) that the
   rule set reports: no more, no fewer.
 
-The UBL writer refuses an invoice without BT-110, and both writers refuse BT-6 = BT-5 with BT-111 (#71); for
-those ``check(invoice, syntax=...)`` must report the rejection instead. ``test_accounting_currency_official.py``
-proves on hand-made documents that the official rules reject that last case in both syntaxes.
+The UBL writer refuses an invoice without BT-110 unless BT-112 = BT-109 and Σ BT-117 = 0 (then it writes
+0.00), and both writers refuse BT-6 = BT-5 with BT-111 (#71); for those ``check(invoice, syntax=...)`` must
+report the rejection instead. ``test_accounting_currency_official.py`` proves on hand-made documents that the
+official rules reject that last case in both syntaxes.
 """
 
 import datetime
@@ -23,7 +24,17 @@ from decimal import Decimal
 
 import pytest
 
-from _calc_drafts import allowance, charge, draft, group, line, replace, with_breakdown, with_totals
+from _calc_drafts import (
+    allowance,
+    charge,
+    draft,
+    group,
+    line,
+    not_subject_to_vat,
+    replace,
+    with_breakdown,
+    with_totals,
+)
 from euinvoice import calc
 from euinvoice.errors import ModelError
 from euinvoice.model import (
@@ -128,6 +139,8 @@ CASES: dict[str, Callable[[], Invoice]] = {
         base(), total_vat=None, total_with_vat="165.00", amount_due="165.00"
     ),
     "BR-CO-15 BT-110 absent": lambda: with_totals(base(), total_vat=None),
+    # bt-mapping.md "Normalizations": no VAT at all, so the UBL writer states BT-110 = 0.00 (CEN example7 pair)
+    "BR-CO-15 BT-110 absent, no VAT": lambda: with_totals(not_subject_to_vat(), total_vat=None),
     "BR-CO-15 BT-112 = BT-109": lambda: with_totals(base(), total_with_vat="165.00", amount_due="165.00"),
     "BR-CO-16": lambda: with_totals(base(), amount_due="188.00"),
     "BR-53 no BT-111": lambda: replace(base(), vat_accounting_currency_code="SEK"),
@@ -219,6 +232,7 @@ BOTH_REFUSE: t.Final[dict[str, dict[Syntax, set[str]]]] = {
 """Cases both writers refuse (#71), with the rule ids the pinned CEN Schematron reports per syntax."""
 CLEAN: t.Final = {
     "clean",
+    "BR-CO-15 BT-110 absent, no VAT",
     "BR-CO-17 within 1",
     "BR-AG-08 unused rate",
     "BR-29 one day",

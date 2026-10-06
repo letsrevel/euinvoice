@@ -58,10 +58,13 @@ generated, parsed and validated per profile is in the README table; the open que
 - `syntax.ubl.write()` ([#10](https://github.com/letsrevel/euinvoice/issues/10)): UBL 2.1 for every business term, in XSD order. BT-3 picks the root (`CreditNote`
   for the CEN credit note codes, including 81; `Invoice` otherwise). A gross price (BT-148) without a discount is
   written with the implied discount. It raises `ModelError` ("BT-n cannot be written in UBL: …") for content UBL
-  cannot express (BT-87 or the BT-125 mime code / filename missing, BT-110 missing, BT-111 without BT-6, BT-6
-  equal to BT-5 with BT-111, BT-148 below BT-146, BT-150 without BT-149, BT-9 in a credit note without BG-16).
+  cannot express (BT-87 or the BT-125 mime code / filename missing, BT-110 missing with VAT, BT-111 without BT-6,
+  BT-6 equal to BT-5 with BT-111, BT-148 below BT-146, BT-150 without BT-149, BT-9 in a credit note without BG-16).
   An absent purchase order reference (BT-13) under a sales order reference is written as `NA`; an empty one
-  stays empty ([#79](https://github.com/letsrevel/euinvoice/issues/79)).
+  stays empty ([#79](https://github.com/letsrevel/euinvoice/issues/79)). An absent BT-110 with no VAT (BT-112 =
+  BT-109 and Σ BT-117 = 0) is written as `cbc:TaxAmount` 0.00, as CEN's `ubl-tc434-example7.xml` does for
+  `CII_example7.xml`, and reads back as 0.00; `calc.check()` accepts it for UBL
+  ([#87](https://github.com/letsrevel/euinvoice/issues/87)).
 - `syntax.cii.write()` ([#13](https://github.com/letsrevel/euinvoice/issues/13)): UN/CEFACT CII D16B `rsm:CrossIndustryInvoice` in XSD order, every date as
   `format="102"`, BT-8 mapped to UNTDID 2475, BT-148 derived as BT-146 + BT-147 when only the discount is given.
   It raises `ModelError` for content CII cannot carry (more than one BG-3, BT-150 without BT-149, BT-111 without
@@ -207,4 +210,3 @@ generated, parsed and validated per profile is in the README table; the open que
 - SaxonC-HE 13.0.0 `normalize-space()` crashes on some non-Latin-1 text, giving a false `SCHEMATRON-RUNTIME`
   fatal ([#74](https://github.com/letsrevel/euinvoice/issues/74)).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
-- The UBL writer refuses an invoice without BT-110 that CII can express ([#87](https://github.com/letsrevel/euinvoice/issues/87), parked).

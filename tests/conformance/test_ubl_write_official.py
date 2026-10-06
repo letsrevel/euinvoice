@@ -8,6 +8,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from _calc_drafts import not_subject_to_vat, with_totals
 from _invoices import TEST_IBAN, full_invoice, minimal_invoice, simple_line
 from euinvoice import _xml
 from euinvoice.model import (
@@ -25,8 +26,8 @@ from euinvoice.model import (
 )
 from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL, UNTDID_1001_INVOICE_TYPE_UBL
 from euinvoice.report import Severity
-from euinvoice.syntax import ubl
-from euinvoice.validation import schematron, xsd
+from euinvoice.syntax import cii, ubl
+from euinvoice.validation import artifacts, schematron, xsd
 
 pytestmark = pytest.mark.conformance
 
@@ -44,6 +45,17 @@ INVOICES: t.Final = {
     # bt-mapping.md "Normalizations": BT-148 without BT-147 writes cbc:Amount = BT-148 - BT-146.
     "gross-equals-net": lambda: _gross_only(Decimal("50"), Decimal("50")),
     "gross-above-net": lambda: _gross_only(Decimal("50"), Decimal("50.75")),
+    # bt-mapping.md "Normalizations": BT-110 absent, BT-112 = BT-109 and Σ BT-117 = 0 write cbc:TaxAmount 0.00.
+    "bt110-absent-no-vat": lambda: with_totals(not_subject_to_vat(), total_vat=None),
+}
+
+NO_VAT_TWINS: t.Final = {
+    # CII omits BT-110, its UBL twin writes 0: CEN TOSL110 (example7) and the KoSIT minimal O-category case.
+    "cen-example7": (("cen-cii", "examples/CII_example7.xml"), ("cen-ubl", "examples/ubl-tc434-example7.xml")),
+    "kosit-01.05-minimal": (
+        ("xrechnung-testsuite", "instances/technical-cases/cius/01.05_minimal_test_uncefact.xml"),
+        ("xrechnung-testsuite", "instances/technical-cases/cius/01.05_minimal_test_ubl.xml"),
+    ),
 }
 
 
@@ -78,6 +90,24 @@ def test_output_is_schema_valid(build: t.Callable[[], Invoice]) -> None:
 def test_output_passes_cen_ubl_schematron(build: t.Callable[[], Invoice]) -> None:
     findings = schematron.run(schematron.CEN_UBL, ubl.write(build()))
     assert [f for f in findings if f.severity in _BLOCKING] == []
+
+
+def _upstream(source: artifacts.SourceName, path: str) -> bytes:
+    return (artifacts.source_dir(source) / path).read_bytes()
+
+
+@pytest.mark.parametrize("pair", NO_VAT_TWINS.values(), ids=NO_VAT_TWINS.keys())
+def test_absent_bt110_is_written_like_the_upstream_ubl_twin(
+    pair: tuple[tuple[artifacts.SourceName, str], tuple[artifacts.SourceName, str]],
+) -> None:
+    (cii_source, cii_path), (ubl_source, ubl_path) = pair
+    invoice = cii.read(_xml.parse(_upstream(cii_source, cii_path))).invoice
+    assert invoice.totals.total_vat is None
+    document = ubl.write(invoice)
+    twin = ubl.read(_xml.parse(_upstream(ubl_source, ubl_path))).invoice
+    assert ubl.read(_xml.parse(document)).invoice.totals.total_vat == twin.totals.total_vat == 0
+    rule_ids = {f.rule_id for f in schematron.run(schematron.CEN_UBL, document)}
+    assert not rule_ids & {"BR-CO-14", "BR-CO-15"}
 
 
 # Narrow strategies: XML-safe text (no control, surrogate or unassigned code points, which XML 1.0 forbids).

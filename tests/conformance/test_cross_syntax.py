@@ -23,6 +23,7 @@ their Schematron is not pinned, #42), so their UBL output runs the CEN UBL rules
 import collections
 import re
 import typing as t
+from decimal import Decimal
 
 import pytest
 from _corpus import Sample, cross_syntax, expected_invalid, samples
@@ -33,7 +34,7 @@ from _strategies import cii_normalized
 from euinvoice import _xml, profiles
 from euinvoice.detection import detect_root
 from euinvoice.errors import ModelError
-from euinvoice.model import Invoice, InvoiceLine, PriceDetails
+from euinvoice.model import DocumentTotals, Invoice, InvoiceLine, PriceDetails
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.syntax import Syntax
 from euinvoice.validation import artifacts, validate
@@ -47,8 +48,8 @@ COUNTS: t.Final[dict[tuple[Syntax, str], int]] = {
     (Syntax.UBL, "normalized"): 5,
     (Syntax.UBL, "refuses"): 2,
     (Syntax.CII, "lossless"): 74,
-    (Syntax.CII, "normalized"): 71,
-    (Syntax.CII, "refuses"): 6,
+    (Syntax.CII, "normalized"): 74,
+    (Syntax.CII, "refuses"): 3,
 }
 """Outcomes per source syntax: ``lossless`` (equal without normalization), ``normalized`` (equal after
 :func:`_as_written`), ``differs`` (a ``differs`` entry of ``expected_invalid.toml``), ``refuses`` (a documented
@@ -72,7 +73,8 @@ def _as_written(invoice: Invoice, syntax: Syntax) -> Invoice:
       BT-147 without BT-148 gains BT-148 = BT-146 + BT-147: the D16B ``TradePriceType`` requires
       ``ram:ChargeAmount``; PEPPOL-EN16931-R046);
     * UBL: a BT-148 without BT-147 gains BT-147 = BT-148 - BT-146 (``cbc:Amount`` is mandatory in the UBL 2.1
-      ``AllowanceChargeType``; PEPPOL-EN16931-R046).
+      ``AllowanceChargeType``; PEPPOL-EN16931-R046), and an absent BT-110 gains 0.00 when BT-112 = BT-109 and
+      Σ BT-117 = 0 (``cbc:TaxAmount`` is mandatory in ``TaxTotalType``; BR-CO-14, BR-CO-15; #87).
     """
     if syntax == Syntax.CII:
         return cii_normalized(invoice)
@@ -86,7 +88,14 @@ def _as_written(invoice: Invoice, syntax: Syntax) -> Invoice:
     lines = tuple(
         InvoiceLine.model_validate({**dict(line), "price_details": price(line.price_details)}) for line in invoice.lines
     )
-    return Invoice.model_validate({**dict(invoice), "lines": lines})
+    totals = invoice.totals
+    if (
+        totals.total_vat is None
+        and totals.total_with_vat == totals.total_without_vat
+        and sum((group.tax_amount for group in invoice.vat_breakdown), Decimal(0)) == 0
+    ):
+        totals = DocumentTotals.model_validate({**dict(totals), "total_vat": Decimal("0.00")})
+    return Invoice.model_validate({**dict(invoice), "lines": lines, "totals": totals})
 
 
 def _target_profile(sample: Sample, data: bytes, target: Syntax) -> profiles.Profile:

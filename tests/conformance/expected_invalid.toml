@@ -547,8 +547,8 @@ link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e8
 #                 beyond the documented writer normalizations, exactly (a tracked gap; `reason` names its issue)
 #   reason        why, citing bt-mapping.md or the rule texts
 #
-# The writer normalizations of bt-mapping.md ("Normalizations": BT-148 derived in CII, BT-147 derived in UBL) are
-# applied by the test itself (_as_written), not listed here.
+# The writer normalizations of bt-mapping.md ("Normalizations": BT-148 derived in CII, BT-147 derived in UBL, BT-110
+# = 0.00 without VAT in UBL) are applied by the test itself (_as_written), not listed here.
 
 [[cross_syntax]]
 source = "xrechnung-testsuite"
@@ -565,27 +565,6 @@ rules = ["BG-3"]
 reason = "Two PRECEDING INVOICE REFERENCEs (BG-3). bt-mapping.md 'CII gap · more than one BG-3': ram:InvoiceReferencedDocument has maxOccurs 1 in ram:HeaderTradeSettlementType (D16B XSD), so the CII writer refuses the second one."
 
 # -- CII -> UBL: refusals of the UBL writer --------------------------------------------------------------------
-
-[[cross_syntax]]
-source = "cen-cii"
-file = "examples/CII_example7.xml"
-outcome = "refuses"
-rules = ["BG-23", "BR-CO-15", "BT-110"]
-reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
-
-[[cross_syntax]]
-source = "cen-cii"
-file = "examples/XRechnung-O.xml"
-outcome = "refuses"
-rules = ["BG-23", "BR-CO-15", "BT-110"]
-reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
-
-[[cross_syntax]]
-source = "xrechnung-testsuite"
-file = "instances/technical-cases/cius/01.05_minimal_test_uncefact.xml"
-outcome = "refuses"
-rules = ["BG-23", "BR-CO-15", "BT-110"]
-reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
 
 [[cross_syntax]]
 source = "zugferd-corpus"

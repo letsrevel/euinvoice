@@ -3,9 +3,10 @@
 :func:`ubl_expressible` changes only what the UBL writer refuses or normalizes by design, each documented in
 ``docs/reference/bt-mapping.md`` and covered by its own example test in ``test_ubl_read.py``:
 
-* refused (``ModelError``): BT-110 missing, BT-87 missing (decision M2), a BT-125 without its mime code or filename
-  (decision M3), a credit note's BT-9 without BG-16, BT-148 below BT-146, BT-111 without BT-6, BT-111 with BT-6
-  equal to BT-5 (two ``cac:TaxTotal`` in one currency, BR-CO-15);
+* refused (``ModelError``): BT-110 missing with VAT (without VAT it is written as 0.00, a normalization; the
+  strategy always sets it), BT-87 missing (decision M2), a BT-125 without its mime code or filename (decision M3),
+  a credit note's BT-9 without BG-16, BT-148 below BT-146, BT-111 without BT-6, BT-111 with BT-6 equal to BT-5
+  (two ``cac:TaxTotal`` in one currency, BR-CO-15);
 * normalized ("Normalizations", "The UBL reader"): BT-148 without BT-147 (BT-147 derived), groups with no term set
   (BG-1, BG-13, BG-14, BG-19, BG-26 read back as absent), a BT-22 without BT-21 that starts like a ``#CODE#``
   pair, a BT-21 note whose BT-22 is empty (written ``#CODE#``, read back without BT-22) and a BT-13 "NA" next to a

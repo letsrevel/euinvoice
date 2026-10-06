@@ -8,6 +8,7 @@ import pytest
 from _ubl_support import written, xpath
 from lxml import etree
 
+from _calc_drafts import not_subject_to_vat, with_totals
 from _invoices import TEST_IBAN, minimal_invoice, simple_line
 from euinvoice import _xml
 from euinvoice.errors import ModelError
@@ -222,9 +223,30 @@ def test_delivery_location_identifier_alone_writes_no_address() -> None:
     assert _local_names(xpath(root, "/*/cac:Delivery/cac:DeliveryLocation")[0]) == ["ID"]
 
 
-def test_total_vat_is_required() -> None:
-    with pytest.raises(ModelError, match=r"^BT-110 cannot be written in UBL"):
-        ubl.write(minimal_invoice(totals=_totals(total_vat=None)))
+def test_absent_total_vat_without_vat_is_written_as_zero() -> None:
+    # bt-mapping.md "Normalizations": BT-112 = BT-109 and Σ BT-117 = 0 give BT-110 = 0.00 (BR-CO-14, BR-CO-15).
+    root = written(with_totals(not_subject_to_vat(), total_vat=None))
+    (amount,) = xpath(root, "/*/cac:TaxTotal/cbc:TaxAmount")
+    assert (amount.text, amount.get("currencyID")) == ("0.00", "EUR")
+    assert len(xpath(root, "/*/cac:TaxTotal/cac:TaxSubtotal")) == 1
+
+
+def test_absent_total_vat_without_vat_reads_back_as_zero() -> None:
+    # The model gains BT-110 = 0.00 on the UBL round trip, like the BT-147/148 normalizations.
+    invoice = not_subject_to_vat()
+    assert invoice.totals.total_vat == Decimal("0.00")
+    assert ubl.read(_xml.parse(ubl.write(with_totals(invoice, total_vat=None)))).invoice == invoice
+
+
+def test_absent_total_vat_with_vat_in_the_total_is_refused() -> None:
+    with pytest.raises(ModelError, match=r"^BT-110 cannot be written in UBL: .*BR-CO-15"):
+        ubl.write(minimal_invoice(totals=_totals(total_vat=None)))  # BT-112 119.00 != BT-109 100.00
+
+
+def test_absent_total_vat_with_vat_in_the_breakdown_is_refused() -> None:
+    totals = _totals(total_vat=None, total_with_vat=Decimal("100.00"), amount_due=Decimal("100.00"))
+    with pytest.raises(ModelError, match=r"^BT-110 cannot be written in UBL: .*BR-CO-14"):
+        ubl.write(minimal_invoice(totals=totals))  # Σ BT-117 = 19.00
 
 
 def test_accounting_currency_total_needs_its_currency() -> None:
