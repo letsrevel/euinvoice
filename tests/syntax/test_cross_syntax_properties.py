@@ -4,9 +4,9 @@ The invoices are the shared random :data:`_strategies.invoices`, mapped onto wha
 unchanged: :func:`_strategies.cii_expressible`, :func:`_strategies.cii_normalized` and
 :func:`_ubl_strategies.ubl_expressible` take out exactly the refusals and normalizations that
 ``docs/reference/bt-mapping.md`` documents for each syntax. Every leg of the cross-syntax round trip must then be
-exact, with nothing unmapped. The property covers only the terms that strategy generates (e.g. not BT-10); a term it
-never sets can be dropped by a mapper unnoticed here. The corpus half, which reaches the other terms the upstream
-samples carry, is ``tests/conformance/test_cross_syntax.py``.
+exact, with nothing unmapped. The strategy draws every model field (``tests/test_strategies.py``, #89), so a mapper
+that drops a term fails here. The corpus half, which reaches the term combinations the upstream samples carry, is
+``tests/conformance/test_cross_syntax.py``.
 """
 
 from _ubl_strategies import ubl_expressible
