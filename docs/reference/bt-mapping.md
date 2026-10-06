@@ -295,6 +295,10 @@ is unbounded.
   `NA` there (Peppol upstream structure docs, commit 806866b, `ubl-invoice.xml`, BT-13). BT-32 is written
   with `cac:TaxScheme/cbc:ID` `FC`, as in the XRechnung test suite (CEN only requires a value other than
   `VAT`, UBL-SR-13). BT-90 is written under `cac:PayeeParty` when BG-10 is present, else under the Seller.
+* **N5 · Peppol P0100 cannot fire on CII.** `PEPPOL-EN16931-CII.sch:601-604` (peppol-bis 3.0.21) checks BT-3
+  against the profile in the context `ram:ExchangedDocument/ram:TypeCode`, but `ExchangedDocument` is in the
+  `rsm` namespace (`rsm:ExchangedDocument`), so the context never matches and the rule is dead upstream. A BT-3
+  that the UBL rule (`PEPPOL-EN16931-UBL.sch`) rejects passes the Peppol CII rules.
 
 ## Library conventions
 

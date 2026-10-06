@@ -38,6 +38,7 @@ PDF_SCOPE: t.Final = ("ZUGFeRDv2/correct", "XML-Rechnung/FX")
 EXPECTED_INVALID: t.Final = pathlib.Path(__file__).with_name("expected_invalid.toml")
 
 type Outcome = t.Literal["parse-error", "reads"]
+type CrossOutcome = t.Literal["refuses", "reads"]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -85,7 +86,7 @@ class ExpectedInvalid:
             its fatal or error rule ids.
         rules: See ``outcome``.
         upstream: The fatal or error rule ids of ``validate(X)`` on the upstream file itself, exactly.
-        differs: For ``reads``: the BT/BG ids of the ``Invoice`` fields where ``read(write(read(X)))`` differs
+        differs: For ``reads``: the BT/BG ids of the innermost fields where ``read(write(read(X)))`` differs
             from ``read(X)``, exactly (a known reader/writer gap; ``reason`` names its issue).
         reason: Why, citing the rule texts and, where open, the issue.
         link: The upstream file at the pinned version.
@@ -187,14 +188,23 @@ class CrossSyntax:
             documented gap of that syntax). ``reads``: ``validate`` of the other syntax's output has exactly
             ``rules`` as its fatal or error rule ids.
         rules: See ``outcome``.
-        differs: For ``reads``: the BT/BG ids where the round trip differs beyond the documented writer
-            normalizations, exactly (a tracked gap; ``reason`` names its issue).
+        differs: For ``reads``: the BT/BG ids of the innermost fields where the round trip differs beyond the
+            documented writer normalizations, exactly (a tracked gap; ``reason`` names its issue).
         reason: Why, citing ``docs/reference/bt-mapping.md`` or the rule texts.
     """
 
-    outcome: t.Literal["refuses", "reads"]
+    outcome: CrossOutcome
     rules: frozenset[str]
     differs: frozenset[str]
+    reason: str
+
+
+class _CrossEntry(t.TypedDict):
+    source: str
+    file: str
+    outcome: CrossOutcome
+    rules: list[str]
+    differs: t.NotRequired[list[str]]
     reason: str
 
 
@@ -202,12 +212,12 @@ class CrossSyntax:
 def cross_syntax() -> dict[str, CrossSyntax]:
     """The ``[[cross_syntax]]`` section of ``expected_invalid.toml`` keyed by :attr:`Sample.id`."""
     with EXPECTED_INVALID.open("rb") as file:
-        entries = t.cast(list[dict[str, t.Any]], tomllib.load(file)["cross_syntax"])
+        entries = t.cast(list[_CrossEntry], tomllib.load(file)["cross_syntax"])
     found: dict[str, CrossSyntax] = {}
     for entry in entries:
-        assert {"source", "file", "outcome", "rules", "reason"} <= set(entry), entry
-        assert set(entry) <= {"source", "file", "outcome", "rules", "differs", "reason"}, entry
-        assert entry["outcome"] in ("refuses", "reads"), entry
+        required, optional = _CrossEntry.__required_keys__, _CrossEntry.__optional_keys__
+        assert required <= set(entry) <= required | optional, entry
+        assert entry["outcome"] in t.get_args(CrossOutcome.__value__), entry
         differs = entry.get("differs", [])
         for ids in (entry["rules"], differs):
             assert isinstance(ids, list), entry  # a bare string would become a set of characters
