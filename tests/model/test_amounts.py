@@ -189,9 +189,9 @@ class TestQuantizeAmount:
         result = quantize_amount(value)
         with localcontext(prec=MAX_PREC):  # exact arithmetic, whatever the magnitude
             error = abs(result - value)
-        assert error <= Decimal("0.005")
-        if error == Decimal("0.005"):
-            assert abs(result) > abs(value)  # ties go away from zero (ROUND_HALF_UP)
+            assert error <= Decimal("0.005")
+            if error == Decimal("0.005"):
+                assert abs(result) > abs(value)  # ties go away from zero (ROUND_HALF_UP)
 
     @given(cents=st.integers(min_value=-(10**12), max_value=10**12))
     def test_ties_round_away_from_zero(self, cents: int) -> None:
