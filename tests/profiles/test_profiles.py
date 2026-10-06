@@ -111,7 +111,7 @@ class TestEn16931:
         assert EN16931.facturx_conformance_level is None
 
     def test_never_requires_bt119(self) -> None:
-        assert EN16931.vat_breakdown_rate_required is None
+        assert EN16931.requires_vat_breakdown_rate is None
 
 
 class TestPrepare:
@@ -158,7 +158,7 @@ class TestPrepare:
 
     def test_writes_bt119_zero_on_an_o_breakdown_when_the_profile_requires_bt119(self) -> None:
         invoice = not_subject_to_vat()
-        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(invoice)
+        prepared = _profile(requires_vat_breakdown_rate=lambda _: True).prepare(invoice)
         (breakdown,) = prepared.vat_breakdown
         assert breakdown.rate == Decimal("0")
         assert breakdown.model_dump(exclude={"rate"}) == invoice.vat_breakdown[0].model_dump(exclude={"rate"})
@@ -174,7 +174,7 @@ class TestPrepare:
             seen.append(asked)
             return False
 
-        prepared = _profile(vat_breakdown_rate_required=not_required).prepare(invoice)
+        prepared = _profile(requires_vat_breakdown_rate=not_required).prepare(invoice)
         assert seen == [invoice]
         assert prepared.vat_breakdown[0].rate is None
 
@@ -182,13 +182,13 @@ class TestPrepare:
         # Only O has a rate that follows from the category; a missing S rate is the caller's error (BR-S-09).
         (s_group,) = make_invoice().vat_breakdown
         groups = (VatBreakdown.model_validate({**dict(s_group), "rate": None}),)
-        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(make_invoice(vat_breakdown=groups))
+        prepared = _profile(requires_vat_breakdown_rate=lambda _: True).prepare(make_invoice(vat_breakdown=groups))
         assert prepared.vat_breakdown == groups
 
     def test_keeps_a_bt119_the_caller_set_on_an_o_breakdown(self) -> None:
         invoice = not_subject_to_vat()
         groups = (VatBreakdown.model_validate({**dict(invoice.vat_breakdown[0]), "rate": Decimal("0.00")}),)
-        prepared = _profile(vat_breakdown_rate_required=lambda _: True).prepare(
+        prepared = _profile(requires_vat_breakdown_rate=lambda _: True).prepare(
             Invoice.model_validate({**dict(invoice), "vat_breakdown": groups})
         )
         assert format(prepared.vat_breakdown[0].rate, "f") == "0.00"

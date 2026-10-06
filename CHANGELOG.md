@@ -170,5 +170,5 @@ All notable changes to this project are documented here. The format follows
 - "Not subject to VAT" (O) invoices from `calc.complete()` now pass XRechnung BR-DE-14 and, between German
   seller and buyer, Peppol DE-R-014: `Profile.prepare()` of the XRechnung profiles (and of `PEPPOL` when
   seller and buyer are both in `DE`) writes BT-119 = 0 on an O VAT breakdown that has none, as the official
-  XRechnung instance `01.04a` does. The new `Profile.vat_breakdown_rate_required` field drives it; the core
+  XRechnung instance `01.04a` does. The new `Profile.requires_vat_breakdown_rate` field drives it; the core
   EN 16931 output is unchanged (#75).

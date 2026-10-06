@@ -426,7 +426,7 @@ XRECHNUNG: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_preflight,
-    vat_breakdown_rate_required=_always,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 CIUS, BT-24 ``urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0``."""
 
@@ -438,7 +438,7 @@ XRECHNUNG_EXTENSION: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_preflight,
-    vat_breakdown_rate_required=_always,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 Extension (adds sub invoice lines, third party payments and more; BR-DEX-* rules)."""
 
@@ -450,6 +450,6 @@ XRECHNUNG_CVD: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_cvd_preflight,
-    vat_breakdown_rate_required=_always,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 CVD, for invoices under the Clean Vehicles Directive (BR-DE-CVD-* rules)."""

@@ -356,6 +356,6 @@ PEPPOL: t.Final = Profile(
     rule_sets=("cen", "peppol"),
     business_process_type=BILLING_PROCESS,
     preflight=_preflight,
-    vat_breakdown_rate_required=_german_parties,
+    requires_vat_breakdown_rate=_german_parties,
 )
 """The Peppol BIS Billing 3.0 profile (profile 01 "Billing" by default)."""
