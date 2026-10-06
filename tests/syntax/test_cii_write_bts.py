@@ -301,6 +301,8 @@ BT_ROWS: t.Final[tuple[Row, ...]] = (
     ("BT-148", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:ChargeAmount", ("50.5",)),
     ("BT-149", {}, f"{LAGR}ram:NetPriceProductTradePrice/ram:BasisQuantity", ("1",)),
     ("BT-150", {}, f"{LAGR}ram:NetPriceProductTradePrice/ram:BasisQuantity/@unitCode", ("C62",)),
+    ("BT-149", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:BasisQuantity", ("1",)),
+    ("BT-150", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:BasisQuantity/@unitCode", ("C62",)),
     ("BG-30", {}, f"{LSTL}ram:ApplicableTradeTax[ram:TypeCode='VAT']", 1),
     ("BT-151", {}, f"{LSTL}ram:ApplicableTradeTax/ram:CategoryCode", ("S",)),
     ("BT-152", {}, f"{LSTL}ram:ApplicableTradeTax/ram:RateApplicablePercent", ("19",)),

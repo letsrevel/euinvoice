@@ -39,8 +39,8 @@ def write(invoice: Invoice) -> bytes:
     Raises:
         ModelError: The invoice holds a value CII cannot carry: more than one preceding invoice reference
             (BG-3), a base quantity unit (BT-150) without base quantity (BT-149), or BT-111 without BT-6.
-            An item price discount (BT-147) without gross price (BT-148) is not an error: the gross price is
-            written as BT-146 + BT-147.
+            An item price discount (BT-147) without gross price (BT-148) is written with the gross price
+            BT-146 + BT-147, and raises only when that sum is negative (BR-28).
     """
     root = etree.Element(f"{{{_xml.CII_RSM}}}CrossIndustryInvoice", nsmap=_xml.CII_NSMAP)
     _context(root, invoice)

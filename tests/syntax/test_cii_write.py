@@ -281,6 +281,26 @@ def test_price_discount_without_gross_price_derives_it() -> None:
     assert select(root, "//ram:NetPriceProductTradePrice/ram:ChargeAmount") == ["1273"]
 
 
+def test_negative_derived_gross_price_cannot_be_written() -> None:
+    invoice = with_line(minimal_invoice(), item_net_price=Decimal("50"), item_price_discount=Decimal("-60"))
+    with pytest.raises(ModelError, match=r"BT-147 .*-10.*BR-28"):
+        cii.write(invoice)
+
+
+def test_explicit_gross_price_carries_the_base_quantity() -> None:
+    invoice = with_line(
+        minimal_invoice(),
+        item_net_price=Decimal("50"),
+        item_gross_price=Decimal("50"),
+        base_quantity=Decimal("2"),
+        base_quantity_unit_code="C62",
+    )
+    root = written(invoice)
+    for price in ("Gross", "Net"):
+        path = f"//ram:{price}PriceProductTradePrice/ram:BasisQuantity"
+        assert select(root, f"{path} | {path}/@unitCode") == ["2", "C62"]
+
+
 def test_base_quantity_unit_needs_base_quantity() -> None:
     invoice = with_line(minimal_invoice(), item_net_price=Decimal("50"), base_quantity_unit_code="C62")
     with pytest.raises(ModelError, match=r"BT-150.*BT-149"):

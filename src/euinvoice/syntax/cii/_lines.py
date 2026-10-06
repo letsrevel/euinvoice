@@ -6,9 +6,6 @@ Children follow ``ram:SupplyChainTradeLineItemType`` (``AssociatedDocumentLineDo
 those of ``docs/reference/bt-mapping.md``.
 """
 
-import typing as t
-from decimal import Decimal
-
 from lxml import etree
 
 from euinvoice.model import InvoiceLine, ItemInformation, PriceDetails
@@ -79,19 +76,24 @@ def _agreement(parent: etree._Element, value: InvoiceLine) -> None:
             f"it is the @unitCode of BT-149 (item price base quantity); set BT-149 on line {value.identifier!r}",
         )
     gross_price = price.item_gross_price
-    derived = gross_price is None and price.item_price_discount is not None
-    if derived:
+    if gross_price is None and price.item_price_discount is not None:
         # BT-147 is an allowance on ram:GrossPriceProductTradePrice, whose ram:ChargeAmount the D16B XSD requires.
         # Without BT-148 the gross price follows from BT-146 = BT-148 - BT-147 (PEPPOL-EN16931-R046 in the
         # Peppol UBL rules). CEN's TOSL108 invoice does exactly this: ubl-tc434-example2.xml carries BT-147
         # only, CII_example2.xml writes gross 1498 = net 1273 + allowance 225. A round trip therefore gains
         # BT-148 (docs/reference/bt-mapping.md, "Normalizations").
-        gross_price = price.item_net_price + t.cast(Decimal, price.item_price_discount)
+        gross_price = price.item_net_price + price.item_price_discount
+        if gross_price < 0:
+            raise cannot_express(
+                "BT-147 (item price discount)",
+                f"without BT-148 the gross price BT-146 + BT-147 = {decimal(gross_price)} would be negative "
+                f"(BR-28); set BT-148 on line {value.identifier!r}",
+            )
     if gross_price is not None:
         gross = sub(element, "GrossPriceProductTradePrice")
         sub(gross, "ChargeAmount", decimal(gross_price))
-        if derived:
-            _basis_quantity(gross, price)
+        # BT-149/BT-150 apply to both prices; the CEN examples (CII_example2.xml) repeat them on the gross price.
+        _basis_quantity(gross, price)
         if price.item_price_discount is not None:
             # BT-147: an allowance (CII-SR-119) with only its amount (CII-SR-120..131).
             discount = sub(gross, "AppliedTradeAllowanceCharge")

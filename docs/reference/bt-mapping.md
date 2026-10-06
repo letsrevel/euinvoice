@@ -334,6 +334,7 @@ terms. A model → syntax → model round trip then gains that value.
   allowance on `ram:GrossPriceProductTradePrice`, whose `ram:ChargeAmount` (BT-148) the D16B XSD requires
   (`TradePriceType`, minOccurs 1). When BT-147 is set without BT-148, the CII writer writes
   BT-148 = BT-146 + BT-147 (the identity BT-146 = BT-148 − BT-147 of PEPPOL-EN16931-R046), with BT-149/BT-150
-  as the gross price's `ram:BasisQuantity`. CEN does the same for its TOSL108 invoice:
+  as the gross price's `ram:BasisQuantity` (written on every gross price, as in the CEN examples). CEN does the same for its TOSL108 invoice:
   `ubl-tc434-example2.xml` carries BT-147 only and `CII_example2.xml` writes gross 1498 = net 1273 +
-  allowance 225.
+  allowance 225. A derived BT-148 below zero would break BR-28 (fatal), so the writer raises `ModelError`
+  then and asks for an explicit BT-148.
