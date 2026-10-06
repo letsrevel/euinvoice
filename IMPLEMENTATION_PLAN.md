@@ -26,7 +26,7 @@ only with an ADR in `docs/adr/` and a `needs-human` issue.
 | Profile | Syntax(es) | Generate | Parse | Validate |
 |---|---|---|---|---|
 | EN 16931 core (`urn:cen.eu:en16931:2017`) | UBL, CII | ✅ | ✅ | ✅ |
-| Peppol BIS Billing 3.0 | UBL | ✅ | ✅ | ✅ |
+| Peppol BIS Billing 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | XRechnung 3.0 | UBL, CII | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: EN16931 (COMFORT) | CII in PDF/A-3 | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ✅ |
@@ -341,7 +341,7 @@ parallel. Each touches a disjoint set of files.
 ### M6 · Profiles
 - **6.1 · Profile protocol + registry + EN 16931 core.** *deps: 2.1.* *AC:* lookup by BT-24, unknown
   BT-24 → `UnsupportedDocumentError` listing the known ones.
-- **6.2 · Peppol BIS Billing 3.0 (UBL).** *deps: 6.1, 3.1, 5.1.* Pre-flight checks derived from
+- **6.2 · Peppol BIS Billing 3.0 (UBL, CII).** *deps: 6.1, 3.1, 5.1.* Pre-flight checks derived from
   PEPPOL-EN16931-R\* rules (cite ids). *AC:* Peppol examples + `unit-UBL-PEPPOL` test cases behave as
   upstream expects.
 - **6.3 · XRechnung 3.0 (UBL + CII).** *deps: 6.1, 3.1, 4.1, 5.1.* Pre-flight from BR-DE-\* rules. *AC:*
