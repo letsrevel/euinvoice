@@ -10,7 +10,6 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.report import Severity
-from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, artifacts, schematron, validate, xsd
 
 CII_XSD = "xsd:xrechnung-validator-configuration"
@@ -18,13 +17,6 @@ CII_XSD = "xsd:xrechnung-validator-configuration"
 pytestmark = pytest.mark.conformance
 
 PEPPOL = profiles.PEPPOL
-# The XRechnung profile object does not exist yet (#21): a test-local stand-in with the rule sets verified
-# on issue #17 (CEN then XRechnung, as in KoSIT scenarios.xml). Its BT-24 is irrelevant here because it is
-# passed explicitly.
-XRECHNUNG = profiles.Profile(
-    id="test-xrechnung", title="XRechnung (test)", specification_identifier="urn:example.com:xrechnung",
-    syntaxes=frozenset(Syntax), rule_sets=("cen", "xrechnung"),
-)  # fmt: skip
 
 EXAMPLE1 = "examples/ubl-tc434-example1.xml"
 PEPPOL_BASE = "rules/examples/base-example.xml"
@@ -74,7 +66,7 @@ def blank_invoice_number(data: bytes) -> bytes:
     [
         (profiles.EN16931, "cen-ubl", EXAMPLE1, {"cen-ubl"}),
         (PEPPOL, "peppol-bis", PEPPOL_BASE, {"cen-ubl", "peppol-bis"}),
-        (XRECHNUNG, "xrechnung-testsuite", XR_UBL, {"cen-ubl", "xrechnung-schematron"}),
+        (profiles.XRECHNUNG, "xrechnung-testsuite", XR_UBL, {"cen-ubl", "xrechnung-schematron"}),
     ],
     ids=["en16931", "peppol", "xrechnung"],
 )
@@ -107,7 +99,7 @@ def test_peppol_rules_run_only_under_a_peppol_profile() -> None:
 def test_xrechnung_rules_run_only_under_an_xrechnung_profile() -> None:
     # Under XRechnung, example1's core BT-24 fails BR-DE-21 (XRechnung 3.0.2 XRechnung-UBL-validation.xsl);
     # Peppol does not run alongside (issue #17: never Peppol and XRechnung together).
-    report = validate(member("cen-ubl", EXAMPLE1), XRECHNUNG)
+    report = validate(member("cen-ubl", EXAMPLE1), profiles.XRECHNUNG)
 
     assert "BR-DE-21" in {f.rule_id for f in report.findings}
     assert {f.source for f in report.findings} == {"xrechnung-schematron"}
@@ -246,10 +238,11 @@ CUSTOM_LEVEL_GAP = {
 
 
 @pytest.mark.parametrize("path", XRECHNUNG_INSTANCES, ids=lambda p: f"{p.parent.name}/{p.name}")
-def test_every_xrechnung_testsuite_instance_validates_under_xrechnung(path: Path) -> None:
+def test_every_xrechnung_testsuite_instance_validates_under_its_detected_profile(path: Path) -> None:
+    # Each instance's BT-24 (CIUS, Extension or CVD) auto-detects its XRechnung profile: no core fallback.
     relative = path.relative_to(artifacts.source_dir("xrechnung-testsuite") / "instances").as_posix()
 
-    report = validate(path.read_bytes(), XRECHNUNG)
+    report = validate(path.read_bytes())
 
     blocking = {f.rule_id for f in report.findings if f.severity in BLOCKING}
     assert blocking == CUSTOM_LEVEL_GAP.get(relative, set()), report.findings
@@ -290,7 +283,7 @@ def with_sub_invoice_line() -> etree._Element:
 def test_upgraded_warnings_are_not_blocking_under_raw_flags(
     document: t.Callable[[], etree._Element], upgraded: set[tuple[str, str]]
 ) -> None:
-    report = validate(etree.tostring(document()), XRECHNUNG)
+    report = validate(etree.tostring(document()), profiles.XRECHNUNG)
 
     warnings = {(f.rule_id, f.source) for f in report.findings if f.severity is Severity.WARNING}
     assert upgraded <= warnings, report.findings
