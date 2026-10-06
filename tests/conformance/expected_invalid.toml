@@ -608,16 +608,6 @@ outcome = "refuses"
 rules = ["BG-16", "BR-49", "BT-81", "BT-9"]
 reason = "A credit note (BT-3 = 381) with a payment due date (BT-9) and no PAYMENT INSTRUCTIONS (BG-16). bt-mapping.md N3: a UBL CreditNote carries BT-9 only in cac:PaymentMeans/cbc:PaymentDueDate, which needs BT-81 (BR-49), so the UBL writer refuses."
 
-# -- Differences beyond the documented normalizations (tracked) ------------------------------------------------
-
-[[cross_syntax]]
-source = "cen-cii"
-file = "examples/CII-BR-CO-10-RoundingIssue.xml"
-outcome = "reads"
-rules = []
-differs = ["BT-13"]
-reason = "Its empty ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID reads as BT-13 '', which the UBL writer replaces by the 'NA' placeholder (bt-mapping.md N4); with no BT-14 next to it, 'NA' reads back as BT-13 'NA' (#79, fixed by PR #82: remove this entry when it lands)."
-
 # -- Validation of the other syntax's output ---------------------------------------------------------------------
 
 [[cross_syntax]]
