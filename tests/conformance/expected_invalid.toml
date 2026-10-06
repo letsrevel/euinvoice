@@ -1,0 +1,540 @@
+# Upstream samples that do not satisfy the round-trip invariant of plan §4 (IMPLEMENTATION_PLAN.md §8 9.1).
+#
+# The single source of truth for test_corpus_harness.py (and test_orchestration_official.py).
+# Every entry is asserted, never skipped: a sample that starts to pass, or fails differently, fails the harness.
+#
+#   source, file  the sample: a pinned source (validate/manifest.toml) and the path in its cache directory;
+#                 for a Factur-X PDF the path of the PDF (the sample is its embedded XML)
+#   outcome       "parse-error": read(X) raises a ParseError whose message names exactly `rules` (rule/BT/BG ids)
+#                 "reads": X reads, and validate(write(read(X))) has exactly `rules` as fatal/error rule ids
+#   upstream      the fatal/error rule ids of validate(X) on the upstream file itself, exactly
+#   differs       optional, "reads" only: BT/BG ids where read(write(read(X))) != read(X) (a tracked gap)
+#   reason        why, citing the official rule texts and the open issue where there is one
+#   link          the upstream file at the pinned version
+#
+# Validation profile: the one detect() finds from BT-24 (EN 16931 core when none); for a PDF the one its XMP
+# fx:ConformanceLevel selects. Factur-X levels whose Schematron is not pinned (#42) run the EN 16931 core rules.
+# validate() reports the raw official flags; KoSIT customLevel overrides are not applied (#49).
+
+# --------------------------------------------------------------------------------------------------------------
+# CEN examples
+# --------------------------------------------------------------------------------------------------------------
+
+[[sample]]
+source = "cen-ubl"
+file = "examples/issue116.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R049"]
+upstream = ["PEPPOL-COMMON-R049"]
+reason = "Peppol BT-24, so validate() runs the Peppol rules (#64); CEN promises the example valid against the CEN rules only. Its placeholder Swedish organisation numbers (EAS 0007, e.g. CompanyID 1234567890) fail the check digit of PEPPOL-COMMON-R049 (fatal, 'Swedish organization number MUST be stated in the correct format', peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch); the round trip keeps them."
+link = "https://github.com/ConnectingEurope/eInvoicing-EN16931/blob/validation-1.3.16/ubl/examples/issue116.xml"
+
+# --------------------------------------------------------------------------------------------------------------
+# KoSIT XRechnung testsuite: the raw-flag side of KoSIT customLevel overrides (#49)
+# --------------------------------------------------------------------------------------------------------------
+
+[[sample]]
+source = "xrechnung-testsuite"
+file = "instances/extension/04.05a-INVOICE_uncefact.xml"
+outcome = "parse-error"
+rules = ["BR-CL-10", "BR-CL-11", "BR-CL-26", "BT-60"]
+upstream = ["BR-CL-10", "BR-CL-21"]
+reason = "XRechnung extension: GlobalID schemeID=\"XR03\" is not in the ISO 6523 ICD list (BR-CL-10, BR-CL-21 fatal on the upstream file), which the model enforces too (D8 permits refusing what the CEN Schematron refuses). KoSIT's scenarios.xml (xrechnung-validator-configuration 2026-08-31) downgrades exactly these rules with <customLevel level=\"information\"> in the scenario the instance matches; validate() reports raw flags (#49)."
+link = "https://github.com/itplr-kosit/xrechnung-testsuite/blob/v2026-08-31/src/test/business-cases/extension/04.05a-INVOICE_uncefact.xml"
+
+[[sample]]
+source = "xrechnung-testsuite"
+file = "instances/extension/05.01a-INVOICE_ubl.xml"
+outcome = "reads"
+rules = ["BR-CO-16", "BR-DEX-09"]
+upstream = ["BR-CO-16"]
+reason = "XRechnung extension with cac:PrepaidPayment (third party payments BT-DEX-002, UBL-CR-470): BT-115 = BT-112 - BT-113 + BT-114 does not hold within EN 16931 core, so the upstream file fails BR-CO-16 (fatal). KoSIT's scenarios.xml (xrechnung-validator-configuration 2026-08-31) downgrades exactly these rules with <customLevel level=\"information\"> in the scenario the instance matches; validate() reports raw flags (#49). BR-DEX-09 (fatal, 'BT-115 = BT-112 - BT-113 + BT-114 + \u03a3 BT-DEX-002') fails only after the round trip: the PrepaidPayment is outside EN 16931, so the reader reports it unmapped and write(read(X)) lacks it."
+link = "https://github.com/itplr-kosit/xrechnung-testsuite/blob/v2026-08-31/src/test/business-cases/extension/05.01a-INVOICE_ubl.xml"
+
+[[sample]]
+source = "xrechnung-testsuite"
+file = "instances/technical-cases/cvd/02.01a-cvd_INVOICE_ubl.xml"
+outcome = "parse-error"
+rules = ["BR-CL-13", "BT-158"]
+upstream = ["BR-CL-13"]
+reason = "CVD extension: item classification listID=\"CVD\" is not in UNTDID 7143 (BR-CL-13 fatal on the upstream file), which the model enforces too (D8). KoSIT's scenarios.xml (xrechnung-validator-configuration 2026-08-31) downgrades exactly these rules with <customLevel level=\"information\"> in the scenario the instance matches; validate() reports raw flags (#49)."
+link = "https://github.com/itplr-kosit/xrechnung-testsuite/blob/v2026-08-31/src/test/technical-cases/cvd/02.01a-cvd_INVOICE_ubl.xml"
+
+[[sample]]
+source = "xrechnung-testsuite"
+file = "instances/technical-cases/cvd/02.01a-cvd_INVOICE_uncefact.xml"
+outcome = "parse-error"
+rules = ["BR-CL-13", "BT-158"]
+upstream = ["BR-CL-13"]
+reason = "CVD extension: item classification listID=\"CVD\" is not in UNTDID 7143 (BR-CL-13 fatal on the upstream file), which the model enforces too (D8). KoSIT's scenarios.xml (xrechnung-validator-configuration 2026-08-31) downgrades exactly these rules with <customLevel level=\"information\"> in the scenario the instance matches; validate() reports raw flags (#49)."
+link = "https://github.com/itplr-kosit/xrechnung-testsuite/blob/v2026-08-31/src/test/technical-cases/cvd/02.01a-cvd_INVOICE_uncefact.xml"
+
+# --------------------------------------------------------------------------------------------------------------
+# ZUGFeRD corpus: XML
+# --------------------------------------------------------------------------------------------------------------
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_1_Teilrechnung.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042", "PEPPOL-EN16931-R120"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_1_Teilrechnung.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_2_Teilrechnung.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_2_Teilrechnung.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_AbweichenderZahlungsempf.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_AbweichenderZahlungsempf.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Betriebskostenabrechnung.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R008", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R008", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R008 (no empty elements); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Betriebskostenabrechnung.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Einfach.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach_DueDate.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Einfach_DueDate.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach_negativePaymentDue.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Einfach_negativePaymentDue.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Gutschrift.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); P0100 (invoice type code per profile); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Gutschrift.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Haftpflichtversicherung_Versicherungssteuer.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Haftpflichtversicherung_Versicherungssteuer.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Innergemeinschaftliche_Lieferungen.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): P0100 (invoice type code per profile); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Innergemeinschaftliche_Lieferungen.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Kraftfahrversicherung_Bruttopreise.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R120 (line net amount = quantity x net price / base quantity + charges - allowances)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Kraftfahrversicherung_Bruttopreise.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Miete.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); P0100 (invoice type code per profile); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Miete.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_OEPNV.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_OEPNV.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Physiotherapeut.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Physiotherapeut.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Rabatte.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Rabatte.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Rechnungskorrektur.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Rechnungskorrektur.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Reisekostenabrechnung.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Reisekostenabrechnung.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_SEPA_Prenotification.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_SEPA_Prenotification.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Sachversicherung_berechneter_Steuersatz.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+upstream = ["DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R120 (line net amount = quantity x net price / base quantity + charges - allowances)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Sachversicherung_berechneter_Steuersatz.ubl.xml"
+
+# BT-13: the round trip differs (#79).
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Elektron.ubl.xml"
+outcome = "reads"
+rules = ["DE-R-002", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["DE-R-002", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R008", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+differs = ["BT-13"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-002 (BG-6 seller contact); P0100 (invoice type code per profile); R008 (no empty elements); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34). Its empty cac:OrderReference/cbc:ID reads as BT-13 '' (the R008 finding), which the writer replaces by the 'NA' placeholder that reads back as no BT-13: the round trip differs in BT-13 and no longer fails R008 (#79)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Elektron.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/XRECHNUNG_Elektron.ubl.xml"
+outcome = "reads"
+rules = []
+upstream = []
+differs = ["BT-13"]
+reason = "Valid upstream, but its empty cac:OrderReference/cbc:ID reads as BT-13 '', which the writer replaces by the 'NA' placeholder that reads back as no BT-13: the round trip differs in BT-13 (#79)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/XRECHNUNG_Elektron.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/CII/EN16931_ElektronischeAdresse.cii.xml"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Buyer electronic address (BT-49) with schemeID=\"9958\", which is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream file); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/CII/EN16931_ElektronischeAdresse.cii.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/CII/EN16931_RechnungsUebertragung.cii.xml"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Buyer electronic address (BT-49) with schemeID=\"9958\", which is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream file); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/CII/EN16931_RechnungsUebertragung.cii.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_ElektronischeAdresse.ubl.xml"
+outcome = "parse-error"
+rules = ["BG-7", "BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25", "DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-CL008", "PEPPOL-EN16931-P0100"]
+reason = "Buyer electronic address (BT-49) with schemeID=\"9958\", which is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream file); the model enforces it too (D8). The Peppol BT-24 also runs the Peppol rules, which the upstream file fails: PEPPOL-EN16931-CL008 (EAS code list), DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference); P0100 (invoice type code per profile)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_ElektronischeAdresse.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_RechnungsUebertragung.ubl.xml"
+outcome = "parse-error"
+rules = ["BG-7", "BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25", "DE-R-001", "DE-R-002", "DE-R-015", "PEPPOL-EN16931-CL008"]
+reason = "Buyer electronic address (BT-49) with schemeID=\"9958\", which is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream file); the model enforces it too (D8). The Peppol BT-24 also runs the Peppol rules, which the upstream file fails: PEPPOL-EN16931-CL008 (EAS code list), DE-R-001 (BG-16 required when seller and buyer are in Germany); DE-R-002 (BG-6 seller contact); DE-R-015 (BT-10 buyer reference)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_RechnungsUebertragung.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/not_validating_full_invoice_based_onTest_EeISI_300_CENfullmodel.ubl.xml"
+outcome = "reads"
+rules = ["BR-CO-10", "BR-CO-15", "PEPPOL-EN16931-CL008", "PEPPOL-EN16931-P0105", "PEPPOL-EN16931-R002", "PEPPOL-EN16931-R120"]
+upstream = ["BR-CO-10", "BR-CO-15", "PEPPOL-EN16931-CL008", "PEPPOL-EN16931-P0105", "PEPPOL-EN16931-R002", "PEPPOL-EN16931-R120"]
+reason = "Upstream marks it not validating (file name). It fails BR-CO-10 (BT-106 = \u03a3 BT-131) and BR-CO-15 (BT-112 = BT-109 + BT-110), and under its Peppol BT-24 also PEPPOL-EN16931-CL008 (EAS code list), P0105 (category O with VATEX-EU-O), R002 (at most one note) and R120 (line net amount); the round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/not_validating_full_invoice_based_onTest_EeISI_300_CENfullmodel.ubl.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "other/eicar.cii.xml"
+outcome = "parse-error"
+rules = ["BR-CL-14", "BR-CL-15", "BT-40"]
+upstream = ["BR-09", "BR-11", "BR-CL-14", "BR-CL-24", "PEPPOL-EN16931-R008"]
+reason = "Malware-test sample with empty country codes: BR-09 (BT-40), BR-11 (BT-55) and BR-CL-14 fatal, BR-CL-24 (MIME code) and, under its XRechnung BT-24, PEPPOL-EN16931-R008 (no empty elements). The model refuses the empty BT-40."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/other/eicar.cii.xml"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "other/eicar.ubl.xml"
+outcome = "parse-error"
+rules = ["BG-5", "BT-40"]
+upstream = ["BR-09", "BR-11", "BR-CL-24"]
+reason = "Malware-test sample without country codes: BR-09 (BT-40) and BR-11 (BT-55) fatal, BR-CL-24 (MIME code). The model refuses the missing BT-40 (BG-5)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/other/eicar.ubl.xml"
+
+# --------------------------------------------------------------------------------------------------------------
+# ZUGFeRD corpus: Factur-X PDFs (the embedded XML)
+# --------------------------------------------------------------------------------------------------------------
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/EN16931_ElektronischeAdresse.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Level EN 16931: buyer electronic address (BT-49) schemeID=\"9958\" is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream XML); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/EN16931_ElektronischeAdresse.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/EN16931_RechnungsUebertragung.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Level EN 16931: buyer electronic address (BT-49) schemeID=\"9958\" is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream XML); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/EN16931_RechnungsUebertragung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_ElektronischeAdresse.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Level EN 16931: buyer electronic address (BT-49) schemeID=\"9958\" is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream XML); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_ElektronischeAdresse.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_RechnungsUebertragung.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Level EN 16931: buyer electronic address (BT-49) schemeID=\"9958\" is not in the pinned CEF EAS list (BR-CL-25 fatal on the upstream XML); the model enforces it too (D8)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EN16931/zugferd_2p1_EN16931_RechnungsUebertragung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Fremdwaehrung.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-19", "BT-98"]
+upstream = ["BR-CL-19", "BR-CL-25"]
+reason = "Level EXTENDED with codes outside the CEN code lists the model enforces: allowance reason 'ABK' (BR-CL-19) and EAS '9958' (BR-CL-25), both fatal under the EN 16931 core rules. Whether the Factur-X EXTENDED rules allow them cannot be checked until the Factur-X Schematron is pinned (#42, needs-human #69)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Fremdwaehrung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf"
+outcome = "parse-error"
+rules = ["BR-CL-25", "BT-49"]
+upstream = ["BR-CL-25"]
+reason = "Level EXTENDED with EAS '9958' outside the CEF EAS list the model enforces (BR-CL-25, fatal under the EN 16931 core rules). Whether the Factur-X EXTENDED rules allow it cannot be checked until #42 (needs-human #69)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_InnergemeinschLieferungMehrereBestellungen.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Kostenrechnung.pdf"
+outcome = "reads"
+rules = ["BR-CO-12", "BR-S-08"]
+upstream = ["BR-CO-12", "BR-S-08"]
+reason = "Level EXTENDED, validated with the EN 16931 core rules because the Factur-X Schematron is not pinned (#42). EXTENDED content beyond EN 16931 (reported as unmapped) makes the upstream XML fail BR-CO-12 (BT-108 = \u03a3 BT-99) and BR-S-08 (BT-116 per rate); the round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Kostenrechnung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Warenrechnung.pdf"
+outcome = "reads"
+rules = ["BR-CO-12", "BR-S-08"]
+upstream = ["BR-CO-12", "BR-S-08"]
+reason = "Level EXTENDED, validated with the EN 16931 core rules because the Factur-X Schematron is not pinned (#42). EXTENDED content beyond EN 16931 (reported as unmapped) makes the upstream XML fail BR-CO-12 (BT-108 = \u03a3 BT-99) and BR-S-08 (BT-116 per rate); the round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Warenrechnung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
+outcome = "reads"
+rules = []
+upstream = ["CII-DT-031"]
+reason = "Level BASIC (EN 16931 core rules, #42). The upstream XML puts a currencyID where CII-DT-031 forbids it ('currencyID should not be present', fatal, cen-cii 1.3.16 EN16931-CII-syntax.sch); the writer does not, so the round trip is valid. Its BT-24 uses colons instead of '#compliant#urn:' (needs-human #69)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/XRECHNUNG_Betriebskostenabrechnung.pdf"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Level XRECHNUNG carrying the XRechnung 2.1 BT-24, validated against the pinned XRechnung 3.0 rules: the upstream XML fails the PEPPOL-EN16931 rules XRechnung 3.0 makes mandatory (xrechnung-schematron 2.6.0 XRechnung-CII-validation): R001 (business process BT-23 required); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34). The round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/XRECHNUNG_Betriebskostenabrechnung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/XRECHNUNG_Einfach.pdf"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Level XRECHNUNG carrying the XRechnung 2.1 BT-24, validated against the pinned XRechnung 3.0 rules: the upstream XML fails the PEPPOL-EN16931 rules XRechnung 3.0 makes mandatory (xrechnung-schematron 2.6.0 XRechnung-CII-validation): R001 (business process BT-23 required); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34). The round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/XRECHNUNG_Einfach.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/XRECHNUNG_Elektron.pdf"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Level XRECHNUNG carrying the XRechnung 2.1 BT-24, validated against the pinned XRechnung 3.0 rules: the upstream XML fails the PEPPOL-EN16931 rules XRechnung 3.0 makes mandatory (xrechnung-schematron 2.6.0 XRechnung-CII-validation): R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34). The round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/XRECHNUNG_Elektron.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/FX/XRECHNUNG_Reisekostenabrechnung.pdf"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R046"]
+upstream = ["PEPPOL-EN16931-R001", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R046"]
+reason = "Level XRECHNUNG carrying the XRechnung 2.1 BT-24, validated against the pinned XRechnung 3.0 rules: the upstream XML fails the PEPPOL-EN16931 rules XRechnung 3.0 makes mandatory (xrechnung-schematron 2.6.0 XRechnung-CII-validation): R001 (business process BT-23 required); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R046 (net price = gross price - price discount). The round trip keeps exactly those findings."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/FX/XRECHNUNG_Reisekostenabrechnung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_MINIMUM.pdf"
+outcome = "parse-error"
+rules = ["BT-106"]
+upstream = ["BR-12", "BR-16", "BR-CO-10", "BR-CO-13", "BR-CO-16", "CII-DT-031"]
+reason = "Level MINIMUM: no lines (BG-25, BR-16), no BT-106 (BR-12) and no VAT breakdown; the reader stops at the first group it cannot build, BG-22 (BT-106 missing), read before the lines. No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_MINIMUM.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_MINIMUM.pdf"
+outcome = "parse-error"
+rules = ["BT-106"]
+upstream = ["BR-12", "BR-16", "BR-CO-10", "BR-CO-13", "BR-CO-14", "BR-CO-16", "CII-DT-031"]
+reason = "Level MINIMUM: no lines (BG-25, BR-16), no BT-106 (BR-12) and no VAT breakdown; the reader stops at the first group it cannot build, BG-22 (BT-106 missing), read before the lines. No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_MINIMUM.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_MINIMUM.pdf"
+outcome = "parse-error"
+rules = ["BT-106"]
+upstream = ["BR-12", "BR-16", "BR-CO-10", "BR-CO-13", "BR-CO-16", "CII-DT-031"]
+reason = "Level MINIMUM: no lines (BG-25, BR-16), no BT-106 (BR-12) and no VAT breakdown; the reader stops at the first group it cannot build, BG-22 (BT-106 missing), read before the lines. No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_MINIMUM.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Buchungshilfe.pdf"
+outcome = "parse-error"
+rules = ["BT-106"]
+upstream = ["BR-12", "BR-16", "BR-CO-10", "BR-CO-13", "BR-CO-14"]
+reason = "Level MINIMUM: no lines (BG-25, BR-16), no BT-106 (BR-12) and no VAT breakdown; the reader stops at the first group it cannot build, BG-22 (BT-106 missing), read before the lines. No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Buchungshilfe.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Rechnung.pdf"
+outcome = "parse-error"
+rules = ["BT-106"]
+upstream = ["BR-12", "BR-16", "BR-CO-10", "BR-CO-13", "BR-CO-14"]
+reason = "Level MINIMUM: no lines (BG-25, BR-16), no BT-106 (BR-12) and no VAT breakdown; the reader stops at the first group it cannot build, BG-22 (BT-106 missing), read before the lines. No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/MINIMUM/zugferd_2p1_MINIMUM_Rechnung.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_BASICWL.pdf"
+outcome = "parse-error"
+rules = ["BG-25", "BR-16"]
+upstream = ["BR-16", "BR-CO-10", "BR-G-01", "BR-G-08", "CII-DT-031"]
+reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_DOM_BASICWL.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_BASICWL.pdf"
+outcome = "parse-error"
+rules = ["BG-25", "BR-16"]
+upstream = ["BR-16", "BR-CO-10", "BR-S-08", "CII-DT-031"]
+reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_FR_BASICWL.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_BASICWL.pdf"
+outcome = "parse-error"
+rules = ["BG-25", "BR-16"]
+upstream = ["BR-16", "BR-CO-10", "BR-IC-01", "BR-IC-08", "BR-IC-11", "BR-IC-12", "CII-DT-031"]
+reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/FNFE-factur-x-examples/Facture_UE_BASICWL.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC WL/zugferd_2p1_BASIC-WL_Buchungshilfe.pdf"
+outcome = "parse-error"
+rules = ["BG-25", "BR-16"]
+upstream = ["BR-16", "BR-CO-10", "BR-S-08"]
+reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/BASIC%20WL/zugferd_2p1_BASIC-WL_Buchungshilfe.pdf"
+
+[[sample]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/BASIC WL/zugferd_2p1_BASIC-WL_Einfach.pdf"
+outcome = "parse-error"
+rules = ["BG-25", "BR-16"]
+upstream = ["BR-16", "BR-CO-10", "BR-S-08"]
+reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
+link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/BASIC%20WL/zugferd_2p1_BASIC-WL_Einfach.pdf"

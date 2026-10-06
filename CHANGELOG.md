@@ -14,6 +14,10 @@ All notable changes to this project are documented here. The format follows
   E, AE, K, G, O, allowances and charges, credit notes, BT-6, payment means) pass `calc.check`, validate without
   fatal or error findings under EN 16931, Peppol BIS and XRechnung in UBL and CII, and round-trip exactly
   through UBL and CII. The test suite's Hypothesis profile has no deadline.
+- Conformance corpus harness (`tests/conformance/test_corpus_harness.py`): the plan §4 round-trip invariant over
+  every pinned upstream example (CEN UBL/CII, Peppol BIS, KoSIT XRechnung testsuite, ZUGFeRD corpus XML and the
+  XML of its Factur-X PDFs). The samples that do not hold are listed once, in
+  `tests/conformance/expected_invalid.toml`, each with its exact rule ids, a reason and an upstream link.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the
