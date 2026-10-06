@@ -34,12 +34,12 @@ import typing as t
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from importlib import resources
+from importlib import metadata, resources
 from pathlib import Path, PurePosixPath
 
 from lxml import etree
 
-from euinvoice import __version__, _xml
+from euinvoice import _xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
 
 ENV_VAR = "EUINVOICE_ARTIFACTS_DIR"
@@ -288,7 +288,7 @@ def _open_url(url: str) -> t.BinaryIO:
         raise ValueError(f"artifact URLs must use https: {url}")
     # The scheme is checked above and on every redirect, so S310 (file:// or custom schemes) does not apply.
     request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage]
-        url, headers={"User-Agent": f"euinvoice/{__version__}"}
+        url, headers={"User-Agent": f"euinvoice/{metadata.version('euinvoice')}"}
     )
     return t.cast(t.BinaryIO, _OPENER.open(request, timeout=_TIMEOUT_S))
 

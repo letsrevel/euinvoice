@@ -30,7 +30,7 @@ from euinvoice import _xml, profiles
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.syntax import Syntax
 
-__all__ = ["Detection", "Root", "detect", "detect_root"]
+__all__ = ["Detection", "Root", "detect", "detect_root", "is_pdf"]
 
 type Root = t.Literal["Invoice", "CreditNote", "CrossIndustryInvoice"]
 """The supported root elements. UBL has one per document kind; CII has one for both (BT-3 tells them apart)."""
@@ -103,13 +103,25 @@ def detect(data: bytes) -> Detection:
         >>> detect(xml.encode()).profile.id
         'en16931'
     """
-    # A PDF header counts only before any markup: "%PDF-" in XML text (e.g. a BT-22 note) is not a PDF.
-    header = data.find(_PDF_MAGIC, 0, _PDF_WINDOW) if isinstance(data, bytes) else -1
-    if header != -1 and b"<" not in data[:header]:
+    if is_pdf(data):
         raise UnsupportedDocumentError(
             "input is a PDF; extract the embedded Factur-X / ZUGFeRD XML with euinvoice.facturx.extract first"
         )
     return detect_root(_xml.parse(data))
+
+
+def is_pdf(data: bytes) -> bool:
+    """Whether ``data`` starts like a PDF: a ``%PDF-`` header within its first 1024 bytes, before any ``<``.
+
+    Args:
+        data: The input; anything but ``bytes`` is not a PDF.
+
+    Returns:
+        ``True`` for a PDF header, ``False`` otherwise (e.g. XML whose text contains ``%PDF-``).
+    """
+    # A PDF header counts only before any markup: "%PDF-" in XML text (e.g. a BT-22 note) is not a PDF.
+    header = data.find(_PDF_MAGIC, 0, _PDF_WINDOW) if isinstance(data, bytes) else -1
+    return header != -1 and b"<" not in data[:header]
 
 
 def detect_root(root: etree._Element) -> Detection:

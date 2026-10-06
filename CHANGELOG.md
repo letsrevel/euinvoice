@@ -7,6 +7,18 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Top-level API (#27): `euinvoice.to_xml(invoice, *, profile=None, syntax=None)` prepares the invoice for the
+  profile (default: the one registered for its BT-24), runs the profile's pre-flight checks and
+  `calc.check(prepared, syntax=...)`, and refuses with the new `euinvoice.errors.PreflightError` (carrying the
+  findings, the profile id and the syntax; picklable) on any `fatal` / `error` finding before writing UBL or
+  CII (`syntax` may be omitted when the profile has one syntax); it refuses the Factur-X levels that are not
+  generated (MINIMUM, BASIC WL, BASIC, EXTENDED). `euinvoice.parse()` / `parse_detailed()` read UBL, CII and
+  Factur-X / ZUGFeRD PDFs (via `facturx.extract`, imported lazily); `parse()` discards `ParseResult.unmapped`.
+  `euinvoice` re-exports `validate`, `detect`, `Invoice`, `InvoiceDraft`, `ParseResult`, `Syntax`,
+  `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx` (not in `__all__`; `import euinvoice` and
+  `from euinvoice import *` load neither pypdf nor saxonche), with an explicit `__all__`.
+  `from euinvoice.detect import is_pdf` is the PDF sniff `detect` and `parse` share.
+- The README usage examples are doctests (`tests/test_readme.py`; the validation block in `make conformance`).
 - Cross-syntax conformance (#30, `tests/conformance/test_cross_syntax.py`): every upstream sample that reads goes
   UBL → model → CII → model (and CII → model → UBL → model) and comes back equal up to the documented writer
   normalizations, with nothing unmapped, and the other syntax's output is validated under the sample's profile.
@@ -83,7 +95,7 @@ All notable changes to this project are documented here. The format follows
 - `python -m euinvoice artifacts fetch [--only NAME]`: downloads into `$EUINVOICE_ARTIFACTS_DIR`
   (default `~/.cache/euinvoice/<source>/<version>/`), verifies sha256, extracts zip-slip-safely and
   precompiles Schematron-only rule sets (Peppol) to XSLT with SchXslt. Idempotent and offline on a
-  warm cache. `euinvoice.validate.artifacts.source_dir()` looks entries up and raises
+  warm cache. `source_dir()` (module `euinvoice.validate.artifacts`) looks entries up and raises
   `ArtifactsNotAvailableError` naming the fetch command.
 - Hardened XML input handling: every XML document is parsed with entity resolution, DTD loading and
   network access disabled. Documents with a DOCTYPE, malformed XML and input over libxml2's safety
@@ -100,15 +112,15 @@ All notable changes to this project are documented here. The format follows
   codes), which CEN 1.3.16 binds in the UBL model Schematron rather than the codes file. The generator
   now also reads the BR-CL params of `schematron/{UBL,CII}/EN16931-*-model.sch`. The list is a strict
   subset of the CII list `UNTDID_4451_TEXT_SUBJECT` (401 codes), which the syntax-neutral model accepts.
-- `euinvoice.validate.xsd.validate()`: UBL 2.1 `Invoice` / `CreditNote` XSD validation against the
+- `validate()` of module `euinvoice.validate.xsd`: UBL 2.1 `Invoice` / `CreditNote` XSD validation against the
   pinned OASIS UBL 2.1 schemas. Each schema error becomes a fatal `XSD` finding located by
   line and element path (libxml2 warnings stay warnings); compiled schemas are cached per process and safe to share across
   threads.
-- `euinvoice.validate.xsd.validate()` also validates UN/CEFACT CII D16B `CrossIndustryInvoice`
+- The XSD `validate()` (module `euinvoice.validate.xsd`) also validates UN/CEFACT CII D16B `CrossIndustryInvoice`
   documents, against the D16B SCRDM Subset schema of the pinned KoSIT validator configuration
   (`resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd`, used by every KoSIT CII scenario).
 - `euinvoice.report`: `Finding`, `Severity` and `ValidationReport` (validation results as data).
-- `euinvoice.validate.schematron`: runs one official compiled rule set (CEN EN 16931 UBL/CII, Peppol
+- Module `euinvoice.validate.schematron`: runs one official compiled rule set (CEN EN 16931 UBL/CII, Peppol
   BIS 3.0 UBL/CII, XRechnung UBL/CII) on Saxon and maps every SVRL failed assert or successful report
   to a `Finding` with its rule id, severity (from `@flag`; a missing or unknown flag counts as `error`),
   XPath location and message. Input is hardened-parsed before Saxon sees it; compiled stylesheets are
@@ -120,13 +132,13 @@ All notable changes to this project are documented here. The format follows
   sets BT-24 and a missing BT-23 through model validation; the EN 16931 core profile `EN16931`
   (`urn:cen.eu:en16931:2017`, UBL and CII, CEN rules); and `profiles.get(bt24)`, which raises
   `UnsupportedDocumentError` listing the known identifiers for an unknown BT-24.
-- `euinvoice.detect.detect(data)` / `detect_root(root)`: classify XML bytes (or an already parsed root)
+- `detect(data)` / `detect_root(root)` (module `euinvoice.detect`; `detect` is also `euinvoice.detect`): classify XML bytes (or an already parsed root)
   as UBL `Invoice` / `CreditNote` or CII `CrossIndustryInvoice`, read BT-24 (XPath `normalize-space`)
   and resolve the registered profile by exact match, or `None` when no profile declares that BT-24. A
   missing, empty or repeated BT-24 gives `specification_identifier=None` and `profile=None` (the
   official rules report it). Only PDF input and an unsupported root raise `UnsupportedDocumentError`;
   malformed XML raises `ParseError`.
-- `euinvoice.validate.validate(data, profile=None)`: validates a UBL or CII document against the
+- `euinvoice.validate(data, profile=None)` (module `euinvoice.validate.orchestration`): validates a UBL or CII document against the
   official XSD, then (unless the XSD step found an error) each Schematron rule set of the profile in
   order (EN 16931: CEN; Peppol: CEN, Peppol; XRechnung: CEN, XRechnung), with the raw official
   severities. Without a profile it is picked by BT-24; an unregistered or missing BT-24 falls back to
@@ -179,6 +191,9 @@ All notable changes to this project are documented here. The format follows
   whose official Schematron is in the Factur-X package, not pinned yet (#42).
 
 ### Changed
+- `euinvoice.validate` and `euinvoice.detect` now name the functions (plan §4 `from euinvoice import validate,
+  detect`), not their modules (#27). Import module members with `from euinvoice.validate import …` /
+  `from euinvoice.detect import …`; attribute access such as `euinvoice.detect.Detection` no longer works.
 - `validate()` no longer falls back to EN 16931 core for auto-detected Factur-X MINIMUM, BASIC WL, BASIC and
   EXTENDED documents (now registered by their BT-24): it raises `ArtifactsNotAvailableError` until their
   Factur-X Schematron is pinned (#42). Pass `profile=profiles.EN16931` to run the core rules.

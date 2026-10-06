@@ -30,7 +30,8 @@ from test_corpus_harness import TOO_LARGE, _assert_blocking, _differs, _profile,
 from test_detect_corpora import EXCLUDED as NOT_INVOICES
 
 from _strategies import cii_normalized
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect_root
 from euinvoice.errors import ModelError
 from euinvoice.model import Invoice, InvoiceLine, PriceDetails
 from euinvoice.profiles._base import FACTURX_RULE_SET
@@ -108,7 +109,7 @@ def _skipped_by_harness(sample: Sample) -> bool:
 
 def _target(data: bytes) -> Syntax:
     """The syntax other than the one of ``data``."""
-    return _other(detect.detect_root(_xml.parse(data)).syntax)
+    return _other(detect_root(_xml.parse(data)).syntax)
 
 
 @pytest.mark.parametrize("sample", SAMPLES, ids=lambda sample: sample.id)

@@ -48,26 +48,43 @@ once (pinned and sha256-verified):
 python -m euinvoice artifacts fetch   # cache: $EUINVOICE_ARTIFACTS_DIR or ~/.cache/euinvoice
 ```
 
-## Usage (target API)
+## Usage
+
+`draft` is an `euinvoice.InvoiceDraft`: the invoice without its derived totals. These examples run as tests
+(`tests/_readme.py` builds the synthetic XRechnung draft they use).
 
 ```python
-from euinvoice import calc, parse, profiles, to_xml, validate
-
-invoice = calc.complete(draft)  # derive totals + VAT breakdown per EN 16931
-xml = to_xml(invoice, profile=profiles.XRECHNUNG, syntax="cii")
-
-report = validate(xml)  # profile auto-detected from BT-24
-for finding in report.findings:
-    print(finding.rule_id, finding.severity, finding.message)
-
-assert parse(xml) == invoice  # lossless round-trip
+>>> from euinvoice import calc, parse, parse_detailed, profiles, to_xml, validate
+>>> invoice = calc.complete(draft)  # derive line totals, document totals and the VAT breakdown (EN 16931)
+>>> xml = to_xml(invoice, profile=profiles.XRECHNUNG, syntax="cii")  # raises PreflightError on blocking findings
+>>> parse(xml) == profiles.XRECHNUNG.prepare(invoice)  # lossless; to_xml wrote the profile's BT-24 (prepare)
+True
+>>> parse_detailed(xml).unmapped  # XPaths of input with no business term; parse() discards them
+()
 ```
 
-```python
-from euinvoice import facturx, profiles
+Validation needs the `[validate]` extra and the fetched artifacts:
 
-# your renderer produces the human-readable PDF/A-3 (e.g. WeasyPrint pdf_variant="pdf/a-3b")
-hybrid_pdf = facturx.embed(rendered_pdf, invoice, profile=profiles.FACTURX_EN16931)
+<!-- readme-doctest: needs-artifacts -->
+```python
+>>> report = validate(xml)  # profile auto-detected from BT-24
+>>> report.ok
+True
+>>> for finding in report.findings:
+...     print(finding.rule_id, finding.severity, finding.message)
+```
+
+Factur-X / ZUGFeRD needs the `[pdf]` extra:
+
+```python
+>>> from euinvoice import facturx
+>>> # your renderer produces the human-readable PDF/A-3 (e.g. WeasyPrint pdf_variant="pdf/a-3b")
+>>> hybrid_pdf = facturx.embed(rendered_pdf, invoice, profile=profiles.FACTURX_EN16931)
+>>> found = facturx.extract(hybrid_pdf)
+>>> found.filename, found.conformance_level, found.profile.id
+('factur-x.xml', 'EN 16931', 'facturx-en16931')
+>>> parse(hybrid_pdf) == profiles.FACTURX_EN16931.prepare(invoice)  # parse() reads PDFs too
+True
 ```
 
 ## Development

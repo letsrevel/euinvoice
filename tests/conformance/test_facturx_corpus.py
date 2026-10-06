@@ -17,7 +17,8 @@ import typing as t
 import pytest
 from _corpus import facturx_pdfs
 
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect
 from euinvoice.report import Finding
 from euinvoice.syntax import cii
 from euinvoice.validate import artifacts, validate
@@ -55,7 +56,7 @@ OTHER_BT24: t.Final[dict[str, str]] = {
 
 
 def _bt24(data: bytes) -> str | None:
-    return detect.detect(data).specification_identifier
+    return detect(data).specification_identifier
 
 
 def _blocking(findings: t.Iterable[Finding]) -> set[str]:
@@ -78,7 +79,7 @@ def test_the_xmp_level_selects_the_profile_of_the_embedded_xml() -> None:
             mismatches[pdf.name] = str(bt24)
         elif profile not in (profiles.FACTURX_EN16931, profiles.FACTURX_XRECHNUNG):
             # A level with a BT-24 of its own is found from the bare XML too.
-            assert detect.detect(pdf.xml).profile is profile, pdf.name
+            assert detect(pdf.xml).profile is profile, pdf.name
     assert mismatches == OTHER_BT24
 
 
