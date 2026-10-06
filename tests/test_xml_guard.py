@@ -339,3 +339,22 @@ def test_xml_is_parsed_only_in_xml_module() -> None:
             counts[relative] = allowed_use_counts(source, allowed)
     assert offenders == {}, "XML must be parsed only via euinvoice._xml (D10)"
     assert counts == PER_FILE_ALLOWED, "allowlisted uses changed: review them and update PER_FILE_ALLOWED"
+
+
+def test_getpath_is_called_only_through_xml_getpath() -> None:
+    # lxml's getpath raises UnicodeDecodeError when libxml2 cuts a path inside a character (#90).
+    offenders: dict[str, list[int]] = {}
+    for path in SRC.rglob("*.py"):
+        relative = path.relative_to(SRC).as_posix()
+        if relative == "_xml.py":
+            continue
+        lines = [
+            node.lineno
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(node, ast.Attribute)
+            and node.attr == "getpath"
+            and not (isinstance(node.value, ast.Name) and node.value.id == "_xml")
+        ]
+        if lines:
+            offenders[relative] = lines
+    assert offenders == {}, "compute node paths with euinvoice._xml.getpath"

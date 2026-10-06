@@ -325,12 +325,11 @@ def _empty_elements(invoice: Invoice) -> Iterator[Finding]:
     # ponytail: R008 costs a second UBL serialization (and parse) of the invoice, on top of the one the
     # caller writes. Upgrade path: to_xml (#27) hands the pre-flight the bytes it already wrote.
     root = _xml.parse(ubl.write(invoice))
-    tree = root.getroottree()
     for element in root.iter(etree.Element):
         if len(element) == 0 and not normalize_space(element.text or ""):
             yield _fatal(
                 "R008",
-                tree.getpath(element),
+                _xml.getpath(element),
                 "Document MUST not contain empty elements.",
                 "A blank text value in the invoice is written as this empty element; leave the term out instead.",
             )

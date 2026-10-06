@@ -202,6 +202,10 @@ All notable changes to this project are documented here. The format follows
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.
 
 ### Fixed
+- Readers and XSD validation no longer raise `UnicodeDecodeError` on a hostile element name or prefix (#90).
+  libxml2 cuts node paths at byte boundaries (98 bytes of `prefix:name`, and the tail of a path longer than its
+  buffer); a cut inside a UTF-8 character now ends in U+FFFD in `unmapped`, `ParseError.location` and XSD finding
+  locations instead of crashing. Every other path is unchanged, and `unmapped` no longer falls back to `getpath`.
 - `syntax.ubl.write()` writes an empty purchase order reference (BT-13 `""`) as an empty
   `cac:OrderReference/cbc:ID` instead of the `NA` placeholder, which now stands in for an absent BT-13 only, so
   an invoice with an empty `cbc:ID` (e.g. ZUGFeRD corpus `UBL/EN16931_Elektron.ubl.xml`) round-trips. Under

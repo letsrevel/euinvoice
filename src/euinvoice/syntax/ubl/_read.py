@@ -77,9 +77,7 @@ def read(root: etree._Element) -> ParseResult:
     """
     credit_note = _ROOTS.get(root.tag) if isinstance(root.tag, str) else None
     if credit_note is None:
-        raise ParseError(
-            f"expected the UBL root Invoice or CreditNote, got {root.tag}", location=root.getroottree().getpath(root)
-        )
+        raise ParseError(f"expected the UBL root Invoice or CreditNote, got {root.tag}", location=_xml.getpath(root))
     cursor = Cursor(root)
     currency = (cursor.text(root, CBC + "DocumentCurrencyCode") or "").strip(XML_SPACE)
     accounting_currency = cursor.text(root, CBC + "TaxCurrencyCode")
@@ -235,9 +233,7 @@ def _supporting_document(cursor: Cursor, element: etree._Element) -> AdditionalS
         try:
             content = base64.b64decode(encoded, validate=True)
         except binascii.Error as exc:
-            raise ParseError(
-                f"BT-125: not base64 content ({exc})", location=embedded.getroottree().getpath(embedded)
-            ) from exc
+            raise ParseError(f"BT-125: not base64 content ({exc})", location=_xml.getpath(embedded)) from exc
         attached = build(
             BinaryObject,
             embedded,

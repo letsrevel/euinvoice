@@ -83,6 +83,22 @@ def test_unknown_element_becomes_a_located_fatal_xsd_finding() -> None:
 
 
 @pytest.mark.usefixtures("cache")
+def test_an_element_path_libxml2_cuts_inside_a_character_is_still_a_finding() -> None:
+    # libxml2 keeps 98 bytes of "prefix:name" in a path step, here ending in the first byte of an "é" (#90).
+    prefix = "p" + "é" * 60
+    data = doc(
+        _xml.UBL_INVOICE,
+        "Invoice",
+        f'<cbc:ID>INV-1</cbc:ID>\n<{prefix}:Bogus xmlns:{prefix}="{_xml.UBL_CBC}"/>\n'
+        "<cbc:IssueDate>2026-01-31</cbc:IssueDate>",
+    )
+
+    (finding,) = xsd.validate(_xml.parse(data))
+
+    assert finding.location == "3 /*/p" + "é" * 48 + "\ufffd"
+
+
+@pytest.mark.usefixtures("cache")
 def test_every_error_is_reported_in_document_order() -> None:
     data = doc(_xml.UBL_INVOICE, "Invoice", "<cbc:ID><x/></cbc:ID>\n<cbc:IssueDate>31.01.2026</cbc:IssueDate>")
 

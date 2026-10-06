@@ -229,3 +229,22 @@ def test_to_xdm_rejects_unsafe_or_wrong_input_before_saxon() -> None:
     with pytest.raises(TypeError):
         _xml.to_xdm(processor, "<a/>")  # type: ignore[arg-type]  # asserting the runtime type check
     assert processor.calls == []
+
+
+def test_getpath_is_lxmls_getpath_when_it_decodes() -> None:
+    root = _xml.parse(b'<a:r xmlns:a="urn:example:a"><a:x/><a:x/><y/></a:r>')
+    assert [_xml.getpath(element) for element in root.iter()] == ["/a:r", "/a:r/a:x[1]", "/a:r/a:x[2]", "/a:r/y"]
+
+
+def test_getpath_replaces_a_character_libxml2_cut() -> None:
+    # libxml2 keeps 98 bytes of "a:" + "x" + 48 "é" (99 bytes): the last one is cut after its first byte (#90).
+    name = "x" + "é" * 48
+    root = _xml.parse(f'<a:r xmlns:a="urn:example:a"><a:{name}/></a:r>'.encode())
+    with pytest.raises(UnicodeDecodeError):
+        root.getroottree().getpath(root[0])
+    assert _xml.getpath(root[0]) == "/a:r/a:x" + "é" * 47 + "\ufffd"
+
+
+def test_path_text_decodes_utf8_and_replaces_a_cut_character() -> None:
+    assert _xml.path_text("/a:é".encode()) == "/a:é"
+    assert _xml.path_text(b"/a:\xc3/b") == "/a:\ufffd/b"

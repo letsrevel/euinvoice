@@ -49,7 +49,7 @@ def type_code(reference: etree._Element) -> str | None:
 
 
 def _path(element: etree._Element) -> str:
-    return element.getroottree().getpath(element)
+    return _xml.getpath(element)
 
 
 def build[M: EuInvoiceModel](model: type[M], at: etree._Element, term: str, /, **values: object) -> M:

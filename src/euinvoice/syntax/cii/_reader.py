@@ -38,7 +38,7 @@ class Reader:
         self._marks = Marks(root)
 
     def path(self, element: etree._Element) -> str:
-        """The XPath of ``element`` (``ElementTree.getpath``)."""
+        """The XPath of ``element`` (:func:`euinvoice._xml.getpath`)."""
         return self._marks.path(element)
 
     def use(self, element: etree._Element) -> etree._Element:
