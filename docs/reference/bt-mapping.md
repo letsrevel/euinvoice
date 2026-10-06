@@ -345,7 +345,8 @@ syntax's writer reports the gap.
 
 * **Empty text is kept (#79).** Optional Text and Identifier terms admit `""` (`model/datatypes.py`, `Text`; only
   the mandatory terms typed `NonBlankText` refuse blank text). Both writers write `""` as an empty element and both
-  readers read an empty element back as `""`, so it round-trips. This is what the pinned sources allow: the UBL 2.1
+  readers read an empty element back as `""`, so it round-trips, except BT-22 in UBL (see "Empty groups and notes
+  are not written in UBL": a `""` note without BT-21 is not written, and with BT-21 it reads back without BT-22). This is what the pinned sources allow: the UBL 2.1
   `IdentifierType` extends `xsd:normalizedString` (`common/CCTS_CCT_SchemaModule-2.1.xsd`) and the CII D16B
   `udt:IDType` / `udt:TextType` extend `xsd:token` / `xsd:string` (`..._UnqualifiedDataType_100pD16B.xsd`), all of
   which admit the empty string, the CEN 1.3.16 Schematron tests no optional term for non-emptiness (e.g. ZUGFeRD corpus

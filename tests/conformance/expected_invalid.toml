@@ -252,21 +252,10 @@ link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e8
 source = "zugferd-corpus"
 file = "XML-Rechnung/UBL/EN16931_Elektron.ubl.xml"
 outcome = "reads"
-rules = ["DE-R-002", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+rules = ["DE-R-002", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R008", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
 upstream = ["DE-R-002", "PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R008", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
-differs = ["BT-13"]
-reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-002 (BG-6 seller contact); P0100 (invoice type code per profile); R008 (no empty elements); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34). Its empty cac:OrderReference/cbc:ID reads as BT-13 '' (the R008 finding), which the writer replaces by the 'NA' placeholder that reads back as no BT-13: the round trip differs in BT-13 and no longer fails R008 (#79)."
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): DE-R-002 (BG-6 seller contact); P0100 (invoice type code per profile); R008 (no empty elements: its empty cac:OrderReference/cbc:ID, BT-13 '', which the writer keeps empty, #79); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
 link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/EN16931_Elektron.ubl.xml"
-
-[[sample]]
-source = "zugferd-corpus"
-file = "XML-Rechnung/UBL/XRECHNUNG_Elektron.ubl.xml"
-outcome = "reads"
-rules = []
-upstream = []
-differs = ["BT-13"]
-reason = "Valid upstream, but its empty cac:OrderReference/cbc:ID reads as BT-13 '', which the writer replaces by the 'NA' placeholder that reads back as no BT-13: the round trip differs in BT-13 (#79)."
-link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/XML-Rechnung/UBL/XRECHNUNG_Elektron.ubl.xml"
 
 [[sample]]
 source = "zugferd-corpus"

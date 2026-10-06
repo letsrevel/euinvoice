@@ -155,7 +155,7 @@ invoices: t.Final = st.builds(
         st.builds(InvoiceNote, subject_code=st.none() | st.sampled_from(["AAI", "SUR"]), note=st.none() | _text),
         max_size=2,
     ).map(tuple),
-    purchase_order_reference=st.none() | _text | st.just("NA"),
+    purchase_order_reference=st.none() | _text | st.just("NA") | st.just(""),
     sales_order_reference=st.none() | _text,
     process_control=st.builds(ProcessControl, specification_identifier=_text),
     preceding_invoice_references=st.lists(
