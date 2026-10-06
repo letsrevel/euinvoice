@@ -22,7 +22,6 @@ from _cii_invoices import all_terms_invoice
 from _invoices import buyer, payment, rebuild
 from euinvoice import _xml
 from euinvoice.model import (
-    BT_INDEX,
     BinaryObject,
     CreditTransfer,
     Identifier,
@@ -272,12 +271,9 @@ def values_at(model: t.Any, path: str) -> tuple[t.Any, ...]:
 def test_term_is_read(term: str, changes: dict[str, t.Any], expected: Expected) -> None:
     result = cii.read(_xml.parse(cii.write(rebuild(all_terms_invoice(), **changes))))
     found = values_at(result.invoice, path_of(term))
+    assert found, f"{term} was not read"
     assert (len(found) if isinstance(expected, int) else found) == expected, term
     assert result.unmapped == (), term
-
-
-def test_every_model_term_has_a_row() -> None:
-    assert {row[0] for row in READ_ROWS} == set(BT_INDEX)
 
 
 def test_all_terms_invoice_reads_back_equal() -> None:

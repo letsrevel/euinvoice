@@ -48,6 +48,11 @@ artifacts: ## Fetch pinned official validation artifacts + example corpora
 codelists: ## Regenerate the EN 16931 code lists (needs `make artifacts`)
 	uv run python scripts/gen_codelists.py
 
+# Regenerates docs/reference/bt-coverage.md from the per-term row tables (the BT coverage gate, #32).
+.PHONY: bt-coverage
+bt-coverage: ## Regenerate docs/reference/bt-coverage.md
+	EUINVOICE_REGEN_DOCS=1 uv run pytest -q tests/syntax/test_bt_coverage.py
+
 .PHONY: conformance
 conformance: ## Conformance suite against official Schematron + upstream corpora
 	uv run pytest -n auto -m conformance

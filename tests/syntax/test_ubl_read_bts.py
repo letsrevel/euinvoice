@@ -14,7 +14,7 @@ from test_ubl_write_bts import BT_ROWS
 
 from _invoices import minimal_invoice
 from euinvoice import _xml
-from euinvoice.model import BT_INDEX, path_of
+from euinvoice.model import path_of
 from euinvoice.syntax import ubl
 
 Expected = tuple[t.Any, ...] | int
@@ -58,7 +58,3 @@ def test_term_is_read(term: str, changes: dict[str, t.Any], expected: Expected) 
     assert (len(found) if isinstance(expected, int) else found) == expected, term
     assert result.invoice == invoice, term
     assert result.unmapped == (), term
-
-
-def test_every_model_term_has_a_row() -> None:
-    assert {row[0] for row in READ_ROWS} == set(BT_INDEX)

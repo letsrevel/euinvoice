@@ -15,7 +15,6 @@ from _ubl_support import written, xpath
 
 from _invoices import TEST_IBAN, minimal_invoice, simple_line
 from euinvoice.model import (
-    BT_INDEX,
     AdditionalSupportingDocument,
     BinaryObject,
     Buyer,
@@ -436,7 +435,3 @@ BT_ROWS: t.Final[tuple[Row, ...]] = (
 )
 def test_business_term_is_written(bt: str, changes: dict[str, t.Any], path: str, expected: str) -> None:
     assert xpath(written(minimal_invoice(**changes)), path) == expected, bt
-
-
-def test_every_business_term_has_a_write_row() -> None:
-    assert {row[0] for row in BT_ROWS} == set(BT_INDEX)

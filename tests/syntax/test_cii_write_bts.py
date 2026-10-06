@@ -15,7 +15,7 @@ from lxml import etree
 
 from _invoices import TEST_IBAN, buyer, payment, rebuild
 from euinvoice import _xml
-from euinvoice.model import BT_INDEX, CreditTransfer, Identifier
+from euinvoice.model import CreditTransfer, Identifier
 from euinvoice.syntax import cii
 
 ROOT: t.Final = "/rsm:CrossIndustryInvoice"
@@ -301,6 +301,8 @@ BT_ROWS: t.Final[tuple[Row, ...]] = (
     ("BT-148", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:ChargeAmount", ("50.5",)),
     ("BT-149", {}, f"{LAGR}ram:NetPriceProductTradePrice/ram:BasisQuantity", ("1",)),
     ("BT-150", {}, f"{LAGR}ram:NetPriceProductTradePrice/ram:BasisQuantity/@unitCode", ("C62",)),
+    # BT-149/BT-150 are bound to the NetPrice BasisQuantity above (bt-mapping.md); these two rows check the copy
+    # the writer repeats on the gross price (as the CEN examples do), not a second binding.
     ("BT-149", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:BasisQuantity", ("1",)),
     ("BT-150", {}, f"{LAGR}ram:GrossPriceProductTradePrice/ram:BasisQuantity/@unitCode", ("C62",)),
     ("BG-30", {}, f"{LSTL}ram:ApplicableTradeTax[ram:TypeCode='VAT']", 1),
@@ -354,11 +356,8 @@ def test_term_is_written(
 ) -> None:
     root = _xml.parse(cii.write(rebuild(all_terms_invoice(), **changes))) if changes else base
     found = select(root, xpath)
+    assert found, f"{term} was not written"
     if isinstance(expected, int):
         assert len(found) == expected, term
     else:
         assert tuple(str(f) if isinstance(f, str) else f.text for f in found) == expected, term
-
-
-def test_every_model_term_has_a_row() -> None:
-    assert {row[0] for row in BT_ROWS} == set(BT_INDEX)
