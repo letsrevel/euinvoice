@@ -107,7 +107,7 @@ generated, parsed and validated per profile is in the README table; the open que
   `EUINVOICE-PROFILE-FALLBACK`. Factur-X MINIMUM, BASIC WL, BASIC and EXTENDED documents raise
   `ArtifactsNotAvailableError` instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)), and so do auto-detected CII documents
   with a ZUGFeRD 2.0 MINIMUM, BASIC or EXTENDED BT-24 or a colon-spelled BASIC / EXTENDED BT-24
-  (`profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS`, not registered as profiles, [#98](https://github.com/letsrevel/euinvoice/issues/98)); pass
+  (neither is registered as a profile, [#98](https://github.com/letsrevel/euinvoice/issues/98)); pass
   `profile=profiles.EN16931` to run the core rules. It takes XML (for a PDF, pass `facturx.extract(pdf).xml`),
   returns a `ValidationReport` and never raises on rule failures.
 - XSD validation (`euinvoice.validate.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B

@@ -1,7 +1,5 @@
 """Tests for the Factur-X / ZUGFeRD level profiles, their registration and the conformance-level lookup (#22)."""
 
-import typing as t
-
 import pytest
 
 from euinvoice import _xml, profiles
@@ -116,21 +114,12 @@ def test_the_xrechnung_level_is_xrechnung_in_a_factur_x_container() -> None:
 
 
 class TestUnregisteredLevelIdentifiers:
-    """BT-24 values the corpus pairs with a level but no profile declares (#98); validate() refuses them."""
+    """BT-24 values the corpus pairs with a level but no profile declares (#98); validate() refuses them.
 
-    EXPECTED: t.ClassVar = {
-        "urn:zugferd.de:2p0:minimum": "MINIMUM",
-        "urn:cen.eu:en16931:2017#compliant#urn:zugferd.de:2p0:basic": "BASIC",
-        "urn:cen.eu:en16931:2017#conformant#urn:zugferd.de:2p0:extended": "EXTENDED",
-        "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic": "BASIC",
-        "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:extended": "EXTENDED",
-    }
+    tests/conformance/test_facturx_extract_corpus.py checks each pair against the corpus PDFs.
+    """
 
-    def test_lists_the_corpus_pairs(self) -> None:
-        # tests/conformance/test_facturx_extract_corpus.py checks each pair against the corpus PDFs.
-        assert dict(facturx.UNREGISTERED_LEVEL_IDENTIFIERS) == self.EXPECTED
-
-    @pytest.mark.parametrize("bt24", sorted(EXPECTED))
+    @pytest.mark.parametrize("bt24", sorted(facturx._UNREGISTERED_LEVEL_IDENTIFIERS))
     def test_none_is_registered_or_written(self, bt24: str) -> None:
         # Not a profile's BT-24, so prepare() / to_xml never write one, and detect() gives no profile.
         with pytest.raises(UnsupportedDocumentError):
@@ -138,6 +127,6 @@ class TestUnregisteredLevelIdentifiers:
         assert detect(_cii(bt24)).profile is None
         assert all(row[0].specification_identifier != bt24 for row in DECLARED)
 
-    @pytest.mark.parametrize("level", sorted(set(EXPECTED.values())))
+    @pytest.mark.parametrize("level", sorted(set(facturx._UNREGISTERED_LEVEL_IDENTIFIERS.values())))
     def test_each_names_a_level_without_pinned_rules(self, level: str) -> None:
         assert FACTURX_RULE_SET in profiles.by_conformance_level(level).rule_sets

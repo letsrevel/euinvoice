@@ -285,12 +285,12 @@ def test_facturx_levels_without_pinned_rules_raise_naming_issue_42(
 
 # The ZUGFeRD 2.0 ids and the colon spellings of BASIC / EXTENDED (#98): no profile declares them, but they identify
 # a level whose Schematron is not pinned, so validate() refuses them like the registered levels.
-UNREGISTERED_LEVEL_IDS = sorted(facturx.UNREGISTERED_LEVEL_IDENTIFIERS)
+UNREGISTERED_LEVEL_IDS = sorted(facturx._UNREGISTERED_LEVEL_IDENTIFIERS)
 
 
 @pytest.mark.parametrize("bt24", UNREGISTERED_LEVEL_IDS)
 def test_unregistered_level_identifiers_raise_naming_issue_42(spy: Spy, bt24: str) -> None:
-    level = facturx.UNREGISTERED_LEVEL_IDENTIFIERS[bt24]
+    level = facturx._UNREGISTERED_LEVEL_IDENTIFIERS[bt24]
     with pytest.raises(ArtifactsNotAvailableError, match=r"issues/42.*profiles\.EN16931") as error:
         validate(cii(bt24))
     assert repr(bt24) in str(error.value)

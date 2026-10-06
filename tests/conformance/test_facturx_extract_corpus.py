@@ -176,9 +176,9 @@ REFUSED_BY_VALIDATE: t.Final = {
 def test_validate_refuses_every_pdf_at_a_level_without_pinned_rules() -> None:
     # #98: validate() as the CLI calls it for a PDF (the Factur-X level's profile, else BT-24 auto-detection) raises
     # for every Factur-X / ZUGFeRD 2.0 PDF at such a level, whether its BT-24 is a registered level's or one of
-    # UNREGISTERED_LEVEL_IDENTIFIERS; it never gives the EN 16931 core verdict. Each unregistered BT-24 comes with the
+    # _UNREGISTERED_LEVEL_IDENTIFIERS; it never gives the EN 16931 core verdict. Each unregistered BT-24 comes with the
     # XMP level the mapping names, in every PDF that carries it.
-    unregistered = profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS
+    unregistered = profiles.facturx._UNREGISTERED_LEVEL_IDENTIFIERS
     levels: dict[str, set[str | None]] = collections.defaultdict(set)
     refused: collections.Counter[tuple[str, str | None]] = collections.Counter()
     for name, data in _pdfs().items():

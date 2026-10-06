@@ -34,7 +34,6 @@ __all__ = [
     "FACTURX_EXTENDED",
     "FACTURX_MINIMUM",
     "FACTURX_XRECHNUNG",
-    "UNREGISTERED_LEVEL_IDENTIFIERS",
     "by_conformance_level",
 ]
 
@@ -78,7 +77,7 @@ FACTURX_BASIC: t.Final = Profile(
     # BT-24 and level "BASIC": ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/
     # zugferd_2p1_BASIC_{Einfach,Rechnungskorrektur,Taxifahrt}.pdf; plan §5. The FNFE samples write
     # "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic" instead (needs-human #69), which is not registered
-    # but listed in UNREGISTERED_LEVEL_IDENTIFIERS (#98).
+    # but listed in _UNREGISTERED_LEVEL_IDENTIFIERS (#98).
     specification_identifier="urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic",
     syntaxes=_CII,
     rule_sets=_FACTURX_RULES,
@@ -146,7 +145,7 @@ _BY_LEVEL: t.Final[Mapping[str, Profile]] = {
     p.facturx_conformance_level: p for p in _LEVELS if p.facturx_conformance_level is not None
 }
 
-UNREGISTERED_LEVEL_IDENTIFIERS: t.Final[Mapping[str, str]] = {
+_UNREGISTERED_LEVEL_IDENTIFIERS: t.Final[Mapping[str, str]] = {
     # XMP container _xml.ZUGFERD_2_XMP (ZUGFeRD 2.0), file zugferd-invoice.xml:
     # level "MINIMUM": ZUGFeRDv2/correct/intarsys/MINIMUM/zugferd_2p0_MINIMUM.pdf (1).
     "urn:zugferd.de:2p0:minimum": "MINIMUM",

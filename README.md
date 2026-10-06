@@ -31,7 +31,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |
-| ZUGFeRD 2.0 MINIMUM, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ BASIC, EXTENDED; ❌ MINIMUM | ❌ |
+| ZUGFeRD 2.0 MINIMUM, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ BASIC, EXTENDED (EXTENDED-only content listed as unmapped; corpus EXTENDED samples with codes outside the CEN lists, ABK BR-CL-19 and 9958 BR-CL-25, raise `ParseError` like their 2.1 twins, [#69](https://github.com/letsrevel/euinvoice/issues/69)); ❌ MINIMUM | ❌ |
 
 - **Parse** means read into the EN 16931 model. Readers never drop input silently: every element or attribute
   without a business term is listed in `parse_detailed(...).unmapped`.

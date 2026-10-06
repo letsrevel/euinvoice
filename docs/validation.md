@@ -105,7 +105,7 @@ The Factur-X / ZUGFeRD Schematron is not pinned yet ([#42](https://github.com/le
 MINIMUM, BASIC WL, BASIC and EXTENDED. It also raises it, rather than falling back to EN 16931 core, for a CII
 document whose BT-24 names one of these levels without being a profile's: the ZUGFeRD 2.0 MINIMUM, BASIC and
 EXTENDED identifiers and the colon spellings of BASIC and EXTENDED
-(`profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS`). Pass `profiles.EN16931` to run the core rules alone.
+(`urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:…`). Pass `profiles.EN16931` to run the core rules alone.
 `profiles.FACTURX_EN16931` and `profiles.FACTURX_XRECHNUNG` validate the
 CII XML against the D16B XSD and the CEN rules (plus the XRechnung rules for `FACTURX_XRECHNUNG`), so their `ok` is
 the EN 16931 (or XRechnung) verdict, not a full Factur-X one. See [Factur-X](facturx.md).
