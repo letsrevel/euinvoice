@@ -6,7 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-06
 
 First release: the EN 16931 semantic model, totals and VAT calculation, UBL 2.1 and CII D16B writers and readers,
 the EN 16931 core, Peppol BIS Billing 3.0, XRechnung 3.0 and Factur-X / ZUGFeRD profiles, validation against the
@@ -212,3 +212,6 @@ generated, parsed and validated per profile is in the README table; the open que
   classification, BR-DE-CVD-03 (fatal) when it does not (`XRechnung-UBL-validation.sch` lines 560-562, CEN
   `EN16931-UBL-codes.sch` lines 67-68). No default BT-23 for XRechnung ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
+
+[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/letsrevel/euinvoice/releases/tag/v0.1.0
