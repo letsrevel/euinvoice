@@ -47,7 +47,7 @@ generated, parsed and validated per profile is in the README table; the open que
   validated `Invoice` that passes the CEN rules in UBL and CII. `ExemptionReason` carries BT-120/BT-121 per
   category. It reproduces the totals of every CEN 1.3.16 and Peppol 3.0.21 example except one HUF example that
   rounds VAT to whole forints.
-- `calc.check(invoice, syntax=None)` ([#9](https://github.com/letsrevel/euinvoice/issues/9), [#62](https://github.com/letsrevel/euinvoice/issues/62)): evaluates BR-CO-10…17, BR-48, BR-53, BR-<x>-01/05/06/07/08/09/10
+- `calc.check(invoice, *, syntax=None)` ([#9](https://github.com/letsrevel/euinvoice/issues/9), [#62](https://github.com/letsrevel/euinvoice/issues/62)): evaluates BR-CO-10…17, BR-48, BR-53, BR-<x>-01/05/06/07/08/09/10
   (S, Z, E, AE, K, G, O, L, M), BR-O-11…14, BR-B-02 and the period date rules BR-29, BR-30, BR-CO-19 and
   BR-CO-20 as the UBL and the CII binding test them (including CII's first-match rule shadowing). With a syntax,
   that binding's failures are `fatal`; without one, a rule is `fatal` when both bindings reject it and an
@@ -72,13 +72,14 @@ generated, parsed and validated per profile is in the README table; the open que
   errors become `ParseError` with the BT/BG id and the element's XPath. Both read every CEN, Peppol BIS,
   XRechnung testsuite and ZUGFeRD corpus file of their syntax and round-trip them, except the files listed with
   their rule ids in `tests/conformance/expected_invalid.toml`. Reading is linear in the number of lines (a
-  25 MB, 26,813-line Peppol sample reads in about 6 s CPU) ([#80](https://github.com/letsrevel/euinvoice/issues/80)).
+  25 MB, 26,813-line Peppol sample reads in about 6 s CPU; the two Peppol stress samples are measured, not run in
+  the suite; issue [#80](https://github.com/letsrevel/euinvoice/issues/80)).
 - `euinvoice.syntax.Syntax` names the syntaxes. The binding decisions and normalizations are documented in
   `docs/reference/bt-mapping.md`.
 
 #### Profiles
-- `euinvoice.profiles.Profile` ([#19](https://github.com/letsrevel/euinvoice/issues/19)): id, title, BT-24, supported syntaxes, official rule sets, BT-23 default,
-  Factur-X file name and conformance level, an optional `preflight(invoice, syntax)` hook ([#20](https://github.com/letsrevel/euinvoice/issues/20)) and
+- `euinvoice.profiles.Profile` ([#19](https://github.com/letsrevel/euinvoice/issues/19)): id, title, BT-24, supported syntaxes (`frozenset[Syntax]`), official rule sets, BT-23
+  default, Factur-X file name and conformance level, `requires_vat_breakdown_rate` ([#75](https://github.com/letsrevel/euinvoice/issues/75)), an optional `preflight(invoice, syntax)` hook ([#20](https://github.com/letsrevel/euinvoice/issues/20)) and
   `prepare(invoice)`, which sets BT-24 and a missing BT-23. `profiles.get(bt24)` looks a profile up by BT-24 and
   raises `UnsupportedDocumentError` listing the known identifiers.
 - `profiles.EN16931`: the EN 16931 core (`urn:cen.eu:en16931:2017`, UBL and CII, CEN rules) ([#19](https://github.com/letsrevel/euinvoice/issues/19)).
@@ -103,7 +104,10 @@ generated, parsed and validated per profile is in the README table; the open que
 - `euinvoice.validate(data, profile=None)` ([#17](https://github.com/letsrevel/euinvoice/issues/17)): the official XSD, then (unless the XSD step failed) each
   Schematron rule set of the profile in order, with the raw official severities. Without a profile it is picked
   by BT-24; an unregistered or missing BT-24 falls back to EN 16931 core with an `information` finding
-  `EUINVOICE-PROFILE-FALLBACK`. It returns a `ValidationReport` and never raises on rule failures.
+  `EUINVOICE-PROFILE-FALLBACK`. Factur-X MINIMUM, BASIC WL, BASIC and EXTENDED documents raise
+  `ArtifactsNotAvailableError` instead (their Schematron is not pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)); pass
+  `profile=profiles.EN16931` to run the core rules. It takes XML (for a PDF, pass `facturx.extract(pdf).xml`),
+  returns a `ValidationReport` and never raises on rule failures.
 - XSD validation (`euinvoice.validate.xsd`) of UBL 2.1 `Invoice` / `CreditNote` (OASIS schemas, [#12](https://github.com/letsrevel/euinvoice/issues/12)) and CII D16B
   (the SCRDM Subset schema of the pinned KoSIT configuration, [#15](https://github.com/letsrevel/euinvoice/issues/15)): each schema error is a fatal `XSD` finding
   located by line and element path.
@@ -121,7 +125,8 @@ generated, parsed and validated per profile is in the README table; the open que
   `~/.cache/euinvoice/<source>/<version>/`), verifies sha256, extracts zip-slip-safely and precompiles the
   Peppol Schematron with SchXslt from hardened-parsed XML (a `.sch` that pulls in other files is refused).
   Idempotent and offline on a warm cache. `validate()` never downloads; a missing artifact raises
-  `ArtifactsNotAvailableError` naming the fetch command.
+  `ArtifactsNotAvailableError` naming the fetch command. `euinvoice.validate.artifacts.source_dir()` looks a
+  fetched source up.
 
 #### Factur-X / ZUGFeRD
 - `facturx.embed()` (the `[pdf]` extra, pypdf) ([#23](https://github.com/letsrevel/euinvoice/issues/23)): embeds an invoice's CII XML, given as bytes or as an
@@ -145,7 +150,8 @@ generated, parsed and validated per profile is in the README table; the open que
   profile (default: the one registered for its BT-24), runs the profile's pre-flight and `calc.check`, and raises
   `PreflightError` (with the findings, the profile id and the syntax; picklable) on any `fatal` / `error`
   finding before writing UBL or CII. It refuses the Factur-X levels that are not generated. `euinvoice.parse()` /
-  `parse_detailed()` read UBL, CII and Factur-X / ZUGFeRD PDFs; `parse()` discards `unmapped`.
+  `parse_detailed()` read UBL, CII and Factur-X 1.0 / ZUGFeRD 2.1+ PDFs (ZUGFeRD 2.0 BT-24s are not registered, [#98](https://github.com/letsrevel/euinvoice/issues/98); ZUGFeRD 1.0 PDFs are
+  extract-only: `parse()` raises `UnsupportedDocumentError`); `parse()` discards `unmapped`.
 - `euinvoice` re-exports `to_xml`, `parse`, `parse_detailed`, `validate`, `detect`, `Invoice`, `InvoiceDraft`,
   `ParseResult`, `Syntax`, `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx`; `import
   euinvoice` loads neither pypdf nor saxonche.
@@ -159,7 +165,7 @@ generated, parsed and validated per profile is in the README table; the open que
 #### CLI
 - `python -m euinvoice validate FILE [--profile ID] [--json]`, `convert FILE --to ubl|cii [--profile ID] [-o OUT]`
   and `info FILE [--json]`, next to `artifacts fetch` ([#28](https://github.com/letsrevel/euinvoice/issues/28)). `FILE` may be XML or a Factur-X / ZUGFeRD PDF (`-`
-  reads stdin). Exit codes: 0 ok (warnings allowed); 1 document rejected or artifact integrity failure; 2 usage
+  reads stdin); for a PDF, `validate` and `info` default to the profile of its Factur-X level. Exit codes: 0 ok (warnings allowed); 1 document rejected or artifact integrity failure; 2 usage
   or setup error. `convert` lists every unmapped input element on stderr and writes `-o` only on success. Text
   the terminal cannot encode is backslash-escaped. The JSON shapes are documented in `euinvoice/__main__.py`.
 
@@ -172,7 +178,8 @@ generated, parsed and validated per profile is in the README table; the open que
 - README with a support table, known limitations and doctested usage examples ([#27](https://github.com/letsrevel/euinvoice/issues/27), [#34](https://github.com/letsrevel/euinvoice/issues/34)).
 
 #### Quality gates (for contributors)
-- Conformance suite (`make conformance`): the corpus round-trip harness over every pinned upstream example with
+- Conformance suite (`make conformance`): the corpus round-trip harness over every pinned upstream example (the two Peppol
+  stress samples are measured, not run in the suite; issue [#80](https://github.com/letsrevel/euinvoice/issues/80)) with
   `tests/conformance/expected_invalid.toml` as the only list of failures ([#29](https://github.com/letsrevel/euinvoice/issues/29)); UBL ↔ CII cross-syntax round
   trips ([#30](https://github.com/letsrevel/euinvoice/issues/30)); Hypothesis invoices that validate under EN 16931, Peppol and XRechnung in both syntaxes and
   round-trip exactly ([#31](https://github.com/letsrevel/euinvoice/issues/31), [#89](https://github.com/letsrevel/euinvoice/issues/89)); veraPDF on the Factur-X PDFs ([#25](https://github.com/letsrevel/euinvoice/issues/25)).
@@ -181,38 +188,22 @@ generated, parsed and validated per profile is in the README table; the open que
 - Tooling and CI: ruff, mypy strict, 3.12–3.14 test matrix, ≥ 95 % branch coverage, conformance and build jobs,
   dependency audits, release workflow with PyPI trusted publishing.
 
-### Changed
-These change behaviour that existed on `main` before the release; they matter only if you used a development
-snapshot.
-- `euinvoice.validate` and `euinvoice.detect` are the functions, not their modules ([#27](https://github.com/letsrevel/euinvoice/issues/27)). Import module members
-  with `from euinvoice.validate import …` / `from euinvoice.detect import …`; attribute access such as
-  `euinvoice.detect.Detection` does not work (see [#93](https://github.com/letsrevel/euinvoice/issues/93)).
-- `validate()` raises `ArtifactsNotAvailableError` for auto-detected Factur-X MINIMUM, BASIC WL, BASIC and
-  EXTENDED documents instead of falling back to EN 16931 core ([#22](https://github.com/letsrevel/euinvoice/issues/22), [#42](https://github.com/letsrevel/euinvoice/issues/42)). Pass `profile=profiles.EN16931` to run
-  the core rules.
-- `Profile.syntaxes` is a `frozenset[Syntax]` ([#20](https://github.com/letsrevel/euinvoice/issues/20)).
-
-### Fixed
-Fixes to development snapshots of `main`, listed for anyone who used one:
-- `syntax.ubl.write()` writes an empty BT-13 as an empty `cac:OrderReference/cbc:ID` instead of `NA`; under Peppol
-  the UBL pre-flight reports PEPPOL-EN16931-R008 for it ([#79](https://github.com/letsrevel/euinvoice/issues/79)).
-- `syntax.ubl.read()` no longer also lists an empty `cac:Contact` in `unmapped` ([#30](https://github.com/letsrevel/euinvoice/issues/30)).
-- The UBL and CII readers are linear in the number of invoice lines; the 26,813-line Peppol sample used not to
-  finish in 30 min ([#80](https://github.com/letsrevel/euinvoice/issues/80)).
-- Model text fields refuse characters XML 1.0 cannot carry instead of failing late in the writers ([#57](https://github.com/letsrevel/euinvoice/issues/57)).
-- `syntax.cii.write()` refuses BT-6 = BT-5 together with BT-111 (BR-53), as the UBL writer does ([#71](https://github.com/letsrevel/euinvoice/issues/71)).
-- XRechnung and Peppol DE-DE "Not subject to VAT" invoices from `calc.complete()` pass BR-DE-14 / DE-R-014 ([#75](https://github.com/letsrevel/euinvoice/issues/75)).
-- `calc.check()` reports the period date rules BR-29, BR-30, BR-CO-19 and BR-CO-20 ([#62](https://github.com/letsrevel/euinvoice/issues/62)).
-- Readers and XSD validation no longer raise `UnicodeDecodeError` on a hostile element name or prefix ([#90](https://github.com/letsrevel/euinvoice/issues/90)).
-
 ### Known issues
-- Factur-X / ZUGFeRD: the Factur-X XSD and Schematron are not pinned ([#42](https://github.com/letsrevel/euinvoice/issues/42)). MINIMUM, BASIC WL, BASIC and EXTENDED
+- Factur-X 1.0 / ZUGFeRD 2.1+: the Factur-X XSD and Schematron are not pinned ([#42](https://github.com/letsrevel/euinvoice/issues/42)). MINIMUM, BASIC WL, BASIC and EXTENDED
   are not validated (`ArtifactsNotAvailableError`); EN 16931 and XRECHNUNG get the EN 16931 / XRechnung verdict.
+- ZUGFeRD 2.0 BT-24s (`urn:zugferd.de:2p0:*`) and the FNFE BASIC colon variant are not registered, so
+  `validate()` falls back to EN 16931 core with `EUINVOICE-PROFILE-FALLBACK` (information) instead of raising,
+  and the CLI can exit 0 ([#98](https://github.com/letsrevel/euinvoice/issues/98)).
 - Factur-X MINIMUM and BASIC WL are detected and extracted but cannot be read into the model ([#69](https://github.com/letsrevel/euinvoice/issues/69)).
-- XRechnung: KoSIT's per-scenario severity overrides are not applied ([#49](https://github.com/letsrevel/euinvoice/issues/49)); every CVD document fails BR-CL-13, and
-  no CVD invoice can be built or read. No default BT-23 for XRechnung ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
+- XRechnung: KoSIT's per-scenario severity overrides are not applied ([#49](https://github.com/letsrevel/euinvoice/issues/49)), so the verdict can differ from KoSIT's
+  (e.g. 2 of the 6 official Extension instances get fatal findings KoSIT downgrades). No *conforming* CVD invoice
+  can be built or read. `validate()` rejects every CVD document: BR-CL-13 when it carries the `CVD` item
+  classification, BR-DE-CVD-03 (fatal) when it does not (`XRechnung-UBL-validation.sch` lines 560-562, CEN
+  `EN16931-UBL-codes.sch` lines 67-68). No default BT-23 for XRechnung ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
 - SaxonC-HE 13.0.0 `normalize-space()` crashes on some non-Latin-1 text, giving a false `SCHEMATRON-RUNTIME`
   fatal ([#74](https://github.com/letsrevel/euinvoice/issues/74)).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
-- The top-level `detect` / `validate` functions shadow their modules ([#93](https://github.com/letsrevel/euinvoice/issues/93)).
+- The top-level `detect` / `validate` functions shadow their modules ([#93](https://github.com/letsrevel/euinvoice/issues/93)): import module
+  members with `from euinvoice.validate import …` / `from euinvoice.detect import …`; attribute access such as
+  `euinvoice.detect.Detection` does not work.
 - The UBL writer refuses an invoice without BT-110 that CII can express ([#87](https://github.com/letsrevel/euinvoice/issues/87), parked).
