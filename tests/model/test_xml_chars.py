@@ -1,7 +1,7 @@
 """Model strings are restricted to the XML 1.0 ``Char`` production (issue #57).
 
 Both UBL and CII instances are XML 1.0 documents, so a character outside ``Char`` (W3C XML 1.0 5th
-ed. §2.2) can never be written in any syntax and is refused when the model is built.
+ed. section 2.2) can never be written in any syntax and is refused when the model is built.
 """
 
 import re
@@ -35,12 +35,12 @@ OFFENDERS: t.Final = [
     pytest.param("\x01", "U+0001", id="C0"),
     pytest.param("\x0b", "U+000B", id="VT"),
     pytest.param("\x1f", "U+001F", id="US"),
-    pytest.param("￾", "U+FFFE", id="FFFE"),
-    pytest.param("￿", "U+FFFF", id="FFFF"),
+    pytest.param("\ufffe", "U+FFFE", id="FFFE"),
+    pytest.param("\uffff", "U+FFFF", id="FFFF"),
     pytest.param("\ud800", "U+D800", id="lone-high-surrogate"),
     pytest.param("\udfff", "U+DFFF", id="lone-low-surrogate"),
 ]
-ALLOWED_EDGES: t.Final = ["\t", "\n", "\r", " ", "퟿", "", "�", "\U00010000", "\U0010ffff"]
+ALLOWED_EDGES: t.Final = ["\t", "\n", "\r", " ", "\ud7ff", "\ue000", "\ufffd", "\U00010000", "\U0010ffff"]
 
 
 @pytest.mark.parametrize(("char", "code_point"), OFFENDERS)
@@ -105,7 +105,7 @@ def test_accepted_iff_every_char_is_xml_1_0(text: str) -> None:
         assert valid
 
 
-@given(st.text())
+@given(st.text())  # default alphabet omits surrogates (Cs): they cannot be UTF-8 encoded, and are rejected anyway
 def test_accepted_text_survives_an_xml_round_trip(text: str) -> None:
     try:
         value = _Holder(text=text).text
