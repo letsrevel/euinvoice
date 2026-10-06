@@ -198,6 +198,7 @@ CASES: dict[str, Callable[[], Invoice]] = {
     "BR-29 one day": lambda: invoicing_period(JAN, JAN),
     "BR-CO-19": lambda: invoicing_period(None, None),
     "BR-CO-19 with BT-8": lambda: invoicing_period(None, None, vat_point_date_code="3"),
+    "BT-8 without BG-14": lambda: replace(base(), vat_point_date_code="3"),
     "BR-30": lambda: line_period(FEB, JAN),
     "BR-30 one day": lambda: line_period(FEB, FEB),
     "BR-CO-20": lambda: line_period(None, None),
@@ -210,7 +211,14 @@ RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] =
 }
 IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-79]|CO-20|29|30|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
 """The official rules ``calc.check`` covers (BR-x-02..04 are about party identifiers, not amounts)."""
-CLEAN: t.Final = {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate", "BR-29 one day", "BR-30 one day"}
+CLEAN: t.Final = {
+    "clean",
+    "BR-CO-17 within 1",
+    "BR-AG-08 unused rate",
+    "BR-29 one day",
+    "BR-30 one day",
+    "BT-8 without BG-14",
+}
 
 
 @pytest.mark.parametrize("syntax", list(Syntax))

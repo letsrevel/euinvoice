@@ -101,7 +101,8 @@ def _periods(invoice: Invoice) -> Iterator[Verdict]:
         if line.period is None:
             continue
         yield from _ordered("BR-30", ("BT-134", "BT-135"), line.period, index)
-        if line.period.start_date is None and line.period.end_date is None:
+        is_dated = line.period.start_date is not None or line.period.end_date is not None
+        if not is_dated:
             yield from fatal(
                 "BR-CO-20",
                 at("BG-26", index),
@@ -205,13 +206,12 @@ def check(invoice: Invoice, *, syntax: Syntax | None = None) -> tuple[Finding, .
     BR-48, BR-53; the period rules BR-29, BR-30, BR-CO-19 and BR-CO-20; per VAT category code S, Z,
     E, AE, K, G, O, L and M the rules ``BR-<x>-01`` (breakdown present), ``-05``/``-06``/``-07``
     (line, allowance and charge VAT rates), ``-08`` (taxable amount), ``-09`` (tax amount) and
-    ``-10`` (exemption reason); BR-O-11 … BR-O-14 and
-    BR-B-02. Each rule is evaluated as the UBL and the CII binding test it. With a target ``syntax``,
-    a rule its binding rejects is ``fatal`` under the rule's id, and the other binding is ignored.
-    Without one, a rule is ``fatal`` when both bindings reject it and a ``warning``
-    :data:`~euinvoice.calc.PORTABILITY` when only one does (see :mod:`euinvoice.calc`). The
-    official Schematron stays the oracle (D8): this is an early warning, not a replacement for
-    ``validate()``.
+    ``-10`` (exemption reason); BR-O-11 … BR-O-14 and BR-B-02. Each rule is evaluated as the UBL
+    and the CII binding test it. With a target ``syntax``, a rule its binding rejects is ``fatal``
+    under the rule's id, and the other binding is ignored. Without one, a rule is ``fatal`` when
+    both bindings reject it and a ``warning`` :data:`~euinvoice.calc.PORTABILITY` when only one does
+    (see :mod:`euinvoice.calc`). The official Schematron stays the oracle (D8): this is an early
+    warning, not a replacement for ``validate()``.
 
     Args:
         invoice: A complete invoice.

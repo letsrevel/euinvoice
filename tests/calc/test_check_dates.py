@@ -25,9 +25,10 @@ def invoice(
     period: bool = True,
     code: str | None = None,
     lines: tuple[LineDraft, ...] = (),
+    type_code: str = "380",
 ) -> Invoice:
     delivery = DeliveryInformation(invoicing_period=InvoicingPeriod(start_date=start, end_date=end)) if period else None
-    return calc.complete(draft(*lines, delivery=delivery, vat_point_date_code=code))
+    return calc.complete(draft(*lines, delivery=delivery, vat_point_date_code=code, type_code=type_code))
 
 
 def ids(found: Invoice, syntax: Syntax | None = None) -> set[tuple[str, Severity, str | None]]:
@@ -119,3 +120,25 @@ def test_br_co_20_does_not_accept_bt_8() -> None:
     found = invoice(period=False, code="3", lines=(dated(line(), None, None),))
 
     assert ids(found) == {("BR-CO-20", Severity.FATAL, "lines[0].period")}
+
+
+def test_br_29_bt_8_does_not_excuse_an_inverted_invoicing_period() -> None:
+    found = invoice(FEB, JAN, code="3")
+
+    expected = {("BR-29", Severity.FATAL, "delivery.invoicing_period.end_date")}
+    assert ids(found) == expected
+    for syntax in Syntax:
+        assert ids(found, syntax) == expected
+
+
+def test_credit_note_periods_follow_the_same_rules() -> None:
+    """UBL tests ``cac:CreditNoteLine/cac:InvoicePeriod`` with the same BR-30 / BR-CO-20 asserts."""
+    found = invoice(FEB, JAN, type_code="381", lines=(dated(line(), None, None),))
+
+    expected = {
+        ("BR-29", Severity.FATAL, "delivery.invoicing_period.end_date"),
+        ("BR-CO-20", Severity.FATAL, "lines[0].period"),
+    }
+    assert ids(found) == expected
+    for syntax in Syntax:
+        assert ids(found, syntax) == expected
