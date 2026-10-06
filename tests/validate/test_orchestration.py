@@ -1,5 +1,7 @@
 """Unit tests for validate() orchestration, offline: the XSD and Schematron steps are spies."""
 
+import itertools
+import pathlib
 import typing as t
 
 import pytest
@@ -7,11 +9,14 @@ from lxml import etree
 
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
-from euinvoice.validate import PROFILE_FALLBACK_RULE_ID, SOURCE, schematron, validate, xsd
+from euinvoice.profiles import _base as profiles_base
+from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
 from euinvoice.validate.report import Finding, Severity
 
 CORE = "urn:cen.eu:en16931:2017"
 CIUS = "urn:cen.eu:en16931:2017#compliant#urn:example.com:cius"
+NBSP = "\N{NO-BREAK SPACE}"
+NO_BT24 = "no single non-empty specification identifier (BT-24)"
 
 PEPPOL = profiles.Profile(
     id="test-peppol", title="t", specification_identifier="urn:example.com:peppol", syntaxes=frozenset({"ubl", "cii"}),
@@ -130,30 +135,48 @@ def test_registered_bt24_selects_its_profile_without_a_note(spy: Spy, data: byte
     report = validate(data)
 
     assert len(spy.ran) == 1
-    assert all(f.source != SOURCE for f in report.findings)
+    assert all(f.source != EUINVOICE_SOURCE for f in report.findings)
 
 
 @pytest.mark.parametrize(
     ("data", "reason"),
     [
-        (ubl(CIUS), "is not a registered profile"),
-        (cii(CIUS), "is not a registered profile"),
-        (ubl(), "0 specification identifiers"),
-        (ubl("  "), "1 specification identifiers"),
-        (cii(), "0 specification identifiers"),
-        (cii(CORE, CORE), "2 specification identifiers"),
+        (ubl(CIUS), f"{CIUS!r} is not a registered profile"),
+        (cii(CIUS), f"{CIUS!r} is not a registered profile"),
+        # normalize-space() keeps U+00A0, so this is not the core BT-24.
+        (ubl(f"{NBSP}{CORE}"), f"{NBSP + CORE!r} is not a registered profile"),
+        (ubl(), NO_BT24),
+        (ubl("  "), NO_BT24),
+        (cii(), NO_BT24),
+        (cii(CORE, CORE), NO_BT24),
     ],
-    ids=["ubl-cius", "cii-cius", "ubl-missing", "ubl-blank", "cii-missing", "cii-repeated"],
+    ids=["ubl-cius", "cii-cius", "ubl-nbsp", "ubl-missing", "ubl-blank", "cii-missing", "cii-repeated"],
 )
 def test_unrecognised_bt24_falls_back_to_core_and_says_so(spy: Spy, data: bytes, reason: str) -> None:
     report = validate(data)
 
     assert spy.ran in ([schematron.CEN_UBL], [schematron.CEN_CII])
-    note = report.findings[0]
-    assert (note.rule_id, note.severity, note.source) == (PROFILE_FALLBACK_RULE_ID, Severity.INFORMATION, SOURCE)
+    assert_fallback_note(report.findings[0], reason)
+    assert report.ok  # the note never blocks; the official rules decide (BR-01 etc.)
+
+
+def test_detected_profile_without_the_document_syntax_falls_back(spy: Spy, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(profiles, "get", lambda bt24: UBL_ONLY)
+
+    report = validate(cii(UBL_ONLY.specification_identifier))
+
+    assert spy.ran == [schematron.CEN_CII]
+    assert_fallback_note(report.findings[0], "profile 'test-ubl' of BT-24 'urn:example.com:ubl' does not support CII")
+
+
+def assert_fallback_note(note: Finding, reason: str) -> None:
+    assert (note.rule_id, note.severity, note.source) == (
+        PROFILE_FALLBACK_RULE_ID,
+        Severity.INFORMATION,
+        EUINVOICE_SOURCE,
+    )
     assert reason in note.message
     assert "EN 16931 core only" in note.message
-    assert report.ok  # the note never blocks; the official rules decide (BR-01 etc.)
 
 
 def test_explicit_profile_wins_over_bt24(spy: Spy) -> None:
@@ -186,14 +209,11 @@ def test_non_bytes_input_raises_type_error(spy: Spy) -> None:
         validate(t.cast(bytes, "<Invoice/>"))
 
 
-def test_missing_artifacts_surface(monkeypatch: pytest.MonkeyPatch, tmp_path: t.Any) -> None:
+def test_missing_artifacts_surface(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
     monkeypatch.setenv("EUINVOICE_ARTIFACTS_DIR", str(tmp_path))
     with pytest.raises(ArtifactsNotAvailableError, match="artifacts fetch"):
         validate(ubl(CORE))
 
 
-def test_report_types_are_re_exported() -> None:
-    from euinvoice import validate as package
-
-    assert (package.Finding, package.Severity) == (Finding, Severity)
-    assert package.ValidationReport().ok
+def test_every_rule_set_name_maps_for_every_syntax() -> None:
+    assert set(orchestration._RULE_SETS) == set(itertools.product(profiles_base.RULE_SETS, profiles_base.SYNTAXES))

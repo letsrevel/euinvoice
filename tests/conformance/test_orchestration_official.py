@@ -1,14 +1,18 @@
 """validate() orchestration against the pinned official artifacts and upstream corpora (``make conformance``)."""
 
+import copy
+import typing as t
 from pathlib import Path
 
 import pytest
 from lxml import etree
 
 from euinvoice import _xml, profiles
-from euinvoice.errors import ArtifactsNotAvailableError
-from euinvoice.validate import PROFILE_FALLBACK_RULE_ID, SOURCE, artifacts, validate, xsd
+from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
+from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, artifacts, schematron, validate, xsd
 from euinvoice.validate.report import Severity
+
+CII_XSD = "xsd:xrechnung-validator-configuration"
 
 pytestmark = pytest.mark.conformance
 
@@ -128,11 +132,75 @@ def test_schema_invalid_document_stops_after_the_xsd_step() -> None:
     }
 
 
-def test_wrong_root_in_a_supported_namespace_is_an_xsd_finding() -> None:
-    report = validate(f'<Order xmlns="{_xml.UBL_INVOICE}"/>'.encode())
+def test_wrong_root_in_a_supported_namespace_is_rejected() -> None:
+    with pytest.raises(UnsupportedDocumentError, match="unsupported root element"):
+        validate(f'<Order xmlns="{_xml.UBL_INVOICE}"/>'.encode())
 
-    assert (xsd.RULE_ID, Severity.FATAL) in {(f.rule_id, f.severity) for f in report.findings}
-    assert {f.source for f in report.findings} <= {SOURCE, "xsd:ubl-2_1"}
+
+# --- a missing or repeated BT-24 is reported by the official steps, after the core fallback -----------
+
+CBC = f"{{{_xml.UBL_CBC}}}"
+RAM = f"{{{_xml.CII_RAM}}}"
+CONTEXT = f"{{{_xml.CII_RSM}}}ExchangedDocumentContext"
+PARAMETER = f"{CONTEXT}/{RAM}GuidelineSpecifiedDocumentContextParameter"
+
+
+def ubl_example1() -> etree._Element:
+    return _xml.parse(member("cen-ubl", EXAMPLE1))
+
+
+def cii_example1() -> etree._Element:
+    return _xml.parse(member("cen-cii", "examples/CII_example1.xml"))
+
+
+def found(element: etree._Element | None) -> etree._Element:
+    assert element is not None
+    return element
+
+
+def without(root: etree._Element, path: str) -> etree._Element:
+    element = found(root.find(path))
+    found(element.getparent()).remove(element)
+    return root
+
+
+def repeated(root: etree._Element, path: str) -> etree._Element:
+    element = found(root.find(path))
+    element.addnext(copy.deepcopy(element))
+    return root
+
+
+@pytest.mark.parametrize(
+    ("document", "expected"),
+    [
+        # BR-01 (fatal, CEN 1.3.16 EN16931-UBL-model.sch): BT-24 required.
+        (lambda: without(ubl_example1(), f"{CBC}CustomizationID"), [("BR-01", "cen-ubl")]),
+        # BR-01 plus CII-SR-009 / CII-SR-010 (fatal, EN16931-CII-syntax.sch): exactly one parameter and ID.
+        (
+            lambda: without(cii_example1(), PARAMETER),
+            [("BR-01", "cen-cii"), ("CII-SR-009", "cen-cii"), ("CII-SR-010", "cen-cii")],
+        ),
+        # cbc:CustomizationID and ram:ID are 0..1 in the UBL 2.1 / CII D16B XSDs.
+        (lambda: repeated(ubl_example1(), f"{CBC}CustomizationID"), [(xsd.RULE_ID, "xsd:ubl-2_1")]),
+        (lambda: repeated(cii_example1(), f"{PARAMETER}/{RAM}ID"), [(xsd.RULE_ID, CII_XSD)]),
+        # The parameter itself may repeat in the XSD; CEN's compiled BR-01 then fails at run time (XPTY0004).
+        (lambda: repeated(cii_example1(), PARAMETER), [(schematron.RUNTIME_ERROR_RULE_ID, "cen-cii")]),
+    ],
+    ids=["ubl-missing", "cii-missing", "ubl-repeated", "cii-repeated-id", "cii-repeated-parameter"],
+)
+def test_bt24_problems_fall_back_to_core_and_fail_the_official_rules(
+    document: t.Callable[[], etree._Element], expected: list[tuple[str, str]]
+) -> None:
+    report = validate(etree.tostring(document()))
+
+    note, *official = report.findings
+    assert (note.rule_id, note.severity, note.source) == (
+        PROFILE_FALLBACK_RULE_ID,
+        Severity.INFORMATION,
+        EUINVOICE_SOURCE,
+    )
+    assert sorted({(f.rule_id, f.source) for f in official}) == expected
+    assert all(f.severity is Severity.FATAL for f in official)
     assert not report.ok
 
 
@@ -154,14 +222,15 @@ def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
 
     assert report.ok, [f for f in report.findings if f.severity in BLOCKING]
     # Examples with a non-core BT-24 (BIS3_*, an Italian CIUS, ...) are checked against core only, and say so.
-    assert {f.rule_id for f in report.findings if f.source == SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
+    assert {f.rule_id for f in report.findings if f.source == EUINVOICE_SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
 
 
-# These instances fail raw official CEN flags. KoSIT's scenarios.xml (xrechnung-validator-configuration
+# KoSIT customLevel overrides (issue #49, needs-human) are not applied; validate() reports the raw official
+# flags (D8). These tests pin the gap in both directions so a change on either side is noticed.
+#
+# Downgrades: these instances fail raw CEN flags. KoSIT's scenarios.xml (xrechnung-validator-configuration
 # 2026-08-31) downgrades exactly these rules with <customLevel level="information"> in the scenario each
 # instance matches (Extension UBL: BR-CO-16; Extension CII: BR-CL-10, BR-CL-21; CVD UBL and CII: BR-CL-13).
-# Whether euinvoice applies customLevel overrides is open (issue #49, needs-human). Until then validate()
-# reports the raw flags (D8), and this pins the gap so a change in either direction is noticed.
 CUSTOM_LEVEL_GAP = {
     "extension/04.05a-INVOICE_uncefact.xml": {"BR-CL-10", "BR-CL-21"},
     "extension/05.01a-INVOICE_ubl.xml": {"BR-CO-16"},
