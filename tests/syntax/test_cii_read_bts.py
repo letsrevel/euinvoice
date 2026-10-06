@@ -9,7 +9,7 @@ the table; the XPath each term is read from is in ``test_cii_write_bts.py`` and 
 The rows are write→read: they prove the reader inverts the writer, not that both bind a term to the right XPath. A
 symmetric bug (writer and reader agreeing on a wrong XPath) is caught by the writer's per-term XPath table and by the
 conformance suite, which reads every upstream CII example and validates what is written back
-(``tests/conformance/test_cii_read_conformance.py``).
+(``tests/conformance/test_corpus_harness.py``).
 """
 
 import datetime

@@ -5,6 +5,7 @@ import typing as t
 from pathlib import Path
 
 import pytest
+from _corpus import expected_invalid
 from lxml import etree
 
 from euinvoice import _xml, profiles
@@ -202,23 +203,27 @@ def test_corpora_are_complete() -> None:
     # 15 UBL + 12 CII core-BT-24 examples (test_profiles_official), plus 4 UBL + 3 CII with another BT-24.
     assert len(CEN_EXAMPLES) == 34
     assert len(XRECHNUNG_INSTANCES) == 86
-    instances = artifacts.source_dir("xrechnung-testsuite") / "instances"
-    assert set(CUSTOM_LEVEL_GAP) <= {p.relative_to(instances).as_posix() for p in XRECHNUNG_INSTANCES}
 
 
-# CEN examples with the Peppol BT-24 now auto-detect the Peppol profile and run its rules too. CEN only
-# promises them valid against the CEN rules: issue116.xml's fake Swedish organization numbers (EAS 0007,
-# e.g. CompanyID 1234567890) fail the check digit test of PEPPOL-COMMON-R049 (fatal, peppol-bis 3.0.21
-# rules/sch/PEPPOL-EN16931-UBL.sch line 413).
-PEPPOL_FAILURES: t.Final = {"issue116.xml": {("PEPPOL-COMMON-R049", "peppol-bis")}}
+def upstream_blocking(source: artifacts.SourceName, path: Path) -> frozenset[str]:
+    """The fatal/error rule ids ``expected_invalid.toml`` documents for the upstream file (none if not listed)."""
+    entry = expected_invalid().get(f"{source}:{path.relative_to(artifacts.source_dir(source)).as_posix()}")
+    return frozenset() if entry is None else entry.upstream
 
 
+# CEN examples with the Peppol BT-24 auto-detect the Peppol profile and run its rules too, though CEN only
+# promises them valid against the CEN rules; expected_invalid.toml lists the one that fails them (issue116.xml).
 @pytest.mark.parametrize("path", CEN_EXAMPLES, ids=lambda p: p.name)
 def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
+    source: artifacts.SourceName = "cen-ubl" if path.is_relative_to(artifacts.source_dir("cen-ubl")) else "cen-cii"
+
     report = validate(path.read_bytes())
 
-    blocking = {(f.rule_id, f.source) for f in report.findings if f.severity in BLOCKING}
-    assert blocking == PEPPOL_FAILURES.get(path.name, set())
+    blocking = [f for f in report.findings if f.severity in BLOCKING]
+    assert {f.rule_id for f in blocking} == upstream_blocking(source, path)
+    assert {f.source for f in blocking} <= {source, "peppol-bis"}
+    # The Peppol rules (e.g. issue116.xml's PEPPOL-COMMON-R049) come from the Peppol rule set, nowhere else.
+    assert all(f.source == "peppol-bis" for f in blocking if f.rule_id.startswith("PEPPOL-"))
     # Examples with a non-core BT-24 (BIS3_*, an Italian CIUS, ...) are checked against core only, and say so.
     assert {f.rule_id for f in report.findings if f.source == EUINVOICE_SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
 
@@ -226,26 +231,16 @@ def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
 # KoSIT customLevel overrides (issue #49, needs-human) are not applied; validate() reports the raw official
 # flags (D8). These tests pin the gap in both directions so a change on either side is noticed.
 #
-# Downgrades: these instances fail raw CEN flags. KoSIT's scenarios.xml (xrechnung-validator-configuration
-# 2026-08-31) downgrades exactly these rules with <customLevel level="information"> in the scenario each
-# instance matches (Extension UBL: BR-CO-16; Extension CII: BR-CL-10, BR-CL-21; CVD UBL and CII: BR-CL-13).
-CUSTOM_LEVEL_GAP = {
-    "extension/04.05a-INVOICE_uncefact.xml": {"BR-CL-10", "BR-CL-21"},
-    "extension/05.01a-INVOICE_ubl.xml": {"BR-CO-16"},
-    "technical-cases/cvd/02.01a-cvd_INVOICE_ubl.xml": {"BR-CL-13"},
-    "technical-cases/cvd/02.01a-cvd_INVOICE_uncefact.xml": {"BR-CL-13"},
-}
-
-
+# Downgrades: the instances expected_invalid.toml lists fail raw CEN flags that KoSIT's scenarios.xml
+# (xrechnung-validator-configuration 2026-08-31) downgrades with <customLevel level="information"> (the entries
+# cite the rules: Extension UBL BR-CO-16; Extension CII BR-CL-10, BR-CL-21; CVD UBL and CII BR-CL-13).
 @pytest.mark.parametrize("path", XRECHNUNG_INSTANCES, ids=lambda p: f"{p.parent.name}/{p.name}")
 def test_every_xrechnung_testsuite_instance_validates_under_its_detected_profile(path: Path) -> None:
     # Each instance's BT-24 (CIUS, Extension or CVD) auto-detects its XRechnung profile: no core fallback.
-    relative = path.relative_to(artifacts.source_dir("xrechnung-testsuite") / "instances").as_posix()
-
     report = validate(path.read_bytes())
 
     blocking = {f.rule_id for f in report.findings if f.severity in BLOCKING}
-    assert blocking == CUSTOM_LEVEL_GAP.get(relative, set()), report.findings
+    assert blocking == upstream_blocking("xrechnung-testsuite", path), report.findings
     assert {f.source for f in report.findings} <= {"cen-ubl", "cen-cii", "xrechnung-schematron"}
 
 
