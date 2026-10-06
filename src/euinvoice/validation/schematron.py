@@ -17,14 +17,14 @@ Run-time errors (D9): a well-formed document can still make an official styleshe
 e.g. ``cbc:PayableAmount`` = ``abc`` raises ``FORG0001`` inside an ``xs:decimal`` cast of CEN's BR-CO
 rules. That is a property of the document, so it becomes one blocking finding
 (:data:`RUNTIME_ERROR_RULE_ID`, ``fatal``) rather than an exception. Saxon also prints that error's
-stack trace to the process's standard error from native code. saxonche 13.0.0 does not route it through
+stack trace to the process's standard error from native code. saxonche (12.10 and 13.0.0) does not route it through
 its Python API, and its ``standardErrorOutputFile`` configuration property does not redirect it.
 Silencing it would mean redirecting file descriptor 2 for the whole process, so it is left alone.
 
 Caching and threads: one :class:`saxonche.PySaxonProcessor` per process, created on first use, and one
 compiled executable per ``(stylesheet path, cache-entry fingerprint)``, so a re-fetched or re-pinned
 artifact is compiled again and an unchanged one is compiled once (about 0.14 s for the CEN UBL
-stylesheet). saxonche 13.0.0 documents a compiled ``PyXsltExecutable`` as "immutable and thread-safe"
+stylesheet). saxonche (12.10 and 13.0.0) documents a compiled ``PyXsltExecutable`` as "immutable and thread-safe"
 (``PyXslt30Processor.compile_stylesheet`` docstring) but says nothing about the shared processor's
 ``parse_xml`` or about the per-call state of ``transform_to_string``. So one module lock serializes
 compiling, building the XDM node and transforming: :func:`run` is safe to call from any thread, and

@@ -55,7 +55,7 @@ XML_HELPERS = frozenset({"parse", "load_trusted_schema"})
 # Names imported from these modules are safe roots: a forbidden attribute directly on them is fine
 # (``_xml.parse``, ``urllib.parse``), but not deeper (``_xml.etree.parse``).
 SAFE_MODULES = ("euinvoice", "urllib")
-# saxonche keyword arguments that make Saxon read a file or URI (from the saxonche 13.0.0 docstrings).
+# saxonche keyword arguments that make Saxon read a file or URI (from the saxonche 12.10 and 13.0.0 docstrings).
 # D10: documents reach Saxon only through ``_xml.to_xdm``, as text from a tree ``_xml.parse`` accepted.
 SAXON_FILE_KEYWORDS = frozenset(
     {
