@@ -2,8 +2,9 @@
 
 ``validate()`` never raises on rule failures. Every XSD error and every failed Schematron assert or
 successful report becomes a :class:`Finding` in a :class:`ValidationReport`; ``calc.check()``
-reports its arithmetic findings with the same type. This module is pure data and imports nothing
-from the package, so ``model`` ← ``calc`` ← … ← ``validate`` can all use it.
+reports its arithmetic findings, and profile pre-flight checks (e.g. ``euinvoice.profiles.PEPPOL``)
+theirs, with the same type. This module is pure data and imports nothing from the package, so
+``model`` ← ``calc`` ← … ← ``profiles`` ← ``validate`` can all use it.
 """
 
 import dataclasses
@@ -34,10 +35,12 @@ class Finding:
             ``XSD`` for a schema-validity error.
         severity: How serious the finding is; ``fatal`` and ``error`` make the report not ok.
         location: Where the problem is (an XPath for Schematron, the line number and element path for XSD,
-            a model path such as ``vat_breakdown[0].tax_amount`` for ``calc``), if known.
+            a model path such as ``vat_breakdown[0].tax_amount`` for ``calc`` or
+            ``buyer.electronic_address`` for a pre-flight check), if known.
         message: The rule's human-readable text.
         source: The rule set that produced it, as the manifest source name plus what ran
-            (e.g. ``cen-ubl``, ``peppol-bis``, ``xsd:ubl-2_1``), or ``calc``.
+            (e.g. ``cen-ubl``, ``peppol-bis``, ``xsd:ubl-2_1``), ``calc``, or a pre-flight source such as
+            ``peppol-preflight``.
     """
 
     rule_id: str
