@@ -43,7 +43,8 @@ import typing as t
 import pypdf
 from lxml import etree
 
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.facturx import xmp
 from euinvoice.facturx._pypdf import PYPDF_FAILURES, metadata_bytes
@@ -202,7 +203,7 @@ def _level_profile(level: str) -> Profile:
 def _profile(xml: bytes, level_profile: Profile | None) -> Profile | None:
     """See :attr:`Extracted.profile`."""
     try:
-        found = detect.detect(xml)
+        found = detect(xml)
     except (ParseError, UnsupportedDocumentError):
         return None
     if (

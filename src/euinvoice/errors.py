@@ -5,6 +5,8 @@ Validation results are data, not exceptions (IMPLEMENTATION_PLAN.md D9): rule fa
 artifacts.
 """
 
+from euinvoice.report import Finding, Severity
+
 
 class EuInvoiceError(Exception):
     """Base class of every exception raised by euinvoice."""
@@ -33,6 +35,30 @@ class ParseError(EuInvoiceError):
         """
         super().__init__(message if location is None else f"{message} (at {location})")
         self.location = location
+
+
+class PreflightError(EuInvoiceError):
+    """``to_xml`` refused to write an invoice: its profile's pre-flight checks found ``fatal`` / ``error`` problems.
+
+    The checks run on the invoice after ``Profile.prepare``; a blocking finding means the profile's official rules
+    would reject the written document, so nothing is written.
+
+    Attributes:
+        findings: Every pre-flight finding (warnings included), each naming its rule id and model location.
+    """
+
+    def __init__(self, profile_id: str, syntax: str, findings: tuple[Finding, ...]) -> None:
+        """Create the error.
+
+        Args:
+            profile_id: The profile's ``id``.
+            syntax: The target syntax.
+            findings: The pre-flight findings; at least one is ``fatal`` or ``error``.
+        """
+        blocking = [f for f in findings if f.severity in (Severity.FATAL, Severity.ERROR)]
+        details = "; ".join(f"{f.rule_id} ({f.severity}) at {f.location}: {f.message}" for f in blocking)
+        super().__init__(f"invoice fails the {profile_id} pre-flight checks for {syntax}: {details}")
+        self.findings = findings
 
 
 class UnsupportedDocumentError(EuInvoiceError):

@@ -24,7 +24,8 @@ import pytest
 from _corpus import Sample, expected_invalid, facturx_pdfs, samples
 from test_detect_corpora import EXCLUDED as NOT_INVOICES
 
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.model import Invoice, bt_id
 from euinvoice.profiles._base import FACTURX_RULE_SET
@@ -78,14 +79,14 @@ def _kind(sample: Sample) -> str:
     if sample.level is not None:
         return "pdf"
     try:
-        return detect.detect(sample.data()).syntax
+        return detect(sample.data()).syntax
     except (ParseError, UnsupportedDocumentError):
         return "not an invoice"
 
 
 def _read(data: bytes) -> ParseResult:
     root = _xml.parse(data)
-    return ubl.read(root) if detect.detect_root(root).syntax == "ubl" else cii.read(root)
+    return ubl.read(root) if detect_root(root).syntax == "ubl" else cii.read(root)
 
 
 def _write(syntax: str, invoice: Invoice) -> bytes:
@@ -95,7 +96,7 @@ def _write(syntax: str, invoice: Invoice) -> bytes:
 def _profile(sample: Sample, data: bytes) -> profiles.Profile:
     if sample.level is not None:
         return profiles.by_conformance_level(sample.level)
-    return detect.detect(data).profile or profiles.EN16931
+    return detect(data).profile or profiles.EN16931
 
 
 def _blocking(data: bytes, profile: profiles.Profile) -> list[Finding]:
@@ -135,11 +136,11 @@ def test_round_trip_invariant(sample: Sample) -> None:
     if not_invoice is not None:
         # Not an EN 16931 invoice (FatturaPA): detect refuses it, as test_detect_corpora.py documents.
         with pytest.raises(not_invoice):
-            detect.detect(data)
+            detect(data)
         return
     if sample.id in TOO_LARGE:
         assert len(data) > 20_000_000
-        assert detect.detect(data).profile is profiles.PEPPOL
+        assert detect(data).profile is profiles.PEPPOL
         return
     profile = _profile(sample, data)
     expected = expected_invalid().get(sample.id)
@@ -153,7 +154,7 @@ def test_round_trip_invariant(sample: Sample) -> None:
     first = _read(data)
     # The per-file report of out-of-model content asked for by plan §4 (shown with -rP or -s).
     print(f"{sample.id}: {len(first.unmapped)} unmapped", *first.unmapped, sep="\n  ")  # ruff: ignore[print] - the per-file report plan §4 asks for
-    written = _write(detect.detect(data).syntax, first.invoice)
+    written = _write(detect(data).syntax, first.invoice)
     second = _read(written)
     assert _differs(first.invoice, second.invoice) == (frozenset() if expected is None else expected.differs)
     assert second.unmapped == ()

@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Top-level API (#27): `euinvoice.to_xml(invoice, *, profile=None, syntax=None)` prepares the invoice for the
+  profile (default: the one registered for its BT-24), runs the profile's pre-flight checks and refuses with the new
+  `euinvoice.errors.PreflightError` (carrying the findings) on any `fatal` / `error` finding before writing UBL or
+  CII (`syntax` may be omitted when the profile has one syntax); it refuses the Factur-X levels that are not
+  generated (MINIMUM, BASIC WL, BASIC, EXTENDED). `euinvoice.parse()` / `parse_detailed()` read UBL, CII and
+  Factur-X / ZUGFeRD PDFs (via `facturx.extract`, imported lazily); `parse()` discards `ParseResult.unmapped`.
+  `euinvoice` re-exports `validate`, `detect`, `Invoice`, `InvoiceDraft`, `ParseResult`, `Syntax`,
+  `ValidationReport`, `calc`, `profiles` and a lazily imported `facturx` (`import euinvoice` loads neither pypdf
+  nor saxonche), with an explicit `__all__`. `euinvoice.detect.is_pdf()` is the PDF sniff `detect` and `parse` share.
+- The README usage examples are doctests (`tests/test_readme.py`; the validation block in `make conformance`).
 - Cross-syntax conformance (#30, `tests/conformance/test_cross_syntax.py`): every upstream sample that reads goes
   UBL → model → CII → model (and CII → model → UBL → model) and comes back equal up to the documented writer
   normalizations, with nothing unmapped, and the other syntax's output is validated under the sample's profile.

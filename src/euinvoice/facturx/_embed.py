@@ -38,7 +38,8 @@ except ImportError as exc:
     raise ImportError("Factur-X embedding needs pypdf: install the extra with `pip install 'euinvoice[pdf]'`.") from exc
 from lxml import etree
 
-from euinvoice import _xml, detect, profiles
+from euinvoice import _xml, profiles
+from euinvoice.detect import detect
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.facturx import xmp
 from euinvoice.facturx._pypdf import PYPDF_FAILURES, metadata_bytes
@@ -166,7 +167,7 @@ def _cii(invoice: Invoice | bytes, profile: Profile) -> bytes:
                 f"or use {generated}"
             )
         return cii.write(profile.prepare(invoice))
-    found = detect.detect(invoice)
+    found = detect(invoice)
     if found.syntax is not Syntax.CII:
         raise UnsupportedDocumentError(f"Factur-X embeds UN/CEFACT CII, got {found.syntax} ({found.root})")
     # Each level pairs with its own BT-24 only: in the pinned corpus every Factur-X PDF's XMP level carries its
