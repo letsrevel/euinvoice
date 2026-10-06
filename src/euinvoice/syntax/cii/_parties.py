@@ -22,14 +22,9 @@ from euinvoice.model import (
     SellerTaxRepresentative,
     TaxRepresentativePostalAddress,
 )
-from euinvoice.syntax.cii._build import identifier, opt, party_id, sub
+from euinvoice.syntax.cii._build import FISCAL_SCHEME, VAT_SCHEME, identifier, opt, party_id, sub
 
 _Address = SellerPostalAddress | BuyerPostalAddress | TaxRepresentativePostalAddress | DeliverToAddress
-
-VAT_SCHEME: str = "VA"
-"""``@schemeID`` of a VAT identifier (BT-31, BT-48, BT-63): BR-56 and BR-AF-02 select ``ram:ID[@schemeID='VA']``."""
-FISCAL_SCHEME: str = "FC"
-"""``@schemeID`` of the Seller tax registration identifier (BT-32), selected as ``'FC'`` by BR-AF-02 etc."""
 
 
 def address(parent: etree._Element, value: _Address) -> None:

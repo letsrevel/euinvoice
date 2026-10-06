@@ -5,9 +5,10 @@ import typing as t
 from decimal import Decimal
 
 import pytest
-from _cii_invoices import TEST_IBAN, all_terms_invoice, full_invoice, minimal_invoice, rebuild
+from _cii_invoices import all_terms_invoice
 from lxml import etree
 
+from _invoices import TEST_IBAN, full_invoice, minimal_invoice, rebuild
 from euinvoice import _xml
 from euinvoice.errors import ModelError
 from euinvoice.model import (
@@ -27,8 +28,9 @@ from euinvoice.model import (
     PrecedingInvoiceReference,
     PriceDetails,
 )
+from euinvoice.model.codes import UNTDID_2005_VAT_POINT_DATE_UBL
 from euinvoice.syntax import Syntax, cii
-from euinvoice.syntax.cii._build import VAT_POINT_DATE_CODES, is_iban
+from euinvoice.syntax.cii._build import VAT_POINT_DATE_CODES, VAT_POINT_DATE_CODES_FROM_CII, is_iban
 
 STL: t.Final = "//ram:ApplicableHeaderTradeSettlement/"
 
@@ -46,8 +48,7 @@ def select(root: etree._Element, xpath: str) -> list[t.Any]:
 
 def with_line(invoice: Invoice, **price: t.Any) -> Invoice:
     """``invoice`` with the price details of its first line replaced."""
-    line = invoice.lines[0]
-    changed = line.model_validate({**dict(line), "price_details": PriceDetails(**price)})
+    changed = rebuild(invoice.lines[0], price_details=PriceDetails(**price))
     return rebuild(invoice, lines=(changed, *invoice.lines[1:]))
 
 
@@ -96,10 +97,10 @@ def test_vat_point_date_code_is_written_as_untdid_2475(untdid_2005: str, untdid_
     assert select(root, f"{STL}ram:ApplicableTradeTax/ram:DueDateTypeCode") == [untdid_2475]
 
 
-def test_vat_point_date_code_map_covers_the_model_list() -> None:
-    from euinvoice.model.codes import UNTDID_2005_VAT_POINT_DATE_UBL
-
+def test_vat_point_date_code_maps_cover_both_code_lists() -> None:
     assert set(VAT_POINT_DATE_CODES) == set(UNTDID_2005_VAT_POINT_DATE_UBL)
+    # The CII list of BR-CL-06 (codelist/EN16931-CII-codes.sch): 5, 29, 72.
+    assert VAT_POINT_DATE_CODES_FROM_CII == {"5": "3", "29": "35", "72": "432"}
 
 
 def test_tax_point_date_and_code_only_in_the_first_breakdown() -> None:
@@ -133,6 +134,13 @@ def test_decimals_never_use_exponent_notation() -> None:
     )
     root = written(minimal_invoice(totals=totals))
     assert select(root, f"{STL}ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:LineTotalAmount") == ["100"]
+
+
+def test_empty_note_is_skipped() -> None:
+    # A BG-1 without BT-21 and BT-22 would be an empty ram:IncludedNote (PEPPOL-EN16931-R008, no round-trip).
+    root = written(minimal_invoice(notes=(InvoiceNote(), InvoiceNote(note="Kept"))))
+    assert select(root, "//rsm:ExchangedDocument/ram:IncludedNote/*") == ["Kept"]
+    assert len(select(root, "//rsm:ExchangedDocument/ram:IncludedNote")) == 1
 
 
 def test_note_with_subject_code_only() -> None:
@@ -255,10 +263,22 @@ def test_more_than_one_preceding_invoice_cannot_be_written() -> None:
         cii.write(minimal_invoice(preceding_invoice_references=references))
 
 
-def test_price_discount_needs_gross_price() -> None:
-    invoice = with_line(minimal_invoice(), item_net_price=Decimal("50"), item_price_discount=Decimal("1"))
-    with pytest.raises(ModelError, match=r"BT-147.*BT-148"):
-        cii.write(invoice)
+def test_price_discount_without_gross_price_derives_it() -> None:
+    # BT-148 = BT-146 + BT-147, as CEN's CII_example2.xml writes the BT-147-only ubl-tc434-example2.xml.
+    invoice = with_line(
+        minimal_invoice(),
+        item_net_price=Decimal("1273"),
+        item_price_discount=Decimal("225"),
+        base_quantity=Decimal("1"),
+        base_quantity_unit_code="C62",
+    )
+    root = written(invoice)
+    gross = "//ram:GrossPriceProductTradePrice/"
+    assert select(root, f"{gross}ram:ChargeAmount") == ["1498"]
+    assert select(root, f"{gross}ram:BasisQuantity | {gross}ram:BasisQuantity/@unitCode") == ["1", "C62"]
+    assert select(root, f"{gross}ram:AppliedTradeAllowanceCharge/ram:ChargeIndicator/udt:Indicator") == ["false"]
+    assert select(root, f"{gross}ram:AppliedTradeAllowanceCharge/ram:ActualAmount") == ["225"]
+    assert select(root, "//ram:NetPriceProductTradePrice/ram:ChargeAmount") == ["1273"]
 
 
 def test_base_quantity_unit_needs_base_quantity() -> None:

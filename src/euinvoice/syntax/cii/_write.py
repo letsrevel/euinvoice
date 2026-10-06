@@ -11,18 +11,18 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.model import Invoice
-from euinvoice.syntax.cii._build import date_time, opt, sub
-from euinvoice.syntax.cii._lines import OBJECT_TYPE_CODE, line
+from euinvoice.syntax.cii._build import (
+    OBJECT_TYPE_CODE,
+    PROJECT_NAME,
+    SUPPORTING_DOCUMENT_TYPE_CODE,
+    TENDER_TYPE_CODE,
+    date_time,
+    opt,
+    sub,
+)
+from euinvoice.syntax.cii._lines import line
 from euinvoice.syntax.cii._parties import buyer, seller, ship_to, tax_representative
 from euinvoice.syntax.cii._settlement import settlement
-
-TENDER_TYPE_CODE: str = "50"
-"""``ram:TypeCode`` of the ``ram:AdditionalReferencedDocument`` holding BT-17 (CII-DT-018, CII-SR-457)."""
-SUPPORTING_DOCUMENT_TYPE_CODE: str = "916"
-"""``ram:TypeCode`` of a BG-24 ``ram:AdditionalReferencedDocument`` (CII-DT-015, -021, -022, CII-SR-475/476)."""
-PROJECT_NAME: str = "Project reference"
-"""``ram:SpecifiedProcuringProject/ram:Name``, which the D16B XSD requires (``ProcuringProjectType``, minOccurs 1)
-but no business term carries; every KoSIT testsuite instance with BT-11 writes this text."""
 
 
 def write(invoice: Invoice) -> bytes:
@@ -38,8 +38,9 @@ def write(invoice: Invoice) -> bytes:
 
     Raises:
         ModelError: The invoice holds a value CII cannot carry: more than one preceding invoice reference
-            (BG-3), an item price discount (BT-147) without gross price (BT-148), a base quantity unit
-            (BT-150) without base quantity (BT-149), or BT-111 without BT-6.
+            (BG-3), a base quantity unit (BT-150) without base quantity (BT-149), or BT-111 without BT-6.
+            An item price discount (BT-147) without gross price (BT-148) is not an error: the gross price is
+            written as BT-146 + BT-147.
     """
     root = etree.Element(f"{{{_xml.CII_RSM}}}CrossIndustryInvoice", nsmap=_xml.CII_NSMAP)
     _context(root, invoice)
@@ -69,6 +70,10 @@ def _document(root: etree._Element, invoice: Invoice) -> None:
     sub(document, "TypeCode", invoice.type_code)
     date_time(document, "IssueDateTime", invoice.issue_date)
     for note in invoice.notes:
+        if note.note is None and note.subject_code is None:
+            # An empty BG-1 carries nothing: an empty ram:IncludedNote cannot round-trip, and Peppol BIS forbids
+            # empty elements (PEPPOL-EN16931-R008, rules/sch/PEPPOL-EN16931-UBL.sch), so it is skipped.
+            continue
         element = sub(document, "IncludedNote")
         opt(element, "Content", note.note)
         opt(element, "SubjectCode", note.subject_code)

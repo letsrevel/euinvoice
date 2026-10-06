@@ -26,8 +26,9 @@ All notable changes to this project are documented here. The format follows
   `InvoiceLine` except the derived BG-22, BG-23 and BT-131 (the input of `calc`).
 - `euinvoice.syntax.cii.write()`: serializes an `Invoice` (invoice or credit note) as UN/CEFACT CII
   D16B `rsm:CrossIndustryInvoice`, in XSD element order, every date as `format="102"`, BT-8 mapped to
-  UNTDID 2475. It raises `ModelError` for values CII cannot carry (more than one BG-3, BT-147 without
-  BT-148, BT-150 without BT-149, BT-111 without BT-6). `euinvoice.syntax.Syntax` names the syntaxes.
+  UNTDID 2475, empty notes skipped, and BT-148 derived as BT-146 + BT-147 when only the discount is
+  given. It raises `ModelError` for values CII cannot carry (more than one BG-3, BT-150 without BT-149,
+  BT-111 without BT-6). `euinvoice.syntax.Syntax` names the syntaxes.
 - Artifact manifest (`euinvoice/validate/manifest.toml`) pinning the official validation artifacts and
   corpora by URL + sha256: CEN EN 16931 1.3.16 (UBL, CII), Peppol BIS Billing 3.0.21, XRechnung
   Schematron 2.6.0, XRechnung test suite and KoSIT validator configuration 2026-08-31 (incl. the CII

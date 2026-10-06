@@ -41,6 +41,26 @@ VAT: t.Final = "VAT"
 # 01.02_comprehensive_test_ubl.xml / _uncefact.xml.
 VAT_POINT_DATE_CODES: t.Final[t.Mapping[str, str]] = {"3": "5", "35": "29", "432": "72"}
 """UNTDID 2005 (model, BT-8) → UNTDID 2475 (CII ``ram:DueDateTypeCode``)."""
+VAT_POINT_DATE_CODES_FROM_CII: t.Final[t.Mapping[str, str]] = {
+    cii: model for model, cii in VAT_POINT_DATE_CODES.items()
+}
+"""UNTDID 2475 (CII ``ram:DueDateTypeCode``) → UNTDID 2005 (model, BT-8), inverse of :data:`VAT_POINT_DATE_CODES`."""
+
+VAT_SCHEME: t.Final = "VA"
+"""``@schemeID`` of a VAT identifier (BT-31, BT-48, BT-63): BR-56 and BR-AF-02 select ``ram:ID[@schemeID='VA']``."""
+FISCAL_SCHEME: t.Final = "FC"
+"""``@schemeID`` of the Seller tax registration identifier (BT-32), selected as ``'FC'`` by BR-AF-02 etc."""
+TENDER_TYPE_CODE: t.Final = "50"
+"""``ram:TypeCode`` of the ``ram:AdditionalReferencedDocument`` holding BT-17 (CII-DT-018, CII-SR-457)."""
+OBJECT_TYPE_CODE: t.Final = "130"
+"""``ram:TypeCode`` of the ``ram:AdditionalReferencedDocument`` carrying an invoiced object identifier
+(BT-18, BT-128): CII-DT-018, CII-SR-458, CII-SR-474 and the KoSIT binding
+``[following-sibling::ram:TypeCode='130']``."""
+SUPPORTING_DOCUMENT_TYPE_CODE: t.Final = "916"
+"""``ram:TypeCode`` of a BG-24 ``ram:AdditionalReferencedDocument`` (CII-DT-015, -021, -022, CII-SR-475/476)."""
+PROJECT_NAME: t.Final = "Project reference"
+"""``ram:SpecifiedProcuringProject/ram:Name``, which the D16B XSD requires (``ProcuringProjectType``, minOccurs 1)
+but no business term carries; every KoSIT testsuite instance with BT-11 writes this text."""
 
 # The IBAN test of XRechnung 2.6.0 (``schematron/common.sch`` XR-IBAN-REGEX and the ``xr:checkIBAN``
 # function of ``schematron/cii/XRechnung-CII-validation.sch``, used by BR-DE-19 / BR-DE-20): whitespace

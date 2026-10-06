@@ -109,7 +109,7 @@ warn_required_dynamic_aliases = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Dev scripts in scripts/ are importable from tests (tests/scripts/test_<name>.py).
-pythonpath = ["scripts"]
+pythonpath = ["scripts", "tests"]
 addopts = "-ra --strict-markers --strict-config -m 'not conformance'"
 xfail_strict = true
 markers = [

@@ -6,10 +6,14 @@ Children follow ``ram:SupplyChainTradeLineItemType`` (``AssociatedDocumentLineDo
 those of ``docs/reference/bt-mapping.md``.
 """
 
+import typing as t
+from decimal import Decimal
+
 from lxml import etree
 
 from euinvoice.model import InvoiceLine, ItemInformation, PriceDetails
 from euinvoice.syntax.cii._build import (
+    OBJECT_TYPE_CODE,
     allowance_charge,
     cannot_express,
     date_time,
@@ -20,11 +24,6 @@ from euinvoice.syntax.cii._build import (
     sub,
     vat_category,
 )
-
-OBJECT_TYPE_CODE: str = "130"
-"""``ram:TypeCode`` of the ``ram:AdditionalReferencedDocument`` carrying an invoiced object identifier
-(BT-18, BT-128): CII-DT-018, CII-SR-458, CII-SR-474 and the KoSIT binding
-``[following-sibling::ram:TypeCode='130']``."""
 
 
 def line(parent: etree._Element, value: InvoiceLine) -> None:
@@ -74,30 +73,40 @@ def _agreement(parent: etree._Element, value: InvoiceLine) -> None:
         # BT-132 is the LineID; CII-SR-108 forbids an IssuerAssignedID here.
         sub(sub(element, "BuyerOrderReferencedDocument"), "LineID", value.purchase_order_line_reference)
     price: PriceDetails = value.price_details
-    if price.item_gross_price is not None:
+    if price.base_quantity is None and price.base_quantity_unit_code is not None:
+        raise cannot_express(
+            "BT-150 (item price base quantity unit of measure code)",
+            f"it is the @unitCode of BT-149 (item price base quantity); set BT-149 on line {value.identifier!r}",
+        )
+    gross_price = price.item_gross_price
+    derived = gross_price is None and price.item_price_discount is not None
+    if derived:
+        # BT-147 is an allowance on ram:GrossPriceProductTradePrice, whose ram:ChargeAmount the D16B XSD requires.
+        # Without BT-148 the gross price follows from BT-146 = BT-148 - BT-147 (PEPPOL-EN16931-R046 in the
+        # Peppol UBL rules). CEN's TOSL108 invoice does exactly this: ubl-tc434-example2.xml carries BT-147
+        # only, CII_example2.xml writes gross 1498 = net 1273 + allowance 225. A round trip therefore gains
+        # BT-148 (docs/reference/bt-mapping.md, "Normalizations").
+        gross_price = price.item_net_price + t.cast(Decimal, price.item_price_discount)
+    if gross_price is not None:
         gross = sub(element, "GrossPriceProductTradePrice")
-        sub(gross, "ChargeAmount", decimal(price.item_gross_price))
+        sub(gross, "ChargeAmount", decimal(gross_price))
+        if derived:
+            _basis_quantity(gross, price)
         if price.item_price_discount is not None:
             # BT-147: an allowance (CII-SR-119) with only its amount (CII-SR-120..131).
             discount = sub(gross, "AppliedTradeAllowanceCharge")
             indicator(discount, "ChargeIndicator", False)
             sub(discount, "ActualAmount", decimal(price.item_price_discount))
-    elif price.item_price_discount is not None:
-        raise cannot_express(
-            "BT-147 (item price discount)",
-            "it is an allowance on ram:GrossPriceProductTradePrice, whose ram:ChargeAmount (BT-148, item "
-            f"gross price) the D16B XSD requires; set BT-148 on line {value.identifier!r}",
-        )
     net = sub(element, "NetPriceProductTradePrice")
     sub(net, "ChargeAmount", decimal(price.item_net_price))
+    _basis_quantity(net, price)
+
+
+def _basis_quantity(parent: etree._Element, price: PriceDetails) -> None:
+    """``ram:BasisQuantity`` (BT-149) with its ``@unitCode`` (BT-150), if BT-149 is set."""
     if price.base_quantity is not None:
         attributes = {} if price.base_quantity_unit_code is None else {"unitCode": price.base_quantity_unit_code}
-        sub(net, "BasisQuantity", decimal(price.base_quantity), **attributes)
-    elif price.base_quantity_unit_code is not None:
-        raise cannot_express(
-            "BT-150 (item price base quantity unit of measure code)",
-            f"it is the @unitCode of BT-149 (item price base quantity); set BT-149 on line {value.identifier!r}",
-        )
+        sub(parent, "BasisQuantity", decimal(price.base_quantity), **attributes)
 
 
 def _settlement(parent: etree._Element, value: InvoiceLine) -> None:
