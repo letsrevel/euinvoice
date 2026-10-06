@@ -7,8 +7,8 @@ from _xsd_helpers import assert_located_xsd_fatal
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError
+from euinvoice.report import Finding
 from euinvoice.validate import artifacts, xsd
-from euinvoice.validate.report import Finding
 
 pytestmark = pytest.mark.conformance
 

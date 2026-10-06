@@ -3,7 +3,7 @@
 Each needs an amount (BR-31, BR-36, BR-41, BR-43) and a reason or a reason code or both (BR-33,
 BR-38, BR-42, BR-44, all ``fatal`` in UBL and CII). Document level ones also need a VAT category
 (BR-32, BR-37). That BT-97/BT-98 (and the other reason pairs) "indicate the same type" (BR-CO-05..08)
-is a business rule left to ``calc.check`` and the Schematron.
+is a business rule left to the official Schematron (D8).
 """
 
 import typing as t

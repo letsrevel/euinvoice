@@ -1,6 +1,6 @@
 """Shared helpers of the XSD conformance tests."""
 
-from euinvoice.validate.report import Finding, Severity
+from euinvoice.report import Finding, Severity
 
 
 def line_of(data: bytes, needle: bytes) -> int:

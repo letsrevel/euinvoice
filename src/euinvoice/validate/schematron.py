@@ -4,7 +4,7 @@ Every rule set runs as a compiled XSLT stylesheet from the artifact cache (D7, D
 compiled XSLT, XRechnung ships compiled ``.xsl``, and the Peppol ``.sch`` files are compiled with SchXslt
 at fetch time (:mod:`euinvoice.validate.artifacts`). The stylesheet writes an SVRL report (ISO/IEC
 19757-3 Annex D, namespace :data:`euinvoice._xml.SVRL`), and every ``svrl:failed-assert`` and
-``svrl:successful-report`` in it becomes a :class:`~euinvoice.validate.report.Finding`. Nothing is
+``svrl:successful-report`` in it becomes a :class:`~euinvoice.report.Finding`. Nothing is
 filtered or downgraded.
 
 Input hardening (D10): the document reaches Saxon only through :func:`euinvoice._xml.to_xdm`, which
@@ -40,8 +40,8 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError, ParseError
+from euinvoice.report import Finding, Severity
 from euinvoice.validate import artifacts
-from euinvoice.validate.report import Finding, Severity
 
 __all__ = [
     "CEN_CII",

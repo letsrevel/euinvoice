@@ -38,7 +38,10 @@ __all__ = [
 
 
 class InvoiceLinePeriod(EuInvoiceModel):
-    """INVOICE LINE PERIOD (BG-26). BR-30 (end not before start) and BR-CO-20 are left to ``calc.check``."""
+    """INVOICE LINE PERIOD (BG-26).
+
+    BR-30 (end not before start) and BR-CO-20 are left to the official Schematron (D8).
+    """
 
     start_date: t.Annotated[Date | None, bt("BT-134")] = None
     """Invoice line period start date."""

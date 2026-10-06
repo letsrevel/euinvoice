@@ -163,7 +163,8 @@ src/euinvoice/
                      #   BG-32 item attributes
     documents.py     # BG-24 additional supporting documents (incl. embedded binary objects BT-125)
     bt_index.py      # registry: every BT/BG id → model path; drives coverage tests and error messages
-  calc.py            # D11: build/derive totals + VAT breakdown; check() → findings with BR-CO ids
+  calc/              # D11: build/derive totals + VAT breakdown; check() → findings with BR-CO ids
+  report.py          # ValidationReport, Finding, Severity (pure data; used by calc and validate)
   syntax/
     __init__.py      # Syntax enum {UBL, CII}; dispatch
     ubl.py           # write(invoice, profile) -> bytes ; read(root) -> Invoice   (Invoice + CreditNote)
@@ -181,7 +182,6 @@ src/euinvoice/
     artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip + SchXslt precompile
     xsd.py           # lxml XMLSchema per syntax/profile
     schematron.py    # saxonche runner, per-process compiled-executable cache, SVRL → Finding
-    report.py        # ValidationReport, Finding, Severity
   facturx/
     __init__.py      # embed(pdf, xml|invoice, profile) -> bytes ; extract(pdf) -> (xml, profile)
     xmp.py           # Factur-X/ZUGFeRD XMP extension schema + PDF/A extension schema description
@@ -326,7 +326,7 @@ parallel. Each touches a disjoint set of files.
 - **4.3 · CII XSD validation.** *deps: 1.1, 1.3.* *AC:* as 3.3.
 
 ### M5 · Schematron validation
-- **5.1 · Schematron runner + report.** *deps: 1.1, 1.3.* `validate/schematron.py`, `validate/report.py`.
+- **5.1 · Schematron runner + report.** *deps: 1.1, 1.3.* `validate/schematron.py`, `report.py`.
   Compiled executables cached per process (keyed by artifact path + version), thread safety documented,
   SVRL → `Finding`. *AC:* reproduces the scoping facts (example1 → 0 findings; drop `cbc:ID` → `BR-02`
   fatal).

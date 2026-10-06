@@ -41,8 +41,8 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.detect import Detection, detect_root
 from euinvoice.errors import UnsupportedDocumentError
+from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.validate import schematron, xsd
-from euinvoice.validate.report import Finding, Severity, ValidationReport
 
 __all__ = ["EUINVOICE_SOURCE", "PROFILE_FALLBACK_RULE_ID", "validate"]
 

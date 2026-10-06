@@ -8,8 +8,8 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ArtifactsNotAvailableError
+from euinvoice.report import Severity, ValidationReport
 from euinvoice.validate import artifacts, schematron
-from euinvoice.validate.report import Severity, ValidationReport
 
 pytestmark = pytest.mark.conformance
 

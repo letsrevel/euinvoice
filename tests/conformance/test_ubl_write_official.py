@@ -24,9 +24,9 @@ from euinvoice.model import (
     PriceDetails,
 )
 from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL, UNTDID_1001_INVOICE_TYPE_UBL
+from euinvoice.report import Severity
 from euinvoice.syntax import ubl
 from euinvoice.validate import schematron, xsd
-from euinvoice.validate.report import Severity
 
 pytestmark = pytest.mark.conformance
 
