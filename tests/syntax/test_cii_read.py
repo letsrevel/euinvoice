@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import pytest
 from _cii_invoices import all_terms_invoice
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given, settings
 from lxml import etree
 
 from _invoices import TEST_IBAN, full_invoice, minimal_invoice, payment, price, rebuild
@@ -112,7 +112,7 @@ def _as_written(invoice: Invoice) -> Invoice:
     )
 
 
-@settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=60)
 @given(invoices.map(cii_expressible))
 def test_random_invoices_round_trip(invoice: Invoice) -> None:
     result = cii.read(tree(invoice))

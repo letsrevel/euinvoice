@@ -6,6 +6,7 @@ from collections.abc import Callable
 from decimal import Decimal
 
 import pytest
+from hypothesis import HealthCheck, settings
 
 from euinvoice.model import (
     AdditionalSupportingDocument,
@@ -46,6 +47,12 @@ from euinvoice.model import (
     VatBreakdown,
 )
 from euinvoice.model.codes import VatCategory
+
+# Hypothesis profile (CLAUDE.md "Testing"): no wall-clock deadline and no too_slow health check. Under a loaded host
+# or parallel xdist workers they fail correct tests (DeadlineExceeded, FlakyFailure) without testing anything about
+# the library. They are runtime knobs only; what each property asserts and how many examples it runs are unchanged.
+settings.register_profile("default", deadline=None, suppress_health_check=[HealthCheck.too_slow])
+settings.load_profile("default")
 
 TEST_IBAN: t.Final = "DE02120300000000202051"
 
