@@ -12,14 +12,14 @@ Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16
   O none). O stands alone (BR-O-11 … 14). E, AE, K, G and O get a VATEX exemption reason code from BR-CL-22
   (``VATEX-EU-132``, ``-AE``, ``-IC``, ``-G``, ``-O``), S and Z none (BR-<x>-10).
 * A seller VAT identifier BT-31 unless the category is O (BR-S/Z/E/AE/IC/G-02 require it, BR-O-02 forbids
-  it); a buyer VAT identifier BT-48 with AE or K (BR-AE-02/03/04, BR-IC-02/03/04), none with O (BR-O-02/03/04).
-  VAT ids carry
-  their country prefix (BR-CO-09). Without BT-31 the seller has a seller identifier BT-29 (BR-CO-26).
+  it); a buyer VAT identifier BT-48 with AE or K (BR-AE-02/03/04, BR-IC-02/03/04), none with O
+  (BR-O-02/03/04). VAT ids carry their country prefix (BR-CO-09). Without BT-31 the seller has a seller
+  identifier BT-29 (BR-CO-26).
 * K: an actual delivery date BT-72 (BR-IC-11) and a deliver-to country code BT-80 (BR-IC-12).
 * BT-20 always present, so EN 16931-1 BR-CO-25 (BT-9 or BT-20 when the amount due is positive) holds whatever
-  the amount due; BR-CO-25 is not implemented in the pinned CEN 1.3.16 Schematron. BT-9 is optional, and absent
-  from a credit
-  note without BG-16: UBL has no place for it there (the UBL writer raises, ``ubl/_write.py``).
+  the amount due; BR-CO-25 is not implemented in the pinned CEN 1.3.16 Schematron. BT-9 is optional, and
+  absent from a credit note without BG-16: UBL has no place for it there (the UBL writer raises,
+  ``ubl/_write.py``).
 * Allowances and charges carry a reason or a reason code (BR-33, BR-38, BR-42, BR-44); codes ``95``
   (UNCL 5189, BR-CL-19) and ``FC`` / ``ABL`` (UNCL 7161, BR-CL-20). A drawn base amount and percentage give
   the amount as base * percentage / 100, rounded half up (PEPPOL-EN16931-R040 allows a 0.02 slack).
