@@ -11,7 +11,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from euinvoice import calc
-from euinvoice.calc._common import CATEGORY_RULES
+from euinvoice.calc._categories import CATEGORY_RULES
 from euinvoice.model import DocumentLevelAllowance, DocumentLevelCharge, Invoice, InvoiceDraft, LineDraft
 
 # (category, rate) pairs that satisfy BR-<x>-05/06/07; the exemption reason is added where -10 needs one.
@@ -35,12 +35,17 @@ def decimals(places: int, bound: int = 10_000) -> st.SearchStrategy[str]:
     )
 
 
-category_rates = st.sampled_from(VALID)
+# BR-O-11..14: category O stands alone; BR-B-02: B (split payment) never with S.
+POOLS: list[list[tuple[str, str | None]]] = [
+    [("O", None)],
+    [pair for pair in VALID if pair[0] not in {"O", "S"}],
+    [pair for pair in VALID if pair[0] not in {"O", "B"}],
+]
 
 
 @st.composite
-def lines(draw: st.DrawFn) -> LineDraft:
-    category, rate = draw(category_rates)
+def lines(draw: st.DrawFn, pool: list[tuple[str, str | None]]) -> LineDraft:
+    category, rate = draw(st.sampled_from(pool))
     return line(
         draw(decimals(3, 1_000)),
         draw(decimals(4).filter(lambda p: Decimal(p) >= 0)),  # BR-27: net price not negative
@@ -54,7 +59,7 @@ def lines(draw: st.DrawFn) -> LineDraft:
 
 @st.composite
 def drafts(draw: st.DrawFn) -> InvoiceDraft:
-    drawn = draw(st.lists(lines(), min_size=1, max_size=6))
+    drawn = draw(st.lists(lines(draw(st.sampled_from(POOLS))), min_size=1, max_size=6))
     used = [(ln.vat_information.category_code, ln.vat_information.rate) for ln in drawn]
 
     def rate_text(rate: Decimal | None) -> str | None:

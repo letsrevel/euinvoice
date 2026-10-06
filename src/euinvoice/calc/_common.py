@@ -1,22 +1,30 @@
-"""Rounding helpers and the per-VAT-category rule table shared by :func:`complete` and :func:`check`.
+"""Rounding helpers (shared by :func:`complete` and :func:`check`) and the finding helpers of :func:`check`.
 
-Sources: CEN validation artifacts ``validation-1.3.16``, ``schematron/abstract/EN16931-model.sch``
-(rule ids and texts) with ``schematron/UBL/EN16931-UBL-model.sch`` and
-``schematron/CII/EN16931-CII-model.sch`` (the tests).
+Sources: see :mod:`euinvoice.calc`.
 """
 
-import dataclasses
-import enum
 import math
 import typing as t
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from decimal import MAX_PREC, ROUND_FLOOR, Context, Decimal
 from fractions import Fraction
 
-from euinvoice.model.codes import VatCategory
+from euinvoice.model.bt_index import path_of
+from euinvoice.report import Finding, Severity
 
 ZERO: t.Final = Decimal("0.00")
 _WIDE = Context(prec=MAX_PREC)  # rescaling must never round digits away
+
+SOURCE: t.Final = "calc"
+"""The ``source`` of every :class:`~euinvoice.report.Finding` that :func:`check` returns."""
+
+PORTABILITY: t.Final = "EUINV-CALC-PORTABILITY"
+"""Rule id of the warning :func:`check` reports when only one syntax binding rejects an official rule."""
+
+_BINDING_FILES: t.Final = {
+    "UBL": "schematron/UBL/EN16931-UBL-model.sch",
+    "CII": "schematron/CII/EN16931-CII-model.sch",
+}
 
 
 def round_cents(value: Fraction) -> Decimal:
@@ -61,69 +69,70 @@ def total(amounts: Iterable[Decimal]) -> Decimal:
     return sum(amounts, ZERO)
 
 
-class RateRule(enum.Enum):
-    """What the ``-05``/``-06``/``-07`` rules of a VAT category require of BT-152, BT-96 and BT-103."""
+def at(ident: str, *indices: int) -> str:
+    """The model path of a BT/BG id with concrete indices, e.g. ``vat_breakdown[1].tax_amount``.
 
-    POSITIVE = "greater than zero"
-    NOT_NEGATIVE = "zero or greater than zero"
-    ZERO = "0 (zero)"
-    ABSENT = "absent"
+    Args:
+        ident: A BT/BG id of :data:`euinvoice.model.bt_index.BT_INDEX`.
+        *indices: One index per repeated group on the path, outermost first.
 
-    def accepts(self, rate: Decimal | None) -> bool:
-        """Whether ``rate`` satisfies the rule (a missing rate fails every rule but ``ABSENT``).
-
-        Args:
-            rate: The VAT rate, or ``None``.
-
-        Returns:
-            ``True`` if the rule holds.
-        """
-        if self is RateRule.ABSENT:
-            return rate is None
-        if rate is None:  # XPath: a comparison with an empty sequence is false
-            return False
-        if self is RateRule.POSITIVE:
-            return rate > 0
-        if self is RateRule.NOT_NEGATIVE:
-            return rate >= 0
-        return rate == 0
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class CategoryRules:
-    """The CEN rules of one VAT category code (``BR-<prefix>-01`` … ``-10``).
-
-    Attributes:
-        prefix: The rule id prefix, e.g. ``BR-S`` for ``S`` or ``BR-IC`` for ``K``.
-        name: The category name the rule texts use.
-        rate: What ``-05``/``-06``/``-07`` require of the line, allowance and charge VAT rates.
-        per_rate: ``-01`` asks for "at least one" breakdown and ``-08`` sums per rate (S, L, M);
-            otherwise ``-01`` asks for "exactly one" breakdown and ``-08`` sums the whole category.
-        zero_tax: ``-09`` requires BT-117 = 0; otherwise ``-09`` repeats BR-CO-17.
-        needs_reason: ``-10`` requires BT-120 or BT-121; otherwise ``-10`` forbids both.
+    Returns:
+        The path; ``[]`` left over where fewer indices were given (``vat_breakdown[]`` → ``vat_breakdown``).
     """
-
-    prefix: str
-    name: str
-    rate: RateRule
-    per_rate: bool
-    zero_tax: bool
-    needs_reason: bool
+    path = path_of(ident)
+    for index in indices:
+        path = path.replace("[]", f"[{index}]", 1)
+    return path.removesuffix("[]")
 
 
-# BR-AF-05/06/07: UBL tests ">= 0", CII "> 0"; the stricter CII test is applied (see the package doc).
-CATEGORY_RULES: t.Final[dict[str, CategoryRules]] = {
-    VatCategory.STANDARD_RATED: CategoryRules("BR-S", "Standard rated", RateRule.POSITIVE, True, False, False),
-    VatCategory.ZERO_RATED: CategoryRules("BR-Z", "Zero rated", RateRule.ZERO, False, True, False),
-    VatCategory.EXEMPT: CategoryRules("BR-E", "Exempt from VAT", RateRule.ZERO, False, True, True),
-    VatCategory.REVERSE_CHARGE: CategoryRules("BR-AE", "Reverse charge", RateRule.ZERO, False, True, True),
-    VatCategory.INTRA_COMMUNITY_SUPPLY: CategoryRules(
-        "BR-IC", "Intra-community supply", RateRule.ZERO, False, True, True
-    ),
-    VatCategory.EXPORT_OUTSIDE_EU: CategoryRules("BR-G", "Export outside the EU", RateRule.ZERO, False, True, True),
-    VatCategory.NOT_SUBJECT_TO_VAT: CategoryRules("BR-O", "Not subject to VAT", RateRule.ABSENT, False, True, True),
-    VatCategory.IGIC: CategoryRules("BR-AF", "IGIC", RateRule.POSITIVE, True, False, False),
-    VatCategory.IPSI: CategoryRules("BR-AG", "IPSI", RateRule.NOT_NEGATIVE, True, False, False),
-}
-"""The rules of each VAT category code. ``B`` (split payment) has none of these: its only CEN rules,
-BR-B-01 and BR-B-02, are about the seller's country and mixing with ``S``, not about amounts."""
+def fmt(value: Decimal | None) -> str:
+    """A decimal for a message: fixed-point, or ``absent``."""
+    return "absent" if value is None else format(value, "f")
+
+
+def verdict(rule_id: str, location: str, message: str, *, ubl: bool, cii: bool) -> Iterator[Finding]:
+    """Turn the outcome of one official rule in both syntax bindings into findings (D8).
+
+    The rule is reported ``fatal`` under its own id only if its test fails in **both** bindings. If
+    only one binding rejects it, the invoice is valid in one syntax and not the other: that is a
+    ``warning`` with rule id :data:`PORTABILITY` naming the rule and the rejecting binding.
+
+    Args:
+        rule_id: The official rule id, e.g. ``BR-S-08``.
+        location: The model path.
+        message: What is wrong, with the values.
+        ubl: Whether the test of ``schematron/UBL/EN16931-UBL-model.sch`` passes.
+        cii: Whether the test of ``schematron/CII/EN16931-CII-model.sch`` passes.
+
+    Yields:
+        Nothing, one fatal finding, or one portability warning.
+    """
+    if ubl and cii:
+        return
+    if not ubl and not cii:
+        yield Finding(rule_id=rule_id, severity=Severity.FATAL, location=location, message=message, source=SOURCE)
+        return
+    rejecting, accepting = ("UBL", "CII") if not ubl else ("CII", "UBL")
+    yield Finding(
+        rule_id=PORTABILITY,
+        severity=Severity.WARNING,
+        location=location,
+        message=f"{rule_id} fails in the {rejecting} binding only ({_BINDING_FILES[rejecting]}); the "
+        f"{accepting} binding accepts it, so the invoice is valid in {accepting} but not in {rejecting}. "
+        f"{message}",
+        source=SOURCE,
+    )
+
+
+def fatal(rule_id: str, location: str, message: str) -> Iterator[Finding]:
+    """A rule whose test is the same in both bindings and fails: one fatal finding.
+
+    Args:
+        rule_id: The official rule id.
+        location: The model path.
+        message: What is wrong, with the values.
+
+    Yields:
+        The fatal finding.
+    """
+    yield from verdict(rule_id, location, message, ubl=False, cii=False)

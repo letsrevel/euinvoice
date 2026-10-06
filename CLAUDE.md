@@ -57,7 +57,7 @@ pushing. Run `make conformance` too when you touch serialization, parsing, valid
 ```
 src/euinvoice/
   model/      EN 16931 semantic model (Pydantic v2, frozen, Decimal-only, BT ids in field metadata)
-  calc.py     totals + VAT breakdown per EN 16931 rounding rules; check() → findings
+  calc/       totals + VAT breakdown per EN 16931 rounding rules; check() → findings
   report.py   Finding, Severity, ValidationReport (pure data, shared by calc and validate)
   syntax/     ubl.py, cii.py: bidirectional mappers (write: Invoice → bytes, read: root → Invoice)
   profiles/   en16931, peppol, xrechnung, facturx: BT-24 ids, defaults, pre-flight checks, rule sets

@@ -93,17 +93,16 @@ All notable changes to this project are documented here. The format follows
   EN 16931 core and the report says so in an `information` finding (`EUINVOICE-PROFILE-FALLBACK`).
 - `euinvoice.calc` (D11): `complete(draft, *, paid_amount, rounding_amount,
   vat_total_in_accounting_currency, exemption_reasons)` derives the line net amounts (BT-131, Peppol
-  R120 convention), the document totals (BG-22, BR-CO-10…16) and the VAT breakdown per category and
-  rate (BG-23, BR-CO-17, BR-<x>-08), rounding half up to cents, and returns a validated `Invoice`.
-  `check(invoice)` reports fatal `Finding`s with the official rule ids for BR-CO-10…17, BR-48, BR-53
-  and the per-category rules BR-<x>-01/05/06/07/08/09/10 (S, Z, E, AE, K, G, O, L, M), applying the
-  stricter of the UBL and CII tolerances. `ExemptionReason` carries BT-120/BT-121 per category.
-  `complete()` reproduces the totals of every CEN 1.3.16 and Peppol 3.0.21 example (except one HUF
-  example that rounds VAT to whole forints).
+  R120 formula), the document totals (BG-22, BR-CO-10…16) and the VAT breakdown per category and
+  rate (BG-23, BR-CO-17, BR-<x>-08), rounding half up to cents, and returns a validated `Invoice`
+  that passes the CEN rules in both UBL and CII. `check(invoice)` evaluates BR-CO-10…17, BR-48,
+  BR-53, the per-category rules BR-<x>-01/05/06/07/08/09/10 (S, Z, E, AE, K, G, O, L, M), BR-O-11…14
+  and BR-B-02 as both the UBL and the CII binding test them: `fatal` under the official rule id when
+  both reject, a `warning` `EUINV-CALC-PORTABILITY` naming the rule and binding when only one does.
+  `ExemptionReason` carries BT-120/BT-121 per category. `complete()` reproduces the totals of every
+  CEN 1.3.16 and Peppol 3.0.21 example (except one HUF example that rounds VAT to whole forints).
 
 ### Changed
-- `Finding`, `Severity` and `ValidationReport` moved from `euinvoice.validate.report` to
-  `euinvoice.report` so `calc` can use them without depending on `validate`.
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.

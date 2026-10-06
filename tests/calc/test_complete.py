@@ -215,7 +215,7 @@ def test_breakdown_follows_first_occurrence_order() -> None:
 
 
 def test_exemption_reason_for_an_unused_category_is_refused() -> None:
-    with pytest.raises(ModelError, match=r"\['E'\]"):
+    with pytest.raises(ModelError, match=r"category codes such as 'AE'; no line, allowance or charge uses \['E'\]"):
         calc.complete(draft(), exemption_reasons={"E": calc.ExemptionReason(text="Exempt")})
 
 
@@ -233,3 +233,40 @@ def test_exemption_reason_code_is_checked_against_vatex() -> None:
 def test_arguments_go_through_model_validation(bad: object) -> None:
     with pytest.raises(pydantic.ValidationError):
         calc.complete(draft(), paid_amount=bad)  # type: ignore[arg-type]  # float on purpose (D3)
+
+
+@pytest.mark.parametrize(
+    ("bt6", "bt111", "match"),
+    [
+        ("SEK", None, "needs vat_total_in_accounting_currency"),
+        (None, "10.00", r"needs a VAT accounting currency code \(BT-6\)"),
+        ("EUR", "23.50", r"must differ from the invoice currency \(BT-5\)"),
+    ],
+)
+def test_vat_accounting_currency_misuse_is_refused(bt6: str | None, bt111: str | None, match: str) -> None:
+    """BR-53: BT-6 and BT-111 go together, and BT-6 = BT-5 fails both syntaxes."""
+    with pytest.raises(ModelError, match=match):
+        calc.complete(
+            draft(vat_accounting_currency_code=bt6),
+            vat_total_in_accounting_currency=None if bt111 is None else dec(bt111),
+        )
+
+
+def test_vat_total_in_accounting_currency_is_validated_as_an_amount() -> None:
+    with pytest.raises(pydantic.ValidationError):
+        calc.complete(draft(vat_accounting_currency_code="SEK"), vat_total_in_accounting_currency=dec("1.001"))
+
+
+def test_exemption_reason_keys_are_matched_upper_cased() -> None:
+    invoice = calc.complete(
+        draft(line("1", "10", "AE", "0")), exemption_reasons={"ae": calc.ExemptionReason(code="VATEX-EU-AE")}
+    )
+
+    assert invoice.vat_breakdown[0].exemption_reason_code == "VATEX-EU-AE"
+    assert calc.check(invoice) == ()
+
+
+def test_exemption_reason_keys_must_not_repeat_in_another_case() -> None:
+    reason = calc.ExemptionReason(code="VATEX-EU-AE")
+    with pytest.raises(ModelError, match="twice"):
+        calc.complete(draft(line("1", "10", "AE", "0")), exemption_reasons={"ae": reason, "AE": reason})

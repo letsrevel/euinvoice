@@ -5,6 +5,9 @@ listed in ``docs/reference/bt-mapping.md``. Only amounts, quantities, VAT catego
 exemption reasons are taken; every party, name and identifier in the draft is synthetic.
 """
 
+# ponytail: a throw-away extractor because no syntax reader exists yet. Replace it with the UBL and CII
+# readers (#11, #14) once they land: read each example into an Invoice and compare complete() with it.
+
 import dataclasses
 import datetime
 import typing as t

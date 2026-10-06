@@ -1,14 +1,15 @@
-"""EN 16931 calculation: derive line net amounts, document totals and the VAT breakdown (D11).
+r"""EN 16931 calculation: derive line net amounts, document totals and the VAT breakdown (D11).
 
 :func:`complete` turns an :class:`~euinvoice.model.InvoiceDraft` into an :class:`~euinvoice.model.Invoice`
 by deriving BT-131 per line, the DOCUMENT TOTALS (BG-22) and the VAT BREAKDOWN (BG-23).
 :func:`check` reports where the amounts of a complete invoice, for example one whose totals the
 consumer supplied, break the CEN arithmetic and VAT category rules. Both are pure: no I/O.
 
-Every rule was read from the pinned CEN validation artifacts ``validation-1.3.16``:
-``schematron/abstract/EN16931-model.sch`` (rule ids and texts; every rule used here is
-``flag="fatal"``) and the bindings ``schematron/UBL/EN16931-UBL-model.sch`` and
-``schematron/CII/EN16931-CII-model.sch`` (the tests).
+Sources: the pinned CEN validation artifacts ``validation-1.3.16``. Rule ids and texts come from the
+abstract patterns (``schematron/abstract/EN16931-model.sch`` of the UBL package and
+``schematron/abstract/EN16931-CII-model.sch`` of the CII package; every rule used here is
+``flag="fatal"`` in both), the tests from the bindings ``schematron/UBL/EN16931-UBL-model.sch`` and
+``schematron/CII/EN16931-CII-model.sch``.
 
 Rounding (D11): amounts are rounded to two decimals half up, ties away from zero (``ROUND_HALF_UP``),
 at the two places a product is rounded: the line net amount and the VAT category tax amount
@@ -16,24 +17,45 @@ at the two places a product is rounded: the line net amount and the VAT category
 The Schematron's XPath ``round()`` breaks ties towards positive infinity instead; the two differ only
 on negative ties, and BR-CO-17 compares absolute values, so the difference never changes an outcome.
 
-Where the two bindings test one rule with different tolerances, :func:`check` applies the stricter
-test, so an invoice it accepts passes that rule in either syntax:
+Severity policy (D8): :func:`check` has no syntax argument, so it evaluates every rule as **both**
+bindings test it. A rule is reported ``fatal`` under its official id only when its test fails in
+both bindings. When only one binding rejects it, the invoice is valid in one syntax and not in the
+other: :func:`check` reports a ``warning`` with rule id :data:`PORTABILITY`
+(``EUINV-CALC-PORTABILITY``) whose message names the official rule and the rejecting binding. The
+output of :func:`complete` passes both bindings. The asymmetric cases, with ``n`` lines, ``a``
+document level allowances and charges and ``b`` VAT breakdowns of one category:
 
-* BR-CO-17 and BR-S/AF/AG-09 accept a VAT amount within 1 of the rounded product; UBL compares with
-  strict ``<`` / ``>`` (CII's BR-CO-17 uses ``<=`` / ``>=``), so a difference of exactly 1 is flagged.
-* The ``-08`` taxable amount rules: UBL tests BR-Z/E/AE/IC/G/O-08 with exact equality and CII tests
-  BR-S/AF/AG/O-08 with exact equality (the other binding tolerates a difference below 1), so every
-  ``-08`` rule is checked exactly.
-* BR-AF-05/06/07 (IGIC rate): UBL accepts ``>= 0`` and CII ``> 0``; the rate must be greater than zero.
+* BR-CO-15. UBL: exactly one BT-110 and BT-112 = BT-109 + BT-110. CII: the same, *or*
+  BT-112 = BT-109 (which accepts an absent or ignored BT-110).
+* BR-CO-17. Both: \|BT-117\| within 1 of the rounded product; UBL with strict ``<`` / ``>``, CII with
+  ``<=`` / ``>=``.
+* BR-AF-09, BR-AG-09. UBL: within 1, strict. CII: ``true()`` (not tested).
+* BR-AF-05/06/07. UBL: rate ``>= 0``. CII: rate ``> 0``.
+* BR-S/AF/AG-08. UBL: within 1, and the rate must occur on a line, allowance or charge. CII: exact,
+  no occurrence test.
+* BR-Z/E/AE/IC/G-08. UBL: exact. CII: within 1.
+* BR-S/AF/AG-01. UBL: ``(n + a > 0) = (b > 0)``. CII: ``(n = 0 or n + b >= 2) and (a = 0 or a + b >= 2)``.
+* BR-Z/E/AE/IC/G-01. UBL: ``b = 1 or n + a + b = 0`` (its ``//cac:TaxCategory`` also matches the
+  breakdown itself). CII: ``n + a + b = 0 or (b = 1 and n + a > 0)``.
+* BR-O-01. UBL: as BR-Z-01. CII: ``b = 0 or (b = 1 and n + a > 0)``.
+* BR-O-11/12. UBL: other breakdowns (11), non-O lines (12). CII: any non-O breakdown or line, for both.
+* BR-O-13/14. UBL: non-O allowances (13), non-O charges (14). CII: any non-O allowance or charge, for
+  both.
+* BR-53. UBL: a ``cbc:TaxAmount`` in BT-6 (BT-6 = BT-5 with BT-111 means two in BT-5, which breaks
+  BR-CO-15; :func:`check` reports that as BR-53). CII: BT-111 in BT-6 and BT-6 != BT-5.
+
+Every other rule :func:`check` reports tests the same in both bindings (BR-CO-10 … 14, BR-CO-16,
+BR-48, ``-05``/``-06``/``-07`` except IGIC, BR-O-08, ``-09`` except IGIC/IPSI, ``-10``, BR-B-02).
 
 Line net amount (BT-131): EN 16931 has no rule that computes BT-131 (the CEN Schematron only requires
-it, BR-24, and limits its decimals, BR-DEC-23). :func:`line_net_amount` follows Peppol BIS 3.0.21 rule
-PEPPOL-EN16931-R120 (``rules/sch/PEPPOL-EN16931-UBL.sch``) as the convention: invoiced quantity *
-(item net price / item price base quantity) + Σ line charges - Σ line allowances. :func:`check` does
-not test it, since no CEN rule does.
+it, BR-24, and limits its decimals, BR-DEC-23). :func:`line_net_amount` uses the formula of Peppol
+BIS 3.0.21 rule PEPPOL-EN16931-R120 (``rules/sch/PEPPOL-EN16931-UBL.sch``): invoiced quantity *
+(item net price / item price base quantity) + line charges - line allowances, rounded half up per
+D11 (R120 itself allows a slack of 0.02). :func:`check` does not test it, since no CEN rule does.
 """
 
-from euinvoice.calc._check import SOURCE, check
+from euinvoice.calc._check import check
+from euinvoice.calc._common import PORTABILITY, SOURCE
 from euinvoice.calc._complete import ExemptionReason, complete, line_net_amount
 
-__all__ = ["SOURCE", "ExemptionReason", "check", "complete", "line_net_amount"]
+__all__ = ["PORTABILITY", "SOURCE", "ExemptionReason", "check", "complete", "line_net_amount"]
