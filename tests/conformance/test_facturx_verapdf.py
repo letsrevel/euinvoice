@@ -36,7 +36,7 @@ def _level(profile: profiles.Profile) -> bytes:
 
 
 FIXTURES: t.Final[dict[str, Callable[[], bytes]]] = {
-    "input.pdf": lambda: pdf(metadata=None),  # TEMPORARY (#25 AC): deliberately broken, not PDF/A
+    "input.pdf": pdf,
     "input-with-attachment.pdf": lambda: pdf(attachment="notes.txt"),
     "facturx-minimum.pdf": lambda: _level(profiles.FACTURX_MINIMUM),
     "facturx-basic-wl.pdf": lambda: _level(profiles.FACTURX_BASIC_WL),
