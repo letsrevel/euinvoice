@@ -50,17 +50,26 @@ def read(root: etree._Element) -> ParseResult:
         The invoice and the unmapped XPaths.
 
     Raises:
-        ParseError: ``root`` is not ``rsm:CrossIndustryInvoice``; a date is not format 102; BT-8 is not a CII code;
+        ParseError: ``root`` is not ``rsm:CrossIndustryInvoice``; there is no line (BG-25, BR-16: Factur-X
+            MINIMUM and BASIC WL, issue #69); a date is not format 102; BT-8 is not a CII code;
             BT-125 is not base64; or the content does not form a valid model (a required term missing, a code
             outside its list, ...). The message names the BT/BG id, and ``location`` is the XPath of the element
             being read.
     """
-    # ponytail: Factur-X MINIMUM and BASIC WL lack terms the model requires (lines, BG-25), so they raise
-    # ParseError naming the missing term; reading them as an EN 16931 subset is #22's job (profiles/facturx).
+    # ponytail: Factur-X MINIMUM and BASIC WL have no lines (BG-25, BR-16; MINIMUM also lacks BT-106 and BG-23), so
+    # they raise the ParseError below. Reading them as an EN 16931 subset needs a maintainer decision on D1
+    # (needs-human #69); BASIC, EN 16931, EXTENDED and XRECHNUNG read fully.
     if root.tag != _ROOT:
         raise ParseError(f"expected the CII root {_ROOT}, got {root.tag}", location=root.getroottree().getpath(root))
     reader = Reader(root)
     transaction = reader.one(root, "SupplyChainTradeTransaction", _xml.CII_RSM)
+    if not reader.children(transaction, "IncludedSupplyChainTradeLineItem"):
+        raise ParseError(
+            "cannot read Invoice: BG-25 (lines): no invoice line, at least one is required (BR-16); Factur-X MINIMUM "
+            "and BASIC WL documents carry none and cannot be read into the EN 16931 model "
+            "(https://github.com/letsrevel/euinvoice/issues/69)",
+            location=reader.path(root),
+        )
     settlement_fields, invoicing_period = settlement(reader, transaction)
     invoice = reader.model(
         Invoice,

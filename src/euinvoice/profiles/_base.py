@@ -13,8 +13,11 @@ __all__ = ["RULE_SETS", "SYNTAXES", "Preflight", "Profile", "no_preflight"]
 SYNTAXES: t.Final[frozenset[Syntax]] = frozenset(Syntax)
 """The syntaxes a profile can support: UBL 2.1 (``Syntax.UBL``) and UN/CEFACT CII D16B (``Syntax.CII``)."""
 
-RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung"})
-"""The official Schematron rule-set names a profile can declare (see :attr:`Profile.rule_sets`)."""
+RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung", "facturx"})
+"""The official Schematron rule-set names a profile can declare (see :attr:`Profile.rule_sets`).
+
+``"facturx"`` is the per-profile Schematron of the Factur-X / ZUGFeRD package (plan §3), which is not pinned yet
+(issue #42): ``validate()`` raises ``ArtifactsNotAvailableError`` for a profile that declares it."""
 
 # The XRechnung XSLT re-asserts 21 (UBL) / 22 (CII) PEPPOL-EN16931-R* rules, so running both double-counts
 # (spec-auditor findings, https://github.com/letsrevel/euinvoice/issues/17#issuecomment-6004767546).
@@ -52,9 +55,10 @@ class Profile:
         rule_sets: Names of the official Schematron rule sets to run after the XSD, in order. A name
             and a syntax select one ``euinvoice.validate.schematron`` constant: ``"cen"`` →
             ``CEN_UBL`` / ``CEN_CII``, ``"peppol"`` → ``PEPPOL_UBL`` / ``PEPPOL_CII``, ``"xrechnung"`` →
-            ``XRECHNUNG_UBL`` / ``XRECHNUNG_CII``. Profiles do not import ``euinvoice.validate``
-            (dependency direction, plan §4), so the validator owns that mapping. Names come from
-            :data:`RULE_SETS`; ``"cen"`` is not required (Factur-X MINIMUM and BASIC WL are not EN 16931).
+            ``XRECHNUNG_UBL`` / ``XRECHNUNG_CII``; ``"facturx"`` has no pinned artifact yet (#42). Profiles do
+            not import ``euinvoice.validate`` (dependency direction, plan §4), so the validator owns that
+            mapping. Names come from :data:`RULE_SETS`; ``"cen"`` is not required (Factur-X MINIMUM and BASIC WL
+            are not EN 16931).
         business_process_type: BT-23 default written when the invoice has none, or ``None``.
         facturx_filename: Name of the embedded XML in a Factur-X / ZUGFeRD PDF; ``None`` otherwise.
         facturx_conformance_level: XMP ``fx:ConformanceLevel`` of a Factur-X / ZUGFeRD profile;

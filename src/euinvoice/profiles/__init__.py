@@ -8,18 +8,34 @@ Example:
 
 from euinvoice.profiles._base import Preflight, Profile, no_preflight
 from euinvoice.profiles.en16931 import EN16931
+from euinvoice.profiles.facturx import (
+    FACTURX_BASIC,
+    FACTURX_BASIC_WL,
+    FACTURX_EN16931,
+    FACTURX_EXTENDED,
+    FACTURX_MINIMUM,
+    FACTURX_XRECHNUNG,
+    by_conformance_level,
+)
 from euinvoice.profiles.peppol import PEPPOL
 from euinvoice.profiles.registry import get
 from euinvoice.profiles.xrechnung import XRECHNUNG, XRECHNUNG_CVD, XRECHNUNG_EXTENSION
 
 __all__ = [
     "EN16931",
+    "FACTURX_BASIC",
+    "FACTURX_BASIC_WL",
+    "FACTURX_EN16931",
+    "FACTURX_EXTENDED",
+    "FACTURX_MINIMUM",
+    "FACTURX_XRECHNUNG",
     "PEPPOL",
     "XRECHNUNG",
     "XRECHNUNG_CVD",
     "XRECHNUNG_EXTENSION",
     "Preflight",
     "Profile",
+    "by_conformance_level",
     "get",
     "no_preflight",
 ]

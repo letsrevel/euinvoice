@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.profiles._base import Profile
 from euinvoice.profiles.en16931 import EN16931
+from euinvoice.profiles.facturx import FACTURX_BASIC, FACTURX_BASIC_WL, FACTURX_EXTENDED, FACTURX_MINIMUM
 from euinvoice.profiles.peppol import PEPPOL
 from euinvoice.profiles.xrechnung import XRECHNUNG, XRECHNUNG_CVD, XRECHNUNG_EXTENSION
 
@@ -32,11 +33,20 @@ def _index(profiles: Iterable[Profile]) -> dict[str, Profile]:
     return index
 
 
-# ponytail: one profile per BT-24. Factur-X profiles that share a BT-24 (EN16931 with EN 16931 core,
-# XRECHNUNG with XRechnung; plan §5) stay out of _PROFILES: the Factur-X container selects them by its XMP
-# fx:ConformanceLevel. Levels with their own BT-24 register here normally. The shared core BT-24 is
-# corroborated by the ZUGFeRD corpus, but the Factur-X spec package is not pinned yet (#42).
-_PROFILES: t.Final = (EN16931, PEPPOL, XRECHNUNG, XRECHNUNG_EXTENSION, XRECHNUNG_CVD)
+# One profile per BT-24. The Factur-X levels that share a BT-24 (EN16931 with EN 16931 core, XRECHNUNG with
+# XRechnung) stay out: the PDF container selects them by its XMP fx:ConformanceLevel
+# (facturx.by_conformance_level). The levels with a BT-24 of their own register here.
+_PROFILES: t.Final = (
+    EN16931,
+    PEPPOL,
+    XRECHNUNG,
+    XRECHNUNG_EXTENSION,
+    XRECHNUNG_CVD,
+    FACTURX_MINIMUM,
+    FACTURX_BASIC_WL,
+    FACTURX_BASIC,
+    FACTURX_EXTENDED,
+)
 _BY_BT24: t.Final[Mapping[str, Profile]] = _index(_PROFILES)
 
 
