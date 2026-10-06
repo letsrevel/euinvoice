@@ -109,6 +109,10 @@ All notable changes to this project are documented here. The format follows
   cross-checks `check()` against the official CEN UBL and CII Schematron on mutated invoices.
   `ExemptionReason` carries BT-120/BT-121 per category. `complete()` reproduces the totals of every
   CEN 1.3.16 and Peppol 3.0.21 example (except one HUF example that rounds VAT to whole forints).
+- `euinvoice.calc.check()` also reports the period date rules BR-29 and BR-CO-19 (invoicing period,
+  BG-14) and BR-30 and BR-CO-20 (invoice line period, BG-26). An undated BG-14 with BT-8 passes the
+  UBL binding of BR-CO-19 only, so it is a portability warning; the oracle conformance test covers
+  all four rules.
 - `euinvoice.profiles.PEPPOL`: Peppol BIS Billing 3.0 (UBL and CII, BT-24
   `urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0`, default BT-23
   `urn:fdc:peppol.eu:2017:poacc:billing:01:1.0`; XSD, CEN, then Peppol rules), registered by its BT-24,

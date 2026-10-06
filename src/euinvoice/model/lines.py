@@ -40,7 +40,8 @@ __all__ = [
 class InvoiceLinePeriod(EuInvoiceModel):
     """INVOICE LINE PERIOD (BG-26).
 
-    BR-30 (end not before start) and BR-CO-20 are left to the official Schematron (D8).
+    BR-30 (end not before start) and BR-CO-20 (start or end present) are business rules, not checked
+    by the model: :func:`euinvoice.calc.check` reports them, the official Schematron decides (D8).
     """
 
     start_date: t.Annotated[Date | None, bt("BT-134")] = None
