@@ -105,10 +105,6 @@ def _without_rate(invoice: Invoice) -> Invoice:
     return rebuild(invoice, vat_breakdown=(VatBreakdown.model_validate({**dict(breakdown), "rate": None}),))
 
 
-def _debit(**fields: str) -> DirectDebit:
-    return DirectDebit(**fields)
-
-
 # Each XRechnung pre-flight rule (official id) → an invoice that violates it and no other pre-flight rule.
 VIOLATIONS: t.Final[dict[str, Callable[[], Invoice]]] = {
     "BR-DE-1": lambda: xrechnung_invoice(payment_instructions=None),
@@ -145,7 +141,7 @@ VIOLATIONS: t.Final[dict[str, Callable[[], Invoice]]] = {
     "BR-DE-25-b": lambda: xrechnung_invoice(
         payment_instructions=payment(
             "59",
-            direct_debit=_debit(
+            direct_debit=DirectDebit(
                 mandate_reference_identifier="M-1",
                 bank_assigned_creditor_identifier=_CREDITOR_ID,
                 debited_account_identifier=TEST_IBAN,
@@ -156,15 +152,20 @@ VIOLATIONS: t.Final[dict[str, Callable[[], Invoice]]] = {
         payment_instructions=payment(
             "59",
             credit_transfers=(),
-            direct_debit=_debit(mandate_reference_identifier="M-1", debited_account_identifier=TEST_IBAN),
+            direct_debit=DirectDebit(mandate_reference_identifier="M-1", debited_account_identifier=TEST_IBAN),
         )
     ),
     "BR-DE-31": lambda: xrechnung_invoice(
         payment_instructions=payment(
             "59",
             credit_transfers=(),
-            direct_debit=_debit(mandate_reference_identifier="M-1", bank_assigned_creditor_identifier=_CREDITOR_ID),
+            direct_debit=DirectDebit(
+                mandate_reference_identifier="M-1", bank_assigned_creditor_identifier=_CREDITOR_ID
+            ),
         )
+    ),
+    "PEPPOL-EN16931-R001": lambda: xrechnung_invoice(
+        process_control=ProcessControl(specification_identifier=profiles.XRECHNUNG.specification_identifier)
     ),
 }
 
@@ -188,7 +189,9 @@ CVD_VIOLATIONS: t.Final[dict[str, Callable[[], Invoice]]] = {
 
 def _debit_only(code: str = "59", transfers: int = 0, **fields: str) -> Invoice:
     return xrechnung_invoice(
-        payment_instructions=payment(code, credit_transfers=(_TRANSFER,) * transfers, direct_debit=_debit(**fields))
+        payment_instructions=payment(
+            code, credit_transfers=(_TRANSFER,) * transfers, direct_debit=DirectDebit(**fields)
+        )
     )
 
 

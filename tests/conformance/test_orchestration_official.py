@@ -17,7 +17,6 @@ CII_XSD = "xsd:xrechnung-validator-configuration"
 pytestmark = pytest.mark.conformance
 
 PEPPOL = profiles.PEPPOL
-XRECHNUNG = profiles.XRECHNUNG
 
 EXAMPLE1 = "examples/ubl-tc434-example1.xml"
 PEPPOL_BASE = "rules/examples/base-example.xml"
@@ -67,7 +66,7 @@ def blank_invoice_number(data: bytes) -> bytes:
     [
         (profiles.EN16931, "cen-ubl", EXAMPLE1, {"cen-ubl"}),
         (PEPPOL, "peppol-bis", PEPPOL_BASE, {"cen-ubl", "peppol-bis"}),
-        (XRECHNUNG, "xrechnung-testsuite", XR_UBL, {"cen-ubl", "xrechnung-schematron"}),
+        (profiles.XRECHNUNG, "xrechnung-testsuite", XR_UBL, {"cen-ubl", "xrechnung-schematron"}),
     ],
     ids=["en16931", "peppol", "xrechnung"],
 )
@@ -100,7 +99,7 @@ def test_peppol_rules_run_only_under_a_peppol_profile() -> None:
 def test_xrechnung_rules_run_only_under_an_xrechnung_profile() -> None:
     # Under XRechnung, example1's core BT-24 fails BR-DE-21 (XRechnung 3.0.2 XRechnung-UBL-validation.xsl);
     # Peppol does not run alongside (issue #17: never Peppol and XRechnung together).
-    report = validate(member("cen-ubl", EXAMPLE1), XRECHNUNG)
+    report = validate(member("cen-ubl", EXAMPLE1), profiles.XRECHNUNG)
 
     assert "BR-DE-21" in {f.rule_id for f in report.findings}
     assert {f.source for f in report.findings} == {"xrechnung-schematron"}
@@ -284,7 +283,7 @@ def with_sub_invoice_line() -> etree._Element:
 def test_upgraded_warnings_are_not_blocking_under_raw_flags(
     document: t.Callable[[], etree._Element], upgraded: set[tuple[str, str]]
 ) -> None:
-    report = validate(etree.tostring(document()), XRECHNUNG)
+    report = validate(etree.tostring(document()), profiles.XRECHNUNG)
 
     warnings = {(f.rule_id, f.source) for f in report.findings if f.severity is Severity.WARNING}
     assert upgraded <= warnings, report.findings

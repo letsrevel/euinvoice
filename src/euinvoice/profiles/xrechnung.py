@@ -14,11 +14,13 @@ KoSIT's ``customLevel`` severity overrides are not applied (issue #49, needs-hum
 No BT-23 default: the XRechnung rule set re-asserts PEPPOL-EN16931-R001 (fatal; ``XRechnung-UBL-validation.sch``
 line 198, ``XRechnung-CII-validation.sch`` lines 173-175), so BT-23 must be present, but no pinned
 artifact fixes its value. All 86 instances of the pinned testsuite (2026-08-31) carry
-``urn:fdc:peppol.eu:2017:poacc:billing:01:1.0``; that is usage, not a rule, so the caller sets BT-23.
+``urn:fdc:peppol.eu:2017:poacc:billing:01:1.0``; that is usage, not a rule, so the caller sets BT-23
+(needs-human #67). The pre-flight reports a missing BT-23 under PEPPOL-EN16931-R001.
 
 Pre-flight checks (each profile's :attr:`~euinvoice.profiles.Profile.preflight`) mirror fatal BR-DE-* rules
-of the pinned XRechnung Schematron 2.6.0 (``schematron/ubl/XRechnung-UBL-validation.sch`` and
-``schematron/cii/XRechnung-CII-validation.sch``, line numbers below as UBL / CII). A pre-flight finding is
+(and the re-asserted PEPPOL-EN16931-R001) of the pinned XRechnung Schematron 2.6.0
+(``schematron/ubl/XRechnung-UBL-validation.sch`` and ``schematron/cii/XRechnung-CII-validation.sch``,
+line numbers below as UBL / CII). A pre-flight finding is
 fatal under the official id exactly when the official rule fires on the output of the writer for the given
 syntax (D8; decision recorded on issue #20), so where the UBL and CII bindings differ the check follows the
 binding.
@@ -26,10 +28,11 @@ Where a rule tests content (``[boolean(normalize-space(.))]``), blank text count
 only that an element exists, any value counts as present.
 """
 
+import dataclasses
 import typing as t
 from collections.abc import Iterator
 
-from euinvoice.model import Invoice
+from euinvoice.model import Invoice, PaymentInstructions
 from euinvoice.model.datatypes import normalize_space
 from euinvoice.profiles._base import Profile
 from euinvoice.report import Finding, Severity
@@ -125,8 +128,9 @@ def _seller_tax_ids(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:
 
     UBL takes the VAT category codes of the lines (BT-151) and of the document-level allowances and charges
     (BT-95, BT-102; the writer always follows ``cbc:ID`` with ``cac:TaxScheme/cbc:ID`` ``VAT``). The CII test
-    compares ``ram:CategoryTradeTax`` itself (an element with children, so never equal) to ``'VAT'``, so there
-    only the line codes count.
+    compares the *string value* of ``ram:CategoryTradeTax`` (its TypeCode, CategoryCode and rate text
+    concatenated) to ``'VAT'``. The CII writer always writes a non-empty CategoryCode there, so the comparison
+    never matches and only the line codes (BT-151) count.
     """
     seller = invoice.seller
     codes = {line.vat_information.category_code for line in invoice.lines}
@@ -146,77 +150,129 @@ def _seller_tax_ids(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:
         )
 
 
-def _payment(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:  # ruff: ignore[complex-structure]  # one branch per official rule
-    """BR-DE-1, BR-DE-23..25 (per payment means) and BR-DE-30/31 (direct debit), per binding.
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Means:
+    """What the writers put into the payment means elements of one invoice, in one syntax.
 
-    Both writers emit one payment means per credit transfer (at least one), the card (BG-18) and the
+    Both writers emit one payment means per credit transfer (at least one), with the card (BG-18) and the
     debited account (BT-91) in the first only. UBL puts BT-89 and BT-91 in ``cac:PaymentMandate`` (written
-    when either is set) and BT-90 in a ``SEPA`` party identifier; CII puts BT-89 and BT-90 at header level and
-    has no BG-19 element: any of BT-89, BT-90, BT-91 counts as BG-19 (CII comment, lines 315-317). The rules
-    test element existence, so a blank value counts as present.
+    when either is set, in the first means) and BT-90 in a ``SEPA`` party identifier; CII puts BT-89 and BT-90
+    at header level and has no BG-19 element: any of BT-89, BT-90, BT-91 counts as BG-19 (CII comment, lines
+    315-317). The rules test element existence, so a blank value counts as present.
     """
-    payment = invoice.payment_instructions
-    # BR-DE-1: UBL line 328 / CII lines 333-335.
-    if payment is None:
-        yield _fatal("BR-DE-1", "payment_instructions", 'An invoice must contain "PAYMENT INSTRUCTIONS" (BG-16).')
-        return
-    debit = payment.direct_debit
-    bt89 = debit is not None and debit.mandate_reference_identifier is not None
-    bt90 = debit is not None and debit.bank_assigned_creditor_identifier is not None
-    bt91 = debit is not None and debit.debited_account_identifier is not None
-    code, transfers, card = payment.payment_means_type_code, payment.credit_transfers, payment.payment_card
-    several = len(transfers) > 1  # means after the first carry neither card nor BT-91 (nor, in UBL, BT-89)
+
+    code: str
+    transfers: bool
+    card: bool
+    several: bool  # more than one means: the later ones carry neither card nor BT-91 (nor, in UBL, BT-89)
+    debit_in_first: bool  # the first means carries BG-19, as the rule sees it
+    debit_in_every: bool  # every means carries BG-19, as the rule sees it
+
+
+def _means(payment: PaymentInstructions, invoice: Invoice, syntax: Syntax) -> _Means:
+    bt89, bt90, bt91 = _debit_terms(invoice)
+    several = len(payment.credit_transfers) > 1
     if syntax == Syntax.UBL:
         debit_in_first = bt89 or bt91  # cac:PaymentMandate
         debit_in_every = debit_in_first and not several
     else:
         debit_in_first = bt89 or bt90 or bt91
         debit_in_every = bt89 or bt90 or (bt91 and not several)
-    if code in _CREDIT_TRANSFER_CODES:
-        # BR-DE-23-a / -b: UBL lines 431-439 / CII lines 423-432.
-        if not transfers:
-            yield _fatal(
-                "BR-DE-23-a",
-                "payment_instructions.credit_transfers",
-                f'BT-81 {code} requires "CREDIT TRANSFER" (BG-17).',
-            )
-        if card is not None or debit_in_first:
-            yield _fatal(
-                "BR-DE-23-b",
-                "payment_instructions",
-                f'BT-81 {code} excludes "PAYMENT CARD INFORMATION" (BG-18) and "DIRECT DEBIT" (BG-19).',
-            )
-    elif code in _CARD_CODES:
-        # BR-DE-24-a / -b: UBL lines 441-445 / CII lines 434-440.
-        if card is None or several:
-            yield _fatal(
-                "BR-DE-24-a",
-                "payment_instructions.payment_card",
-                f'BT-81 {code} requires "PAYMENT CARD INFORMATION" (BG-18) in its one payment means.',
-            )
-        if transfers or debit_in_first:
-            yield _fatal(
-                "BR-DE-24-b",
-                "payment_instructions",
-                f'BT-81 {code} excludes "CREDIT TRANSFER" (BG-17) and "DIRECT DEBIT" (BG-19).',
-            )
-    elif code in _DIRECT_DEBIT_CODES:
-        # BR-DE-25-a / -b: UBL lines 447-454 / CII lines 442-451.
-        if not debit_in_every:
-            yield _fatal(
-                "BR-DE-25-a",
-                "payment_instructions.direct_debit",
-                f'BT-81 {code} requires "DIRECT DEBIT" (BG-19) in its one payment means.',
-            )
-        if transfers or card is not None:
-            yield _fatal(
-                "BR-DE-25-b",
-                "payment_instructions",
-                f'BT-81 {code} excludes "CREDIT TRANSFER" (BG-17) and "PAYMENT CARD INFORMATION" (BG-18).',
-            )
-    # BR-DE-30 / BR-DE-31: UBL lines 366-371 (a cac:PaymentMandate needs the SEPA creditor id BT-90 and
-    # PayerFinancialAccount BT-91) / CII lines 315-331 (with any of BT-89/90/91: (BT-89 or BT-91) and BT-90,
-    # resp. (BT-89 or BT-90) and BT-91).
+    return _Means(
+        code=payment.payment_means_type_code,
+        transfers=bool(payment.credit_transfers),
+        card=payment.payment_card is not None,
+        several=several,
+        debit_in_first=debit_in_first,
+        debit_in_every=debit_in_every,
+    )
+
+
+def _payment(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:
+    """BR-DE-1, then BR-DE-23, BR-DE-24 or BR-DE-25 by payment means type code (BT-81), per binding."""
+    payment = invoice.payment_instructions
+    # BR-DE-1: UBL line 328 / CII lines 333-335.
+    if payment is None:
+        yield _fatal("BR-DE-1", "payment_instructions", 'An invoice must contain "PAYMENT INSTRUCTIONS" (BG-16).')
+        return
+    means = _means(payment, invoice, syntax)
+    if means.code in _CREDIT_TRANSFER_CODES:
+        yield from _credit_transfer(means)
+    elif means.code in _CARD_CODES:
+        yield from _card(means)
+    elif means.code in _DIRECT_DEBIT_CODES:
+        yield from _direct_debit_means(means)
+
+
+def _credit_transfer(means: _Means) -> Iterator[Finding]:
+    # BR-DE-23-a / -b: UBL lines 431-439 / CII lines 423-432.
+    if not means.transfers:
+        yield _fatal(
+            "BR-DE-23-a",
+            "payment_instructions.credit_transfers",
+            f'BT-81 {means.code} requires "CREDIT TRANSFER" (BG-17).',
+        )
+    if means.card or means.debit_in_first:
+        yield _fatal(
+            "BR-DE-23-b",
+            "payment_instructions",
+            f'BT-81 {means.code} excludes "PAYMENT CARD INFORMATION" (BG-18) and "DIRECT DEBIT" (BG-19).',
+        )
+
+
+def _card(means: _Means) -> Iterator[Finding]:
+    # BR-DE-24-a / -b: UBL lines 441-445 / CII lines 434-440.
+    if not means.card or means.several:
+        yield _fatal(
+            "BR-DE-24-a",
+            "payment_instructions.payment_card",
+            f'BT-81 {means.code} requires "PAYMENT CARD INFORMATION" (BG-18) in its one payment means.',
+        )
+    if means.transfers or means.debit_in_first:
+        yield _fatal(
+            "BR-DE-24-b",
+            "payment_instructions",
+            f'BT-81 {means.code} excludes "CREDIT TRANSFER" (BG-17) and "DIRECT DEBIT" (BG-19).',
+        )
+
+
+def _direct_debit_means(means: _Means) -> Iterator[Finding]:
+    # BR-DE-25-a / -b: UBL lines 447-454 / CII lines 442-451.
+    if not means.debit_in_every:
+        yield _fatal(
+            "BR-DE-25-a",
+            "payment_instructions.direct_debit",
+            f'BT-81 {means.code} requires "DIRECT DEBIT" (BG-19) in its one payment means.',
+        )
+    if means.transfers or means.card:
+        yield _fatal(
+            "BR-DE-25-b",
+            "payment_instructions",
+            f'BT-81 {means.code} excludes "CREDIT TRANSFER" (BG-17) and "PAYMENT CARD INFORMATION" (BG-18).',
+        )
+
+
+def _debit_terms(invoice: Invoice) -> tuple[bool, bool, bool]:
+    """Whether BT-89, BT-90 and BT-91 are present (the direct debit rules test element existence)."""
+    payment = invoice.payment_instructions
+    debit = payment.direct_debit if payment else None
+    if debit is None:
+        return False, False, False
+    return (
+        debit.mandate_reference_identifier is not None,
+        debit.bank_assigned_creditor_identifier is not None,
+        debit.debited_account_identifier is not None,
+    )
+
+
+def _direct_debit(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:
+    """BR-DE-30 / BR-DE-31, per binding.
+
+    UBL lines 366-371: a ``cac:PaymentMandate`` (written when BT-89 or BT-91 is set) needs the SEPA creditor
+    id BT-90 and ``cac:PayerFinancialAccount`` BT-91. CII lines 315-331: with any of BT-89/90/91, BR-DE-30
+    requires (BT-89 or BT-91) and BT-90, BR-DE-31 requires (BT-89 or BT-90) and BT-91.
+    """
+    bt89, bt90, bt91 = _debit_terms(invoice)
     if syntax == Syntax.UBL:
         missing_bt90 = (bt89 or bt91) and not bt90
         missing_bt91 = bt89 and not bt91
@@ -238,6 +294,14 @@ def _payment(invoice: Invoice, syntax: Syntax) -> Iterator[Finding]:  # ruff: ig
 
 
 def _document(invoice: Invoice) -> Iterator[Finding]:
+    # PEPPOL-EN16931-R001, re-asserted by XRechnung (fatal): UBL line 198 tests cbc:ProfileID, CII lines
+    # 173-175 test ram:BusinessProcessSpecifiedDocumentContextParameter/ram:ID; both only for existence.
+    if invoice.process_control.business_process_type is None:
+        yield _fatal(
+            "PEPPOL-EN16931-R001",
+            "process_control.business_process_type",
+            "Business process (BT-23) must be provided; the XRechnung profiles set no default (#67).",
+        )
     # BR-DE-15: UBL lines 329-331 / CII lines 336-338.
     if _blank(invoice.buyer_reference):
         yield _fatal("BR-DE-15", "buyer_reference", 'The "Buyer reference" (BT-10) must be provided.')
@@ -266,7 +330,7 @@ _CIUS_RULES: t.Final[frozenset[str]] = frozenset(
     {
         "BR-DE-1", "BR-DE-2", "BR-DE-3", "BR-DE-4", "BR-DE-5", "BR-DE-6", "BR-DE-7", "BR-DE-8", "BR-DE-9",
         "BR-DE-10", "BR-DE-11", "BR-DE-14", "BR-DE-15", "BR-DE-16", "BR-DE-22", "BR-DE-23-a", "BR-DE-23-b",
-        "BR-DE-24-a", "BR-DE-24-b", "BR-DE-25-a", "BR-DE-25-b", "BR-DE-30", "BR-DE-31",
+        "BR-DE-24-a", "BR-DE-24-b", "BR-DE-25-a", "BR-DE-25-b", "BR-DE-30", "BR-DE-31", "PEPPOL-EN16931-R001",
     }
 )  # fmt: skip
 _CVD_RULES: t.Final[frozenset[str]] = frozenset({"BR-DE-CVD-01", "BR-DE-CVD-02", "BR-DE-CVD-03"})
@@ -294,24 +358,32 @@ def _preflight(invoice: Invoice, syntax: Syntax) -> tuple[Finding, ...]:
     """
     if syntax not in (Syntax.UBL, Syntax.CII):
         raise ValueError(f"unknown syntax {syntax!r} for XRechnung; expected 'ubl' or 'cii'")
-    # ponytail: BR-DE-18 (Skonto lines in BT-20) and BR-TMP-2 (BT-124 URL) are fatal but regex-based; they are
-    # left to the Schematron. Add them here if early messages for them are wanted.
+    # ponytail: fatal rules of the XRechnung rule set that are not pre-flighted, left to the Schematron:
+    # BR-DE-18 (Skonto lines in BT-20) and BR-TMP-2 (BT-124 URL), which are regex-based; BR-TMP-3 (CII gross
+    # and net base quantity), which the CII writer satisfies by construction; the Extension rules BR-DEX-*;
+    # and the re-asserted PEPPOL-EN16931-R* rules other than R001 (R005, R008, R010, R020, R040-R046, R053-R055,
+    # R061, R101, R110, R111, R121, R130). Add a check here when an early message for one of them is wanted.
     return (
         *_document(invoice),
         *_seller(invoice),
         *_buyer_and_delivery(invoice),
         *_seller_tax_ids(invoice, syntax),
         *_payment(invoice, syntax),
+        *_direct_debit(invoice, syntax),
     )
 
 
 def _cvd_preflight(invoice: Invoice, syntax: Syntax) -> tuple[Finding, ...]:
     """:func:`_preflight` plus BR-DE-CVD-01..03 (UBL lines 549-565 / CII lines 522-526, 560-569).
 
+    Same call contract, arguments and result as :func:`_preflight`.
+
     Raises:
         ValueError: ``syntax`` is not UBL or CII.
     """
     # ponytail: BR-DE-CVD-04/05/06 and BR-TMP-CVD-01 (per-line code checks) are left to the Schematron.
+    # XRECHNUNG_CVD cannot be satisfied yet: BR-DE-CVD-03 needs item classification list id 'CVD', which the
+    # model rejects under CEN BR-CL-13 (KoSIT downgrades BR-CL-13 in its CVD scenarios; #49).
     findings = list(_preflight(invoice, syntax))
     if _blank(invoice.contract_reference):
         findings.append(

@@ -124,8 +124,9 @@ All notable changes to this project are documented here. The format follows
 - XRechnung 3.0 profiles `profiles.XRECHNUNG`, `XRECHNUNG_EXTENSION` and `XRECHNUNG_CVD` (UBL and CII,
   rule sets CEN then XRechnung), one per accepted BT-24 so `prepare()` never rewrites an Extension or CVD
   claim. `validate()` auto-detects them. Their `preflight(invoice, syntax)` reports the fatal BR-DE-* rules
-  checkable on the model (BR-DE-1..11, 14..16, 22, 23..25, 30, 31; BR-DE-CVD-01..03 for CVD) under the
-  official ids, exactly when the official rule fires on that syntax's writer output.
+  checkable on the model (BR-DE-1..11, 14..16, 22, 23..25, 30, 31; BR-DE-CVD-01..03 for CVD) and the
+  re-asserted PEPPOL-EN16931-R001 (BT-23 required; no default, #67) under the official ids, exactly when
+  the official rule fires on that syntax's writer output.
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
