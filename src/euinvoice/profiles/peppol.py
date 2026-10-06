@@ -52,6 +52,9 @@ Not pre-flighted: rules the writers satisfy by construction (R006, R043, R044, R
 R101) or that CEN rules already report (R054/R055 with BR-53 and BR-CO-15), R040, R046 and R120 (decimal
 arithmetic with a slack; ``calc`` and the Schematron own them), R130, and the ``P``, ``CL``, ``F``,
 ``COMMON`` and national rules. The Schematron run by ``validate()`` reports them all.
+
+``prepare()`` defaults: BT-24, the BT-23 above, and BT-119 = 0 on a "Not subject to VAT" (O) breakdown when
+seller and buyer are both in Germany, where DE-R-014 requires BT-119 (see ``_german_parties``; issue #75).
 """
 
 import typing as t
@@ -333,6 +336,17 @@ def _empty_elements(invoice: Invoice) -> Iterator[Finding]:
             )
 
 
+def _german_parties(invoice: Invoice) -> bool:
+    """Whether DE-R-014 applies: seller and buyer postal country (BT-40, BT-55) are both ``DE``.
+
+    DE-R-014 (``PEPPOL-EN16931-UBL.sch`` lines 799-800, fatal) requires BT-119 on every VAT breakdown under
+    ``$supplierCountryIsDE and $customerCountryIsDE`` (lines 50-51). The CII file has no DE-R rules; BT-119 = 0
+    on an O breakdown passes the CEN and Peppol rules in both syntaxes, so :meth:`Profile.prepare` (which has no
+    syntax) writes it for either (issue #75).
+    """
+    return invoice.seller.postal_address.country_code == "DE" and invoice.buyer.postal_address.country_code == "DE"
+
+
 PEPPOL: t.Final = Profile(
     id="peppol",
     title="Peppol BIS Billing 3.0",
@@ -342,5 +356,6 @@ PEPPOL: t.Final = Profile(
     rule_sets=("cen", "peppol"),
     business_process_type=BILLING_PROCESS,
     preflight=_preflight,
+    requires_vat_breakdown_rate=_german_parties,
 )
 """The Peppol BIS Billing 3.0 profile (profile 01 "Billing" by default)."""

@@ -10,6 +10,7 @@ from decimal import Decimal
 
 import pytest
 
+from _calc_drafts import not_subject_to_vat
 from _invoices import TEST_IBAN, minimal_invoice, peppol_invoice, rebuild, simple_line
 from euinvoice import profiles
 from euinvoice.model import (
@@ -74,6 +75,20 @@ class TestProfile:
     def test_prepare_writes_the_peppol_bt24_and_the_billing_bt23(self) -> None:
         prepared = PEPPOL.prepare(minimal_invoice())
         assert prepared.process_control == process(BT23)
+
+    # DE-R-014 (rules/sch/PEPPOL-EN16931-UBL.sch:799-800) asks for BT-119 on every VAT breakdown when the seller
+    # and the buyer are both in Germany (issue #75).
+    @pytest.mark.parametrize(
+        ("seller_country", "buyer_country", "rate"),
+        [("DE", "DE", Decimal("0")), ("DE", "AT", None), ("AT", "DE", None), ("AT", "AT", None)],
+    )
+    def test_prepare_writes_bt119_zero_on_an_o_breakdown_between_german_parties(
+        self, seller_country: str, buyer_country: str, rate: Decimal | None
+    ) -> None:
+        invoice = not_subject_to_vat(seller_country, buyer_country)
+        assert invoice.vat_breakdown[0].rate is None
+
+        assert [g.rate for g in PEPPOL.prepare(invoice).vat_breakdown] == [rate]
 
     def test_covered_rules(self) -> None:
         rules = {f"PEPPOL-EN16931-R{n}" for n in ("001", "002", "003", "004", "005", "007", "008", "010", "020")}

@@ -17,6 +17,10 @@ artifact fixes its value. All 86 instances of the pinned testsuite (2026-08-31) 
 ``urn:fdc:peppol.eu:2017:poacc:billing:01:1.0``; that is usage, not a rule, so the caller sets BT-23
 (needs-human #67). The pre-flight reports a missing BT-23 under PEPPOL-EN16931-R001.
 
+BT-119 on a "Not subject to VAT" (O) breakdown: BR-DE-14 requires BT-119 on every VAT breakdown, while EN 16931
+lets an O breakdown leave it out (BR-48) and ``calc.complete`` does. So :meth:`~euinvoice.profiles.Profile.prepare`
+writes BT-119 = 0 there, as the official instance ``standard/01.04a-INVOICE_ubl.xml`` does (issue #75).
+
 Pre-flight checks (each profile's :attr:`~euinvoice.profiles.Profile.preflight`) mirror fatal BR-DE-* rules
 (and the re-asserted PEPPOL-EN16931-R001) of the pinned XRechnung Schematron 2.6.0
 (``schematron/ubl/XRechnung-UBL-validation.sch`` and ``schematron/cii/XRechnung-CII-validation.sch``,
@@ -410,6 +414,11 @@ def _cvd_preflight(invoice: Invoice, syntax: Syntax) -> tuple[Finding, ...]:
     return tuple(findings)
 
 
+def _always(invoice: Invoice) -> bool:
+    """BR-DE-14 (UBL lines 456-459 / CII lines 453-456) requires BT-119 on every VAT breakdown (issue #75)."""
+    return True
+
+
 XRECHNUNG: t.Final = Profile(
     id="xrechnung",
     title="XRechnung 3.0 (CIUS)",
@@ -417,6 +426,7 @@ XRECHNUNG: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_preflight,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 CIUS, BT-24 ``urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0``."""
 
@@ -428,6 +438,7 @@ XRECHNUNG_EXTENSION: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_preflight,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 Extension (adds sub invoice lines, third party payments and more; BR-DEX-* rules)."""
 
@@ -439,5 +450,6 @@ XRECHNUNG_CVD: t.Final = Profile(
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
     preflight=_cvd_preflight,
+    requires_vat_breakdown_rate=_always,
 )
 """XRechnung 3.0 CVD, for invoices under the Clean Vehicles Directive (BR-DE-CVD-* rules)."""

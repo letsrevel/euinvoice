@@ -16,6 +16,8 @@ from pathlib import Path
 import pytest
 from test_schematron_official import VEFA, check_vefa_test, expectations
 
+import _xrechnung_cases as xr
+from _calc_drafts import not_subject_to_vat
 from _invoices import TEST_IBAN, peppol_invoice, rebuild, simple_line
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError
@@ -28,6 +30,7 @@ from euinvoice.model import (
     DocumentLevelAllowance,
     DocumentLevelCharge,
     DocumentTotals,
+    Identifier,
     Invoice,
     InvoiceLineAllowance,
     InvoiceLineCharge,
@@ -270,3 +273,44 @@ def test_r003_with_only_bt14_warns_in_ubl_and_is_fatal_in_cii() -> None:
     ubl_findings = {(f.rule_id, f.severity) for f in PEPPOL.preflight(invoice, UBL)}
     assert ubl_findings == {(peppol.R003_NA_WARNING, Severity.WARNING)}
     assert {(f.rule_id, f.severity) for f in PEPPOL.preflight(invoice, CII)} == {(PREFIX + "R003", Severity.FATAL)}
+
+
+# --- prepare() defaults ------------------------------------------------------------------------------
+
+
+def german_o_invoice() -> Invoice:
+    """A "Not subject to VAT" (O) invoice between German parties, from ``complete()`` (no BT-119; issue #75).
+
+    The parties carry what the DE-R rules of the UBL file ask of German seller and buyer (BG-6, city, post
+    code, BG-16, BT-10), and GLN electronic addresses (R010, R020).
+    """
+    return not_subject_to_vat(
+        process_control=ProcessControl(
+            business_process_type=peppol.BILLING_PROCESS, specification_identifier=peppol.SPECIFICATION_IDENTIFIER
+        ),
+        buyer_reference="BUYER-REF-1",
+        seller=xr.seller(
+            vat_identifier=None,
+            legal_registration_identifier=Identifier(value="HRB 00000"),
+            electronic_address=Identifier(value="4000001000005", scheme_id="0088"),
+        ),
+        buyer=xr.buyer(electronic_address=Identifier(value="4000001000036", scheme_id="0088")),
+        payment_instructions=xr.payment(),
+    )
+
+
+@pytest.mark.parametrize(("syntax", "unprepared"), [(UBL, {"DE-R-014"}), (CII, set())])
+def test_prepare_writes_bt119_on_a_german_o_breakdown(syntax: Syntax, unprepared: set[str]) -> None:
+    # DE-R-014 (PEPPOL-EN16931-UBL.sch:799-800) requires BT-119 when seller and buyer are in Germany; the CII
+    # file has no DE-R rules. BT-119 = 0 passes the CEN and Peppol rules in both syntaxes.
+    invoice = german_o_invoice()
+    blocking = (Severity.FATAL, Severity.ERROR)
+    before = validate(WRITERS[syntax](invoice), PEPPOL)
+    assert {f.rule_id for f in before.findings if f.severity in blocking} == unprepared
+
+    prepared = PEPPOL.prepare(invoice)
+    report = validate(WRITERS[syntax](prepared), PEPPOL)
+
+    assert prepared.vat_breakdown[0].rate == Decimal("0")
+    assert report.ok, report.findings
+    assert preflighted(prepared, syntax) == set()

@@ -5,12 +5,14 @@ import typing as t
 from collections.abc import Sequence
 from decimal import Decimal
 
+from euinvoice.calc import ExemptionReason, complete
 from euinvoice.model import (
     Buyer,
     BuyerPostalAddress,
     DocumentLevelAllowance,
     DocumentLevelCharge,
     DocumentTotals,
+    Identifier,
     Invoice,
     InvoiceDraft,
     InvoiceLineAllowance,
@@ -135,3 +137,24 @@ def group(index: int, invoice: Invoice, **changes: t.Any) -> VatBreakdown:
         for k, v in changes.items()
     }
     return VatBreakdown.model_validate({**dict(invoice.vat_breakdown[index]), **values})
+
+
+NOT_SUBJECT_TO_VAT: t.Final = ExemptionReason(code="VATEX-EU-O", text="Not subject to VAT")
+"""BT-121 and BT-120 of a category O breakdown (BR-O-10)."""
+
+
+def not_subject_to_vat(seller_country: str = "AT", buyer_country: str = "AT", **changes: t.Any) -> Invoice:
+    """:func:`complete` of a one-line "Not subject to VAT" (O) draft; its O breakdown has no BT-119 (issue #75).
+
+    The seller has a legal registration id (BR-CO-26) and no VAT id (BR-O-02); ``changes`` go to :func:`draft`.
+    """
+    seller = Seller(
+        name="Seller Example GmbH",
+        legal_registration_identifier=Identifier(value="HRB 00000"),
+        postal_address=SellerPostalAddress(country_code=seller_country),
+    )
+    data: dict[str, t.Any] = {"seller": seller, **changes}
+    return complete(
+        draft(line(category="O", rate=None), buyer_country=buyer_country, **data),
+        exemption_reasons={"O": NOT_SUBJECT_TO_VAT},
+    )
