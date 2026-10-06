@@ -190,3 +190,10 @@ def test_missing_artifacts_surface(monkeypatch: pytest.MonkeyPatch, tmp_path: t.
     monkeypatch.setenv("EUINVOICE_ARTIFACTS_DIR", str(tmp_path))
     with pytest.raises(ArtifactsNotAvailableError, match="artifacts fetch"):
         validate(ubl(CORE))
+
+
+def test_report_types_are_re_exported() -> None:
+    from euinvoice import validate as package
+
+    assert (package.Finding, package.Severity) == (Finding, Severity)
+    assert package.ValidationReport().ok
