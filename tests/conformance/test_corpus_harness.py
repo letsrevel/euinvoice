@@ -67,9 +67,11 @@ TWO_CREDIT_TRANSFERS: t.Final[dict[str, tuple[str, ...]]] = {
 TOO_LARGE: t.Final[frozenset[str]] = frozenset(
     f"zugferd-corpus:PEPPOL/Valid/Qvalia/Large_Invoice_sample{n}.xml" for n in (1, 2)
 )
-"""Peppol stress samples (25 MB and 61 MB) beyond the time budget of the suite: ``validate`` of sample1 alone takes
-about 300 s and its read did not finish in 30 min (measured 2026-10-06). ponytail: they are only classified here
-(Peppol UBL); the ceiling is the reader's and Saxon's cost on very large inputs, the upgrade path issue #80."""
+"""Peppol stress samples (25 MB and 61 MB) beyond the time budget of the suite. ponytail: they are only classified
+here (Peppol UBL). Reading is linear since #80 (``ubl.read`` about 6 s and 14 s CPU, round trip equal); the ceiling
+is Saxon running the official Peppol stylesheet, upstream and superlinear: ``validate`` takes about 42 s and 188 s
+CPU (measured 2026-10-06), minutes the conformance job should not spend. Sample2 also fails Peppol upstream
+(PEPPOL-COMMON-R049 x3, SE-R-013), so it needs an ``expected_invalid.toml`` entry if it ever joins the run."""
 
 
 def _kind(sample: Sample) -> str:

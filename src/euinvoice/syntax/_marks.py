@@ -61,7 +61,10 @@ class Marks:
         self._partial_text: set[etree._Element] = set()
 
     def path(self, element: etree._Element) -> str:
-        """The XPath of ``element`` (``ElementTree.getpath``; O(siblings times depth), so not once per element)."""
+        """The XPath of ``element`` (``ElementTree.getpath``).
+
+        It costs O(siblings at every ancestor level), so it must not be called once per element.
+        """
         return self._tree.getpath(element)
 
     def mark(self, element: etree._Element) -> etree._Element:
@@ -109,12 +112,13 @@ class Marks:
         """Each child element of ``parent`` with the last step of its ``getpath`` XPath, in one pass (#80).
 
         ``getpath`` is libxml2's ``xmlGetNodePath``, which counts the siblings at every level of every call, so
-        one call per element was quadratic in the number of invoice lines. This writes the same steps
-        (libxml2 2.14.6 ``tree.c``, ``xmlGetNodePath``, ``XML_ELEMENT_NODE`` branch): ``prefix:name``, ``name``
-        without a namespace, or ``*`` in a default namespace; then ``[n]``, the 1-based position among the
-        siblings it counts, unless it is the only one. A ``*`` step counts every sibling element; any other
-        counts those with the same local name and either no namespace or the same prefix (not the same URI).
-        Comments and PIs carry no data and are neither listed nor counted.
+        one call per element was quadratic in the number of invoice lines. This writes the same steps for every
+        element a reader can list (libxml2 2.14.6 ``tree.c``, ``xmlGetNodePath``, ``XML_ELEMENT_NODE`` branch;
+        libxml2 also truncates the tail of very long no-namespace ancestor paths, which readers never list):
+        ``prefix:name``, ``name`` without a namespace, or ``*`` in a default namespace; then ``[n]``, the
+        1-based position among the siblings it counts, unless it is the only one. A ``*`` step counts every
+        sibling element; any other counts those with the same local name and either no namespace or the same
+        prefix (not the same URI). Comments and PIs carry no data and are neither listed nor counted.
         """
         children = list(parent.iterchildren("*"))
         names: list[str | None] = []
@@ -133,7 +137,11 @@ class Marks:
         for position, (child, name) in enumerate(zip(children, names, strict=True), start=1):
             seen[name] = seen.get(name, 0) + 1
             index, count = (position, len(children)) if name is None else (seen[name], totals[name])
-            if name is not None and len(name.encode()) > 98:  # truncated by libxml2's 100-byte buffer
+            # libxml2 writes ``prefix:name`` into a 100-byte buffer with snprintf size 99, keeping 98 bytes.
+            # ponytail: such a name falls back to getpath, O(siblings) each, so a crafted invoice with many
+            # long-prefixed siblings is quadratic again. Upgrade path: replicate the byte truncation (cut the
+            # UTF-8 at 98 bytes as libxml2 does, then decode the way lxml decodes the result) and drop the fallback.
+            if name is not None and len(name.encode()) > 98:
                 steps.append((child, self.path(child).rpartition("/")[2]))
             else:
                 step = "*" if name is None else name

@@ -63,7 +63,7 @@ _NSMAPS: t.Final[tuple[dict[str | None, str], ...]] = (
 # The last name overflows libxml2's 100-byte step buffer once prefixed.
 _LOCAL_NAMES: t.Final = ("x", "y", "z" * 120)
 
-Spec = tuple[str | None, str, int, bool, list[t.Any]]
+type Spec = tuple[str | None, str, int, bool, list[Spec]]
 
 
 def _specs(children: st.SearchStrategy[list[Spec]]) -> st.SearchStrategy[Spec]:
@@ -154,3 +154,33 @@ def test_build_computes_the_error_location_only_on_failure() -> None:
     untouchable = t.cast(etree._Element, object())  # computing its XPath raises AttributeError
     built = read_errors.build(ItemAttribute, untouchable, {"name": "Colour", "value": "Blue"})
     assert built == ItemAttribute(name="Colour", value="Blue")
+
+
+@pytest.mark.parametrize(
+    "local",
+    [
+        "x" * 96,  # a:… is 98 bytes, the most libxml2 keeps: built here
+        "x" * 97,  # 99 bytes, truncated by libxml2: getpath fallback
+        "é" * 47 + "x",  # multibyte, 97 bytes
+    ],
+)
+def test_steps_at_the_libxml2_name_buffer_edge(local: str) -> None:
+    root = _edge_tree(local)
+    assert Marks(root).unmapped() == _getpath_unmapped(root, {root})[1:]  # [1:]: the oracle's root/@k
+
+
+def test_a_name_libxml2_cuts_inside_a_character_fails_as_getpath_does() -> None:
+    # a:… is 99 bytes: libxml2 cuts it inside an "é" and lxml cannot decode getpath's result (unchanged by #80).
+    root = _edge_tree("x" + "é" * 48)
+    with pytest.raises(UnicodeDecodeError):
+        _getpath_unmapped(root, {root})
+    with pytest.raises(UnicodeDecodeError):
+        Marks(root).unmapped()
+
+
+def _edge_tree(local: str) -> etree._Element:
+    """A root with two ``a:<local>`` children (indexed steps) and an ``a:y``."""
+    root = etree.Element(f"{{{_URI_A}}}root", nsmap={"a": _URI_A})
+    for name in (local, local, "y"):
+        etree.SubElement(root, f"{{{_URI_A}}}{name}")
+    return root
