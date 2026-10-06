@@ -67,7 +67,7 @@ def build[M: EuInvoiceModel](model: type[M], at: etree._Element, term: str, /, *
     Raises:
         ParseError: The values do not form a valid model; the message names each failing BT/BG id.
     """
-    return read_errors.build(model, _path(at), values, term)
+    return read_errors.build(model, at, values, term)
 
 
 class Cursor:

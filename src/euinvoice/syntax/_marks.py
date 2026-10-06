@@ -61,7 +61,7 @@ class Marks:
         self._partial_text: set[etree._Element] = set()
 
     def path(self, element: etree._Element) -> str:
-        """The XPath of ``element`` (``ElementTree.getpath``)."""
+        """The XPath of ``element`` (``ElementTree.getpath``; O(siblings times depth), so not once per element)."""
         return self._tree.getpath(element)
 
     def mark(self, element: etree._Element) -> etree._Element:
@@ -88,19 +88,54 @@ class Marks:
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the input no business term took (``ParseResult.unmapped``), in document order."""
         found: list[str] = []
-        self._collect(self.root, found)
+        self._collect(self.root, self.path(self.root), found)
         return tuple(found)
 
-    def _collect(self, element: etree._Element, found: list[str]) -> None:
-        path = self.path(element)
+    def _collect(self, element: etree._Element, path: str, found: list[str]) -> None:
         for key in element.attrib:
             name = key if isinstance(key, str) else key.decode()
             if (element, name) not in self._attributes:
                 found.append(f"{path}/@{attribute_name(element, name)}")
         if element in self._partial_text:
             found.append(f"{path}/text()")
-        for child in element.iterchildren("*"):  # elements only: comments and PIs carry no data
+        for child, step in self._steps(element):
+            child_path = f"{path}/{step}"
             if child in self._elements:
-                self._collect(child, found)
+                self._collect(child, child_path, found)
             else:
-                found.append(self.path(child))
+                found.append(child_path)
+
+    def _steps(self, parent: etree._Element) -> list[tuple[etree._Element, str]]:
+        """Each child element of ``parent`` with the last step of its ``getpath`` XPath, in one pass (#80).
+
+        ``getpath`` is libxml2's ``xmlGetNodePath``, which counts the siblings at every level of every call, so
+        one call per element was quadratic in the number of invoice lines. This writes the same steps
+        (libxml2 2.14.6 ``tree.c``, ``xmlGetNodePath``, ``XML_ELEMENT_NODE`` branch): ``prefix:name``, ``name``
+        without a namespace, or ``*`` in a default namespace; then ``[n]``, the 1-based position among the
+        siblings it counts, unless it is the only one. A ``*`` step counts every sibling element; any other
+        counts those with the same local name and either no namespace or the same prefix (not the same URI).
+        Comments and PIs carry no data and are neither listed nor counted.
+        """
+        children = list(parent.iterchildren("*"))
+        names: list[str | None] = []
+        for child in children:
+            qname = etree.QName(child)
+            if not qname.namespace:
+                names.append(qname.localname)
+            else:
+                prefix = t.cast(str | None, child.prefix)  # lxml-stubs say str; None in a default namespace
+                names.append(None if prefix is None else f"{prefix}:{qname.localname}")
+        totals: dict[str | None, int] = {}
+        for name in names:
+            totals[name] = totals.get(name, 0) + 1
+        seen: dict[str | None, int] = {}
+        steps: list[tuple[etree._Element, str]] = []
+        for position, (child, name) in enumerate(zip(children, names, strict=True), start=1):
+            seen[name] = seen.get(name, 0) + 1
+            index, count = (position, len(children)) if name is None else (seen[name], totals[name])
+            if name is not None and len(name.encode()) > 98:  # truncated by libxml2's 100-byte buffer
+                steps.append((child, self.path(child).rpartition("/")[2]))
+            else:
+                step = "*" if name is None else name
+                steps.append((child, step if count == 1 else f"{step}[{index}]"))
+        return steps
