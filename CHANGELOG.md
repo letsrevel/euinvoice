@@ -10,6 +10,10 @@ All notable changes to this project are documented here. The format follows
 - BT coverage gate (`tests/syntax/test_bt_coverage.py`): fails if any EN 16931 term or group lacks a write
   and a read test in UBL and in CII (or a reasoned exemption), and generates `docs/reference/bt-coverage.md`
   (197 ids, all covered in all four cells, no exemptions).
+- Property-based conformance tests (#31): Hypothesis invoices built through `calc.complete` (VAT categories S, Z,
+  E, AE, K, G, O, allowances and charges, credit notes, BT-6, payment means) pass `calc.check`, validate without
+  fatal or error findings under EN 16931, Peppol BIS and XRechnung in UBL and CII, and round-trip exactly
+  through UBL and CII. Hypothesis profiles `default` (no deadline) and `ci` (more examples, `HYPOTHESIS_PROFILE=ci`).
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the
