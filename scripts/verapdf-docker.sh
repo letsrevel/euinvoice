@@ -2,7 +2,7 @@
 # veraPDF CLI (PDF/A validator) in Docker, pinned by version and image digest (plan §5: the verapdf/cli image).
 # Runs veraPDF in the current directory, mounted read-only at the image's working directory /data, so file
 # arguments must be paths relative to it. Point EUINVOICE_VERAPDF at this script to let `make conformance` run
-# tests/conformance/test_facturx_verapdf.py without a local Java install; CI does that in the conformance job.
+# tests/conformance/test_facturx_verapdf.py without a local Java install (CI wiring: #25).
 #
 # Usage: scripts/verapdf-docker.sh [veraPDF options] FILE...
 # Bump: pick the tag at hub.docker.com/r/verapdf/cli, then pin the digest that `docker pull` prints.

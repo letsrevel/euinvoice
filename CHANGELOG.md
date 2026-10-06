@@ -23,7 +23,7 @@ All notable changes to this project are documented here. The format follows
   `PdfError`). It writes the associated file (`factur-x.xml` / `xrechnung.xml`, `/AFRelationship`, `text/xml`,
   `/ModDate`, catalog `/AF`) and the Factur-X XMP with its PDF/A extension schema, using the values the pinned
   ZUGFeRD corpus attests until the Factur-X spec package is pinned (#42). The conformance suite runs veraPDF
-  (PDF/A-3B) on the output through `scripts/verapdf-docker.sh` (`$EUINVOICE_VERAPDF`).
+  (PDF/A-3B) on the output when `$EUINVOICE_VERAPDF` (e.g. `scripts/verapdf-docker.sh`) or `verapdf` is available.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the

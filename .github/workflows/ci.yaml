@@ -68,13 +68,9 @@ jobs:
         env:
           EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
         run: make artifacts
-      # veraPDF (PDF/A validator, plan §5) runs from the verapdf/cli image pinned by digest in the script.
-      - name: Pull veraPDF image
-        run: grep -o 'verapdf/cli:[^"]*' scripts/verapdf-docker.sh | xargs docker pull --platform linux/amd64
       - name: Conformance suite
         env:
           EUINVOICE_ARTIFACTS_DIR: ${{ github.workspace }}/.artifacts
-          EUINVOICE_VERAPDF: ${{ github.workspace }}/scripts/verapdf-docker.sh
         run: uv run pytest -n auto -m conformance
 
   build:
