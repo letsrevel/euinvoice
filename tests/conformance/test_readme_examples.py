@@ -8,4 +8,4 @@ pytestmark = pytest.mark.conformance
 
 
 def test_every_readme_example_runs() -> None:
-    assert _readme.run(with_artifacts=True) == 13
+    assert _readme.run(with_artifacts=True) == 15

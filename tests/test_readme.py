@@ -9,4 +9,4 @@ def test_the_readme_has_its_three_example_blocks() -> None:
 
 
 def test_the_readme_examples_run_without_artifacts() -> None:
-    assert _readme.run(with_artifacts=False) == 10
+    assert _readme.run(with_artifacts=False) == 12
