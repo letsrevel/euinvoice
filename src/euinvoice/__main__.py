@@ -17,13 +17,18 @@ comes from BT-24 (``validate`` falls back to EN 16931 core as :func:`euinvoice.v
 Exit codes:
 
 * ``0``: success; ``validate`` found nothing ``fatal`` / ``error`` (warnings allowed).
-* ``1``: the document was rejected: ``validate`` found a ``fatal`` / ``error`` finding, ``convert`` was refused
-  by the pre-flight / calculation checks (the findings go to stderr), the input is not a readable invoice
-  (malformed XML, unsupported root or profile, a PDF without one embedded invoice), or another euinvoice error
-  (e.g. a failed artifact download).
-* ``2``: no verdict, fix the command or the setup: a usage error (argparse, an unknown ``--profile``), ``FILE``
-  cannot be read or ``OUT`` written, the artifacts are missing (the message names ``artifacts fetch``) or the
-  profile's Schematron is not pinned, or an extra (``[pdf]``) is not installed.
+* ``1``: the document was rejected: ``validate`` found a ``fatal`` / ``error`` finding (``validate --profile ID``
+  on a document whose syntax the profile does not support included), ``convert`` was refused by the pre-flight /
+  calculation checks (the findings go to stderr), the input is not a readable invoice (malformed XML, unsupported
+  root or profile, a PDF without one embedded invoice), or an artifact fails its integrity check
+  (``ArtifactIntegrityError``: sha256 mismatch, unsafe archive member).
+* ``2``: no verdict, fix the command or the setup: a usage error (argparse, an unknown ``--profile``, ``convert
+  --profile ID --to SYNTAX`` with a syntax the profile does not support), ``FILE`` cannot be read or ``OUT``
+  written, an artifact download fails (network / HTTP), the artifacts are missing (the message names
+  ``artifacts fetch``) or the profile's Schematron is not pinned, or an extra (``[pdf]``) is not installed.
+
+Text that the terminal's encoding cannot represent (e.g. German rule messages on an ASCII stdout) is written
+with backslash escapes instead of failing.
 
 JSON output (``--json``), one object on stdout:
 
@@ -40,8 +45,12 @@ Errors are a single ``error: ...`` line on stderr in either mode.
 import argparse
 import dataclasses
 import datetime
+import io
 import json
+import logging
+import os
 import sys
+import tempfile
 import typing as t
 from decimal import Decimal
 from pathlib import Path
@@ -91,8 +100,12 @@ def _finding_line(finding: Finding) -> str:
 
 
 def _validate(args: argparse.Namespace) -> int:
-    xml, _ = _xml_of(_read(args.file))
-    report: ValidationReport = validate(xml, args.profile)
+    xml, found = _xml_of(_read(args.file))
+    # For a PDF, the Factur-X level in the XMP selects the profile (a level shares its BT-24 with EN 16931 core or
+    # XRechnung), as in ``info``. A level whose Factur-X Schematron is not pinned (MINIMUM, BASIC WL, BASIC,
+    # EXTENDED; issue #42) then makes validate() raise ArtifactsNotAvailableError (exit 2) instead of a verdict.
+    profile = args.profile if args.profile is not None or found is None else found.profile
+    report: ValidationReport = validate(xml, profile)
     if args.json:
         payload = {"ok": report.ok, "findings": [dataclasses.asdict(f) for f in report.findings]}
         sys.stdout.write(json.dumps(payload, indent=2) + "\n")
@@ -106,6 +119,12 @@ def _validate(args: argparse.Namespace) -> int:
 
 
 def _convert(args: argparse.Namespace) -> int:
+    if args.profile is not None and Syntax(args.to) not in args.profile.syntaxes:
+        supported = ", ".join(sorted(args.profile.syntaxes))
+        sys.stderr.write(
+            f"error: profile {args.profile.id!r} does not support --to {args.to}; it supports {supported}\n"
+        )
+        return 2
     result = parse_detailed(_read(args.file))
     for path in result.unmapped:
         sys.stderr.write(f"warning: not converted, no business term: {path}\n")
@@ -122,8 +141,19 @@ def _convert(args: argparse.Namespace) -> int:
         sys.stdout.buffer.write(xml)
         sys.stdout.buffer.flush()
     else:
-        Path(args.output).write_bytes(xml)
+        _write_atomically(Path(args.output), xml)
     return 0
+
+
+def _write_atomically(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` through a temporary file in the same directory, so ``path`` is never half-written."""
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as tmp:
+        tmp.write(data)
+    try:
+        os.replace(tmp.name, path)
+    except OSError:
+        os.unlink(tmp.name)
+        raise
 
 
 def _plain(value: object) -> str | None:
@@ -193,29 +223,34 @@ def _profile_arg(value: str) -> profiles.Profile:
         raise argparse.ArgumentTypeError(f"unknown profile {value!r}; choose from {', '.join(PROFILES)}") from None
 
 
+_EPILOG: t.Final = "exit codes: 0 ok, 1 document rejected (findings, refused, unreadable invoice), 2 usage or setup"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m euinvoice",
         description="EN 16931 e-invoicing toolkit (euinvoice).",
-        epilog="exit codes: 0 ok, 1 document rejected (findings, refused, unreadable invoice), 2 usage or setup",
+        epilog=_EPILOG,
     )
     commands = parser.add_subparsers(dest="command", required=True)
     profile_help = f"profile id (default: from BT-24): {', '.join(PROFILES)}"
 
-    check = commands.add_parser("validate", help="validate a UBL / CII invoice or Factur-X / ZUGFeRD PDF")
+    check = commands.add_parser(
+        "validate", help="validate a UBL / CII invoice or Factur-X / ZUGFeRD PDF", epilog=_EPILOG
+    )
     check.add_argument("file", metavar="FILE", help="the invoice; - reads stdin")
     check.add_argument("--profile", type=_profile_arg, metavar="ID", help=profile_help)
     check.add_argument("--json", action="store_true", help="print the report as JSON")
     check.set_defaults(run=_validate)
 
-    convert = commands.add_parser("convert", help="convert an invoice to UBL or CII")
+    convert = commands.add_parser("convert", help="convert an invoice to UBL or CII", epilog=_EPILOG)
     convert.add_argument("file", metavar="FILE", help="the invoice (XML or Factur-X / ZUGFeRD PDF); - reads stdin")
     convert.add_argument("--to", required=True, choices=[str(s) for s in Syntax], help="target syntax")
     convert.add_argument("--profile", type=_profile_arg, metavar="ID", help=profile_help)
     convert.add_argument("-o", "--output", metavar="OUT", help="write here instead of stdout")
     convert.set_defaults(run=_convert)
 
-    info = commands.add_parser("info", help="show what an invoice is: syntax, profile, number, totals")
+    info = commands.add_parser("info", help="show what an invoice is: syntax, profile, number, totals", epilog=_EPILOG)
     info.add_argument("file", metavar="FILE", help="the invoice (XML or Factur-X / ZUGFeRD PDF); - reads stdin")
     info.add_argument("--json", action="store_true", help="print as JSON")
     info.set_defaults(run=_info)
@@ -248,8 +283,16 @@ def main(argv: t.Sequence[str] | None = None) -> int:
         The process exit code (see the module docstring). Usage errors found by argparse exit with 2 through
         ``SystemExit``.
     """
+    for stream in (sys.stdout, sys.stderr):
+        if isinstance(stream, io.TextIOWrapper):
+            stream.reconfigure(errors="backslashreplace")
     args = _parser().parse_args(argv)
     run = t.cast(t.Callable[[argparse.Namespace], int], args.run)
+    # pypdf logs recoverable damage (e.g. "EOF marker not found") as warnings; the CLI reports a PdfError as one
+    # ``error:`` line instead, so the pypdf logger is quieted for the run and restored afterwards.
+    pypdf_logger = logging.getLogger("pypdf")
+    level = pypdf_logger.level
+    pypdf_logger.setLevel(logging.ERROR)
     try:
         return run(args)
     except (ArtifactsNotAvailableError, OSError, ImportError) as exc:
@@ -258,6 +301,8 @@ def main(argv: t.Sequence[str] | None = None) -> int:
     except EuInvoiceError as exc:
         sys.stderr.write(f"error: {exc}\n")
         return 1
+    finally:
+        pypdf_logger.setLevel(level)
 
 
 if __name__ == "__main__":

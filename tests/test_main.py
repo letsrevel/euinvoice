@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 import runpy
 import sys
 import typing as t
@@ -173,7 +174,8 @@ def test_validate_extracts_the_xml_of_a_pdf(tmp_path: Path, monkeypatch: pytest.
     hybrid = facturx.embed(pdf(), invoice, profile=profiles.FACTURX_EN16931)
     calls = _fake_validate(monkeypatch, ValidationReport())
     assert cli.main(["validate", _write(tmp_path, "a.pdf", hybrid)]) == 0
-    assert calls == [(facturx.extract(hybrid).xml, None)]
+    # The XMP level selects the profile, as in ``info``.
+    assert calls == [(facturx.extract(hybrid).xml, profiles.FACTURX_EN16931)]
 
 
 def test_validate_reads_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -283,10 +285,21 @@ def test_convert_refuses_on_preflight_findings_exit_1(
     assert b"fatal BR-CO-15 [calc]" in captured.err
 
 
-def test_convert_profile_without_the_target_syntax_exits_1(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_convert_profile_without_the_target_syntax_is_a_usage_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Checked before reading FILE, so the missing file is never opened.
+    assert cli.main(["convert", "--to", "ubl", "--profile", "facturx-en16931", str(tmp_path / "nope.xml")]) == 2
+    assert capsys.readouterr().err == "error: profile 'facturx-en16931' does not support --to ubl; it supports cii\n"
+
+
+def test_convert_output_failure_leaves_no_temporary_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     source = _write(tmp_path, "a.xml", ubl.write(_core_invoice()))
-    assert cli.main(["convert", "--to", "ubl", "--profile", "facturx-en16931", source]) == 1
-    assert "does not support UBL" in capsys.readouterr().err
+    target = tmp_path / "out"
+    target.mkdir()  # os.replace cannot put a file over a directory
+    assert cli.main(["convert", "--to", "cii", "-o", str(target), source]) == 2
+    assert capsys.readouterr().err.startswith("error: ")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.xml", "out"]
 
 
 # --- info -----------------------------------------------------------------------------------------------------------
@@ -350,3 +363,49 @@ def test_info_of_an_unregistered_bt24(tmp_path: Path, capsys: pytest.CaptureFixt
     assert cli.main(["info", "--json", _write(tmp_path, "a.xml", ubl.write(invoice))]) == 0
     info = json.loads(capsys.readouterr().out)
     assert (info["specification_identifier"], info["profile"]) == ("urn:example.com:cius", None)
+
+
+def test_text_the_terminal_cannot_encode_is_escaped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    german = Finding("BR-DE-1", Severity.FATAL, None, "Eine Rechnung muss übermittelt werden.", "xrechnung-ubl")
+    _fake_validate(monkeypatch, ValidationReport((german,)))
+    buffer = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(buffer, encoding="ascii"))
+    assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 1
+    sys.stdout.flush()
+    assert b"Eine Rechnung muss \\xfcbermittelt werden." in buffer.getvalue()
+
+
+def test_artifacts_fetch_download_failure_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def offline(names: t.Any) -> dict[str, Path]:
+        raise ArtifactsNotAvailableError("cen-ubl 1.3.16: could not download https://example.com/x.zip")
+
+    monkeypatch.setattr(artifacts, "fetch", offline)
+    assert cli.main(["artifacts", "fetch"]) == 2
+    assert capsys.readouterr().err == "error: cen-ubl 1.3.16: could not download https://example.com/x.zip\n"
+
+
+@pytest.mark.parametrize("command", ["validate", "convert", "info"])
+def test_subcommand_help_lists_the_exit_codes(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        cli.main([command, "--help"])
+    assert "exit codes: 0 ok, 1 document rejected" in capsys.readouterr().out
+
+
+def test_a_damaged_pdf_is_one_error_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    # pypdf logs "EOF marker not found" for this input before failing; outside pytest that warning reaches stderr.
+    assert cli.main(["validate", _write(tmp_path, "a.pdf", b"%PDF-1.7\nnot really")]) == 1
+    assert capsys.readouterr().err.startswith("error: cannot read the PDF: ")
+    assert [r.getMessage() for r in caplog.records if r.name.startswith("pypdf")] == []
+    assert logging.getLogger("pypdf").level == logging.NOTSET  # restored after the run
+
+
+def test_a_plain_text_stdout_is_left_as_is(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _fake_validate(monkeypatch, ValidationReport())
+    out = io.StringIO()  # no encoding to reconfigure, e.g. a redirected stream in an embedding application
+    monkeypatch.setattr(sys, "stdout", out)
+    assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 0
+    assert out.getvalue() == "ok: 0 fatal/error, 0 warning/information\n"
