@@ -22,4 +22,6 @@ for arg in "$@"; do
     fi
 done
 
-exec docker run --rm --platform linux/amd64 --network none -v "$PWD:/data:ro" "$IMAGE" "${args[@]}"
+# Run as the calling user: the image's own user (uid 100) cannot read a 0700 directory such as pytest's tmp_path on a
+# Linux host (on the GitHub runner veraPDF reported every file as missing). Docker Desktop hides this on macOS.
+exec docker run --rm --platform linux/amd64 --network none --user "$(id -u):$(id -g)" -v "$PWD:/data:ro" "$IMAGE" "${args[@]}"
