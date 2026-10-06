@@ -10,14 +10,14 @@ round-trip invariant, with the ids each must fail with.
 
 import dataclasses
 import functools
+import io
 import pathlib
 import tomllib
 import typing as t
 
 import pypdf
-from lxml import etree
 
-from euinvoice import _xml
+from euinvoice import facturx
 from euinvoice.errors import ArtifactsNotAvailableError
 from euinvoice.validate import artifacts
 
@@ -43,17 +43,14 @@ type CrossOutcome = t.Literal["refuses", "reads"]
 
 @dataclasses.dataclass(frozen=True)
 class FacturXPdf:
-    """A Factur-X PDF of the ZUGFeRD corpus: its XMP level, the XMP file name and the embedded files."""
+    """A Factur-X PDF of the ZUGFeRD corpus: its XMP level, the XMP file name, the attachment names and the invoice."""
 
     name: str
     level: str
     xmp_filename: str
-    attachments: dict[str, bytes]
-
-    @property
-    def xml(self) -> bytes:
-        """The embedded invoice the XMP ``fx:DocumentFileName`` names."""
-        return self.attachments[self.xmp_filename]
+    attachments: frozenset[str]
+    xml: bytes
+    """The embedded invoice the XMP ``fx:DocumentFileName`` names (:func:`euinvoice.facturx.extract`)."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -129,37 +126,27 @@ def _xml_samples(source: artifacts.SourceName) -> list[Sample]:
     return [Sample(source, p.relative_to(root).as_posix()) for p in paths]
 
 
-def _fx(xmp: etree._Element, name: str) -> list[str]:
-    """``fx:<name>`` of the Factur-X XMP schema, as element text or ``rdf:Description`` attribute."""
-    qname = f"{{{_xml.FACTURX_XMP}}}{name}"
-    return [element.text or "" for element in xmp.iter(qname)] + [
-        str(element.get(qname)) for element in xmp.iter() if element.get(qname) is not None
-    ]
-
-
 def _read_pdf(path: pathlib.Path, name: str) -> FacturXPdf | None:
-    """The Factur-X view of a PDF, or ``None`` when its XMP does not declare the Factur-X schema."""
-    reader = pypdf.PdfReader(path)
-    root = t.cast(pypdf.generic.DictionaryObject, reader.trailer["/Root"])
-    metadata = root.get("/Metadata")
-    if metadata is None:
+    """The Factur-X view of a PDF, or ``None`` when its XMP declares a ZUGFeRD 1.0 / 2.0 schema instead.
+
+    A PDF in scope that :func:`euinvoice.facturx.extract` refuses (no invoice XMP, an ambiguous or unattested
+    attachment) fails collection loudly with its ``PdfError``: every PDF under :data:`PDF_SCOPE` is an e-invoice.
+    """
+    data = path.read_bytes()
+    extracted = facturx.extract(data)
+    if extracted.container != "factur-x":
         return None
-    xmp = _xml.parse(t.cast(pypdf.generic.StreamObject, metadata.get_object()).get_data())
-    levels, filenames = _fx(xmp, "ConformanceLevel"), _fx(xmp, "DocumentFileName")
-    if not levels:
-        return None
-    assert len(levels) == 1, name
-    assert len(filenames) == 1, name
-    attachments = {key: value[0] for key, value in reader.attachments.items()}
-    return FacturXPdf(name, levels[0], filenames[0], attachments)
+    level = t.cast(str, extracted.conformance_level)  # required for the Factur-X schema
+    attachments = frozenset(pypdf.PdfReader(io.BytesIO(data)).attachments)
+    return FacturXPdf(name, level, extracted.filename, attachments, extracted.xml)
 
 
 @functools.cache
 def facturx_pdfs() -> tuple[FacturXPdf, ...]:
     """Every PDF under :data:`PDF_SCOPE` whose XMP declares the Factur-X 1.0 / ZUGFeRD 2.1+ schema.
 
-    The PDFs are read with pypdf (the ``[pdf]`` extra) only to get at the XMP and the attachments; every XML goes
-    through :func:`euinvoice._xml.parse`.
+    The invoice is taken out with :func:`euinvoice.facturx.extract`; the attachment names are listed with pypdf
+    (the ``[pdf]`` extra) for an independent check of the XMP file name.
     """
     corpus = _cached("zugferd-corpus")
     if corpus is None:

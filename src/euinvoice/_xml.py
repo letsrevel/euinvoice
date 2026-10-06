@@ -67,6 +67,16 @@ XSLT: t.Final = "http://www.w3.org/1999/XSL/Transform"
 FACTURX_XMP: t.Final = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
 """The Factur-X 1.0 / ZUGFeRD 2.1+ XMP extension schema (prefix ``fx``; plan §5), as declared in the XMP of the
 Factur-X PDFs of the pinned ZUGFeRD corpus (e.g. ``ZUGFeRDv2/correct/symtrax/Beispiele``, ``XML-Rechnung/FX``)."""
+ZUGFERD_2_XMP: t.Final = "urn:zugferd:pdfa:CrossIndustryDocument:invoice:2p0#"
+"""The ZUGFeRD 2.0 XMP extension schema, read by ``facturx.extract`` only (plan §8 7.2): the XMP of all 30 ZUGFeRD 2.0
+PDFs of ``ZUGFeRDv2/correct`` in the pinned ZUGFeRD corpus (e.g. ``intarsys/EN16931``)."""
+ZUGFERD_1_XMP: t.Final = "urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#"
+"""The ZUGFeRD 1.0 XMP extension schema, read by ``facturx.extract`` only: 18 of the 21 PDFs of ``ZUGFeRDv1/correct``
+in the pinned ZUGFeRD corpus (e.g. ``Intarsys``)."""
+ZUGFERD_1_RC_XMP: t.Final = "urn:ferd:pdfa:invoice:rc#"
+"""The XMP schema of the ZUGFeRD 1.0 release candidate (``fx``-like properties, ``Version`` ``RC``), read by
+``facturx.extract`` only: the other 3 of ``ZUGFeRDv1/correct`` (``Mustangproject/MustangGnuaccountingBeispielRE-
+2014*.pdf``)."""
 # XMP / PDF/A namespaces, as declared in the XMP of all 74 Factur-X PDFs of the pinned ZUGFeRD corpus
 # (``ZUGFeRDv2/correct``, ``XML-Rechnung/FX``; e.g. ``FNFE-factur-x-examples/Facture_FR_BASICWL.pdf``).
 RDF: t.Final = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
