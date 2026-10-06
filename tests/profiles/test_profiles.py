@@ -41,9 +41,12 @@ class TestRegistry:
         assert "urn:cen.eu:en16931:2017" in message
 
     def test_lookup_is_exact(self) -> None:
-        # A CIUS identifier only *starts* with the core one; it must not resolve to the core profile.
+        # A CIUS identifier only *starts* with the core one (and an extension with the CIUS one); neither
+        # resolves to the profile whose BT-24 it extends.
         with pytest.raises(UnsupportedDocumentError):
-            profiles.get(PEPPOL_BT24)
+            profiles.get("urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0")
+        with pytest.raises(UnsupportedDocumentError):
+            profiles.get(PEPPOL_BT24 + "#conformant#urn:example.com:extension")
 
     def test_index_rejects_two_profiles_with_the_same_bt24(self) -> None:
         with pytest.raises(ValueError, match="urn:example:test"):

@@ -386,3 +386,31 @@ def full_invoice(**changes: t.Any) -> Invoice:
         ),
     }
     return Invoice(**{**data, **changes})
+
+
+def peppol_invoice(**changes: t.Any) -> Invoice:
+    """:func:`minimal_invoice` plus what Peppol BIS requires; valid under ``profiles.PEPPOL`` in UBL and CII.
+
+    BT-10 (PEPPOL-EN16931-R003), GLN electronic addresses (R010, R020; EAS ``0088`` passes
+    PEPPOL-COMMON-R040) and Austrian parties (no Peppol national rule set applies to AT). BT-23 and BT-24
+    are the Peppol ones, as ``PEPPOL.prepare()`` sets them.
+    """
+    data: dict[str, t.Any] = {
+        "buyer_reference": "BUYER-REF-1",
+        "process_control": ProcessControl(
+            business_process_type="urn:fdc:peppol.eu:2017:poacc:billing:01:1.0",
+            specification_identifier="urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0",
+        ),
+        "seller": Seller(
+            name="Seller Example GmbH",
+            vat_identifier="ATU00000000",
+            electronic_address=Identifier(value="4000001000005", scheme_id="0088"),
+            postal_address=SellerPostalAddress(country_code="AT"),
+        ),
+        "buyer": Buyer(
+            name="Buyer Example AG",
+            electronic_address=Identifier(value="4000001000036", scheme_id="0088"),
+            postal_address=BuyerPostalAddress(country_code="AT"),
+        ),
+    }
+    return minimal_invoice(**{**data, **changes})

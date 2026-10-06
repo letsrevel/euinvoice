@@ -11,6 +11,7 @@ from euinvoice.syntax import Syntax
 
 CORE = "urn:cen.eu:en16931:2017"
 PEPPOL = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
+XRECHNUNG = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
 
 
 def ubl(root: str = "Invoice", bt24: str | None = CORE, namespace: str = _xml.UBL_INVOICE) -> bytes:
@@ -59,12 +60,17 @@ def test_bt24_whitespace_is_normalized_like_the_official_rules() -> None:
 
 
 @pytest.mark.parametrize(
-    "data", [ubl(bt24=PEPPOL), cii(PEPPOL), cii("urn:ferd:CrossIndustryDocument:invoice:1p0:comfort")]
+    "data", [ubl(bt24=XRECHNUNG), cii(XRECHNUNG), cii("urn:ferd:CrossIndustryDocument:invoice:1p0:comfort")]
 )
 def test_a_well_formed_invoice_with_an_unregistered_bt24_is_classified_without_a_profile(data: bytes) -> None:
     detection = detect(data)
     assert detection.profile is None
-    assert detection.specification_identifier in {PEPPOL, "urn:ferd:CrossIndustryDocument:invoice:1p0:comfort"}
+    assert detection.specification_identifier in {XRECHNUNG, "urn:ferd:CrossIndustryDocument:invoice:1p0:comfort"}
+
+
+@pytest.mark.parametrize("data", [ubl(bt24=PEPPOL), cii(PEPPOL)], ids=["ubl", "cii"])
+def test_the_peppol_bt24_resolves_to_the_peppol_profile(data: bytes) -> None:
+    assert detect(data).profile is profiles.PEPPOL
 
 
 def test_bt24_normalization_keeps_non_xml_whitespace() -> None:
