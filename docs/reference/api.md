@@ -20,6 +20,10 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ::: euinvoice.report.Severity
 
+::: euinvoice.report.KositAssessment
+
+::: euinvoice.report.SeverityOverride
+
 ::: euinvoice.Syntax
 
 ::: euinvoice.ParseResult

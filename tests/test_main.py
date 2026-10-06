@@ -18,7 +18,7 @@ from euinvoice import __main__ as cli
 from euinvoice import _xml, facturx, parse_detailed, profiles, to_xml
 from euinvoice.errors import ArtifactIntegrityError, ArtifactsNotAvailableError
 from euinvoice.model import Invoice, ProcessControl
-from euinvoice.report import Finding, Severity, ValidationReport
+from euinvoice.report import Finding, KositAssessment, Severity, SeverityOverride, ValidationReport
 from euinvoice.syntax import Syntax, cii, ubl
 from euinvoice.syntax.result import ParseResult
 from euinvoice.validation import artifacts
@@ -153,7 +153,74 @@ def test_validate_json(
             }
             for f in report.findings
         ],
+        "kosit": None,
     }
+
+
+_DOWNGRADED = Finding("BR-CL-23", Severity.FATAL, "/Invoice/cac:InvoiceLine[1]", "unit code", "cen-ubl")
+_KOSIT = KositAssessment(
+    "EN16931 XRechnung (UBL Invoice)",
+    overrides=(SeverityOverride(_DOWNGRADED, Severity.WARNING), SeverityOverride(_WARNING, Severity.ERROR)),
+    blocking=(_WARNING, _ERROR),
+)
+
+
+def test_validate_json_carries_the_kosit_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The exit code stays tied to ok (here not ok), whatever KoSIT says.
+    _fake_validate(monkeypatch, ValidationReport((_DOWNGRADED, _WARNING, _ERROR), kosit=_KOSIT))
+    assert cli.main(["validate", "--json", _write(tmp_path, "a.xml", b"<x/>")]) == 1
+    assert json.loads(capsys.readouterr().out)["kosit"] == {
+        "scenario": "EN16931 XRechnung (UBL Invoice)",
+        "accepted": False,
+        "overrides": [
+            {"rule_id": "BR-CL-23", "severity": "fatal", "effective_severity": "warning"},
+            {"rule_id": "UBL-CR-001", "severity": "warning", "effective_severity": "error"},
+        ],
+        # Why KoSIT rejects: an upgraded warning (its override) and a fatal finding no customLevel touches.
+        "blocking": [
+            {"rule_id": "UBL-CR-001", "severity": "warning", "effective_severity": "error"},
+            {"rule_id": "BR-02", "severity": "fatal", "effective_severity": "fatal"},
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("kosit", "line"),
+    [
+        (_KOSIT, "kosit: rejected under scenario 'EN16931 XRechnung (UBL Invoice)' (2 severity overrides)\n"),
+        (
+            KositAssessment("EN16931 XRechnung (CII)"),
+            "kosit: accepted under scenario 'EN16931 XRechnung (CII)' (0 severity overrides)\n",
+        ),
+        (
+            KositAssessment("EN16931 XRechnung (CII)", (SeverityOverride(_DOWNGRADED, Severity.WARNING),)),
+            "kosit: accepted under scenario 'EN16931 XRechnung (CII)' (1 severity override)\n",
+        ),
+    ],
+    ids=["rejected", "accepted", "one-override"],
+)
+def test_validate_text_adds_one_kosit_line_before_the_verdict(
+    kosit: KositAssessment,
+    line: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _fake_validate(monkeypatch, ValidationReport((_WARNING,), kosit=kosit))
+    assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 0
+    out = capsys.readouterr().out
+    assert out.endswith(line + "ok: 0 fatal/error, 1 warning/information\n")
+    assert out.count("kosit:") == 1
+
+
+def test_validate_text_has_no_kosit_line_without_a_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_validate(monkeypatch, ValidationReport((_WARNING,)))
+    assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 0
+    assert "kosit" not in capsys.readouterr().out
 
 
 def test_validate_passes_the_profile_by_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

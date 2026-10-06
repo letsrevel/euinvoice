@@ -228,8 +228,8 @@ def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
     assert {f.rule_id for f in report.findings if f.source == EUINVOICE_SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
 
 
-# KoSIT customLevel overrides (issue #49, needs-human) are not applied; validate() reports the raw official
-# flags (D8). These tests pin the gap in both directions so a change on either side is noticed.
+# validate() reports the raw official flags (D8) in findings / ok; KoSIT's customLevel overrides only feed
+# report.kosit (issue #49, test_kosit_official.py). These tests pin the raw-flag side in both directions.
 #
 # Downgrades: the instances expected_invalid.toml lists fail raw CEN flags that KoSIT's scenarios.xml
 # (xrechnung-validator-configuration 2026-08-31) downgrades with <customLevel level="information"> (the entries
@@ -245,9 +245,9 @@ def test_every_xrechnung_testsuite_instance_validates_under_its_detected_profile
 
 
 # Upgrades: CEN 1.3.16 flags these rules ``warning``, so the raw-flag report is ok, while KoSIT's
-# scenarios.xml sets them to <customLevel level="error"> and rejects the document: CII-SR-452 / CII-SR-453
-# (EN16931-CII-syntax.sch, "Only one SpecifiedTradePaymentTerms [Description] should be present") in the
-# XRechnung CII scenario; UBL-CR-646 (EN16931-UBL-syntax.sch, "should not include the InvoiceLine
+# scenarios.xml sets them to <customLevel level="error"> and rejects the document (report.kosit is not accepted):
+# CII-SR-452 / CII-SR-453 (EN16931-CII-syntax.sch, "Only one SpecifiedTradePaymentTerms [Description] should be
+# present") in the XRechnung CII scenario; UBL-CR-646 (EN16931-UBL-syntax.sch, "should not include the InvoiceLine
 # SubInvoiceLine") in the XRechnung UBL Invoice scenario.
 CAC = f"{{{_xml.UBL_CAC}}}"
 
@@ -283,3 +283,5 @@ def test_upgraded_warnings_are_not_blocking_under_raw_flags(
     warnings = {(f.rule_id, f.source) for f in report.findings if f.severity is Severity.WARNING}
     assert upgraded <= warnings, report.findings
     assert report.ok, [f for f in report.findings if f.severity in BLOCKING]
+    assert report.kosit is not None
+    assert not report.kosit.accepted

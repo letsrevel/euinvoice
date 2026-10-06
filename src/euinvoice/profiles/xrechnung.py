@@ -9,7 +9,8 @@ CIUS one (issue #21).
 
 Every XRechnung scenario of the pinned KoSIT validator configuration (``scenarios.xml``, 2026-08-31) runs
 the XSD, then the CEN Schematron, then the XRechnung Schematron, and never the Peppol one (issue #17).
-KoSIT's ``customLevel`` severity overrides are not applied (issue #49, needs-human).
+KoSIT's ``customLevel`` severity overrides leave the findings' official flags unchanged; ``validate()`` applies them
+only to the separate KoSIT verdict, ``ValidationReport.kosit`` (issue #49, :mod:`euinvoice.validation.kosit`).
 
 No BT-23 default: the XRechnung rule set re-asserts PEPPOL-EN16931-R001 (fatal; ``XRechnung-UBL-validation.sch``
 line 198, ``XRechnung-CII-validation.sch`` lines 173-175), so BT-23 must be present, but no pinned

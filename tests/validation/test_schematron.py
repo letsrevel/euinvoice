@@ -274,6 +274,7 @@ def test_public_surface() -> None:
         "XRECHNUNG_UBL",
         "RuleSet",
         "run",
+        "saxon",
         "svrl_findings",
     }
 

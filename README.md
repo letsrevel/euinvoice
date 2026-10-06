@@ -26,8 +26,8 @@ is a small, typed, MIT-licensed Python library with three principles:
 | EN 16931 core | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN |
 | Peppol BIS Billing 3.0 | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN + Peppol |
 | XRechnung 3.0 (CIUS) | UBL 2.1, CII D16B | ✅ | ✅ | ✅ XSD + CEN + XRechnung |
-| XRechnung 3.0 Extension | UBL 2.1, CII D16B | ✅ EN 16931 content only | ✅ extension content listed as unmapped; content outside the CEN code lists (e.g. ICD `XR03`, testsuite `04.05a` CII) raises `ParseError` | ⚠️ raw flags ([#49](https://github.com/letsrevel/euinvoice/issues/49)) |
-| XRechnung 3.0 CVD | UBL 2.1, CII D16B | ❌ | ❌ conforming documents (BR-CL-13) | ⚠️ raw flags, see below |
+| XRechnung 3.0 Extension | UBL 2.1, CII D16B | ✅ EN 16931 content only | ✅ extension content listed as unmapped; content outside the CEN code lists (e.g. ICD `XR03`, testsuite `04.05a` CII) raises `ParseError` | ⚠️ `ok` is `False` for 2 of the 6 official instances, `kosit.accepted` is `True`; see below |
+| XRechnung 3.0 CVD | UBL 2.1, CII D16B | ❌ | ❌ conforming documents (BR-CL-13) | ⚠️ `ok` is `False` for every CVD document, `kosit.accepted` is `True` for the official instances; see below |
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |
@@ -35,14 +35,17 @@ is a small, typed, MIT-licensed Python library with three principles:
 
 - **Parse** means read into the EN 16931 model. Readers never drop input silently: every element or attribute
   without a business term is listed in `parse_detailed(...).unmapped`.
-- **Validate** reports the raw severities of the official rule sets. KoSIT's per-scenario severity overrides are
-  not applied ([#49](https://github.com/letsrevel/euinvoice/issues/49)): for example, 2 of the 6 official XRechnung Extension instances get fatal findings
-  that KoSIT downgrades.
+- **Validate** reports the raw severities of the official rule sets in `report.findings` and `report.ok`. For the
+  XRechnung profiles, `report.kosit` adds the verdict of the KoSIT validator, which applies its per-scenario
+  severity overrides ([#49](https://github.com/letsrevel/euinvoice/issues/49)): for example, 2 of the 6 official
+  XRechnung Extension instances get fatal findings that KoSIT downgrades, so `report.ok` is `False` and
+  `report.kosit.accepted` is `True`.
 - **XRechnung CVD:** BR-DE-CVD-03 (fatal, `XRechnung-UBL-validation.sch` lines 560-562) needs an item
   classification with list id `CVD`, which BR-CL-13 (fatal, CEN `EN16931-UBL-codes.sch` lines 67-68) and
   therefore the model refuse. No *conforming* CVD invoice can be built or read. `validate()` rejects every CVD
-  document: BR-CL-13 when it carries the `CVD` item classification, BR-DE-CVD-03 (fatal) when it does not
-  (KoSIT downgrades BR-CL-13, [#49](https://github.com/letsrevel/euinvoice/issues/49)).
+  document: BR-CL-13 when it carries the `CVD` item classification, BR-DE-CVD-03 (fatal) when it does not.
+  KoSIT downgrades BR-CL-13 in its CVD scenarios, so `report.kosit.accepted` is `True` for the official CVD
+  instances ([#49](https://github.com/letsrevel/euinvoice/issues/49)).
 - **Factur-X:** the rows above cover the Factur-X 1.0 / ZUGFeRD 2.1+ BT-24s. `facturx.embed` / `facturx.extract`
   write and read the PDF container (the `[pdf]` extra). The
   Factur-X XSD and Schematron are not pinned yet ([#42](https://github.com/letsrevel/euinvoice/issues/42)), so
@@ -155,9 +158,6 @@ Open questions waiting for a maintainer decision (`needs-human`):
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
 - [#69](https://github.com/letsrevel/euinvoice/issues/69): Factur-X MINIMUM and BASIC WL cannot be read into the
   model.
-- [#49](https://github.com/letsrevel/euinvoice/issues/49): KoSIT's XRechnung severity overrides are not applied,
-  so the verdict can differ from the KoSIT validator in both directions (e.g. BR-CL-21/23, XRechnung Extension
-  and CVD).
 - [#67](https://github.com/letsrevel/euinvoice/issues/67): the XRechnung profiles set no default BT-23; the caller
   must provide it (the pre-flight reports PEPPOL-EN16931-R001 otherwise).
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over

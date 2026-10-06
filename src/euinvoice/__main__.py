@@ -32,8 +32,12 @@ with backslash escapes instead of failing.
 
 JSON output (``--json``), one object on stdout:
 
-* ``validate``: ``{"ok": bool, "findings": [{"rule_id", "severity", "location", "message", "source"}]}``, the
-  fields of :class:`euinvoice.report.Finding` (``location`` may be ``null``).
+* ``validate``: ``{"ok": bool, "findings": [{"rule_id", "severity", "location", "message", "source"}], "kosit"}``,
+  the fields of :class:`euinvoice.report.Finding` (``location`` may be ``null``). ``kosit`` is ``null``, or the
+  KoSIT verdict of an XRechnung report (:class:`euinvoice.report.KositAssessment`): ``{"scenario", "accepted",
+  "overrides": [...], "blocking": [...]}``, each entry ``{"rule_id", "severity", "effective_severity"}`` with
+  ``severity`` the official flag; ``blocking`` lists the findings that make KoSIT reject. The text
+  output prints it as one ``kosit:`` line before the verdict line. The exit code follows ``ok`` only.
 * ``info``: ``{"syntax", "root", "specification_identifier", "profile", "pdf", "invoice", "unmapped"}``.
   ``profile`` is a profile id or ``null``; ``pdf`` is ``null`` for XML, else ``{"container",
   "conformance_level", "filename"}``; ``invoice`` maps the BT ids above to strings (dates ISO 8601, amounts as
@@ -59,7 +63,7 @@ from euinvoice.detection import detect, is_pdf
 from euinvoice.errors import ArtifactsNotAvailableError, EuInvoiceError, PreflightError
 from euinvoice.model.bt_index import path_of
 from euinvoice.model.invoice import Invoice
-from euinvoice.report import Finding, Severity, ValidationReport
+from euinvoice.report import Finding, KositAssessment, Severity, ValidationReport
 from euinvoice.syntax import Syntax
 from euinvoice.validation import artifacts, validate
 
@@ -97,6 +101,20 @@ def _finding_line(finding: Finding) -> str:
     return f"{finding.severity} {finding.rule_id} [{finding.source}]{at}: {finding.message}\n"
 
 
+def _kosit_json(kosit: KositAssessment) -> dict[str, t.Any]:
+    def entry(finding: Finding, effective: Severity) -> dict[str, str]:
+        return {"rule_id": finding.rule_id, "severity": finding.severity, "effective_severity": effective}
+
+    # A blocking finding's effective severity is its override if one applies (matched by identity), else its own.
+    overridden = {id(o.finding): o.severity for o in kosit.overrides}
+    return {
+        "scenario": kosit.scenario,
+        "accepted": kosit.accepted,
+        "overrides": [entry(o.finding, o.severity) for o in kosit.overrides],
+        "blocking": [entry(f, overridden.get(id(f), f.severity)) for f in kosit.blocking],
+    }
+
+
 def _validate(args: argparse.Namespace) -> int:
     xml, found = _xml_of(_read(args.file))
     # For a PDF, the Factur-X level in the XMP selects the profile (a level shares its BT-24 with EN 16931 core or
@@ -112,13 +130,23 @@ def _validate(args: argparse.Namespace) -> int:
         raise ArtifactsNotAvailableError(
             f"{exc.reason}. To run only the EN 16931 core rules, pass --profile {exc.fallback_profile_id}"
         ) from exc
+    kosit = report.kosit
     if args.json:
-        payload = {"ok": report.ok, "findings": [dataclasses.asdict(f) for f in report.findings]}
+        payload = {
+            "ok": report.ok,
+            "findings": [dataclasses.asdict(f) for f in report.findings],
+            "kosit": None if kosit is None else _kosit_json(kosit),
+        }
         sys.stdout.write(json.dumps(payload, indent=2) + "\n")
     else:
         blocking = sum(f.severity in (Severity.FATAL, Severity.ERROR) for f in report.findings)
         for finding in report.findings:
             sys.stdout.write(_finding_line(finding))
+        if kosit is not None:
+            outcome = "accepted" if kosit.accepted else "rejected"
+            count = len(kosit.overrides)
+            overrides = f"{count} severity override{'' if count == 1 else 's'}"
+            sys.stdout.write(f"kosit: {outcome} under scenario {kosit.scenario!r} ({overrides})\n")
         verdict = "ok" if report.ok else "invalid"
         sys.stdout.write(f"{verdict}: {blocking} fatal/error, {len(report.findings) - blocking} warning/information\n")
     return 0 if report.ok else 1

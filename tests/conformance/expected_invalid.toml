@@ -15,7 +15,7 @@
 #
 # Validation profile: the one detect() finds from BT-24 (EN 16931 core when none); for a PDF the one its XMP
 # fx:ConformanceLevel selects. Factur-X levels whose Schematron is not pinned (#42) run the EN 16931 core rules.
-# validate() reports the raw official flags; KoSIT customLevel overrides are not applied (#49).
+# validate() reports the raw official flags; KoSIT customLevel overrides apply only to report.kosit (#49).
 #
 # Reasons quote the pinned versions (cen 1.3.16, peppol-bis 3.0.21, xrechnung-schematron 2.6.0, KoSIT testsuite and
 # validator configuration 2026-08-31, ZUGFeRD corpus d891458e9822): on a pin bump, grep them and update.
