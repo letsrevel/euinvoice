@@ -233,6 +233,8 @@ def _contact[C: _Contact](cursor: Cursor, party: etree._Element, model: type[C],
     element = cursor.first(party, CAC + "Contact")
     if element is None:
         return None
+    # Taken even when empty: it becomes the (empty) group, as an empty ram:DefinedTradeContact does in CII (#30).
+    cursor.take(element)
     return build(
         model,
         element,

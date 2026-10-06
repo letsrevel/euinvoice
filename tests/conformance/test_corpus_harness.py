@@ -19,6 +19,7 @@ import collections
 import re
 import typing as t
 
+import pydantic
 import pytest
 from _corpus import Sample, expected_invalid, facturx_pdfs, samples
 from test_detect_corpora import EXCLUDED as NOT_INVOICES
@@ -157,13 +158,32 @@ def test_round_trip_invariant(sample: Sample) -> None:
     _assert_blocking(_blocking(written, profile), frozenset() if expected is None else expected.rules)
 
 
-def _differs(first: Invoice, second: Invoice) -> frozenset[str]:
-    """The BT/BG ids (else the names) of the top-level ``Invoice`` fields that differ; empty iff equal."""
-    found = frozenset(
-        bt_id(Invoice, name) or name for name in Invoice.model_fields if getattr(first, name) != getattr(second, name)
-    )
+def _differs(first: pydantic.BaseModel, second: pydantic.BaseModel) -> frozenset[str]:
+    """The BT/BG ids (else the names) of the innermost fields that differ; empty iff equal.
+
+    Groups and repeated groups of equal length are compared field by field, so a difference is named by its BT
+    (e.g. BT-148 rather than BG-25); anything else (a term, a group present on one side only, a repeated group of
+    another length) is named by its own id.
+    """
+    found: set[str] = set()
+    for name in type(first).model_fields:
+        a, b = getattr(first, name), getattr(second, name)
+        if a == b:
+            continue
+        if isinstance(a, pydantic.BaseModel) and isinstance(b, pydantic.BaseModel):
+            found |= _differs(a, b)
+        elif (
+            isinstance(a, tuple)
+            and isinstance(b, tuple)
+            and len(a) == len(b)
+            and a
+            and isinstance(a[0], pydantic.BaseModel)
+        ):
+            found |= {term for x, y in zip(a, b, strict=True) for term in _differs(x, y)}
+        else:
+            found.add(bt_id(type(first), name) or name)
     assert bool(found) == (first != second)
-    return found
+    return frozenset(found)
 
 
 @pytest.mark.parametrize("sample", list(TWO_CREDIT_TRANSFERS))
