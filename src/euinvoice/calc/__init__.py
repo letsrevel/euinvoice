@@ -48,13 +48,13 @@ document level allowances and charges and ``b`` VAT breakdowns of one category:
 * BR-O-01. UBL: as BR-Z-01. CII: ``b = 0 or (b = 1 and n + a > 0)``.
 * BR-53. UBL: a ``cbc:TaxAmount`` in BT-6 (BT-110 is one when BT-6 = BT-5). CII: BT-111 in BT-6 and
   BT-6 != BT-5.
+* BR-O-11 … 14 (with an O breakdown). UBL: other breakdowns (11), non-O lines (12), allowances (13)
+  and charges (14), each apart. CII: 11 and 12 both test breakdowns and lines, 13 and 14 both
+  allowances and charges; each offending item is fatal under its own rule and fails its partner rule
+  in CII only.
 
 Every other rule :func:`check` reports tests the same in both bindings (BR-CO-10 … 14, BR-CO-16,
 BR-48, ``-05``/``-06``/``-07`` except IGIC, BR-O-08, ``-09`` except IGIC/IPSI, ``-10``, BR-B-02).
-BR-O-11 … 14 differ in scope only: UBL tests other breakdowns (11), lines (12), allowances (13) and
-charges (14) apart, CII tests breakdowns and lines for 11 and 12 and allowances and charges for 13 and
-14; every item CII's wider test adds is already fatal under the partner rule, so :func:`check` reports
-the UBL split.
 
 Line net amount (BT-131): EN 16931 has no rule that computes BT-131 (the CEN Schematron only requires
 it, BR-24, and limits its decimals, BR-DEC-23). :func:`line_net_amount` uses the formula of Peppol

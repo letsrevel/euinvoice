@@ -346,21 +346,31 @@ def test_not_subject_to_vat_with_another_category_on_a_line() -> None:
 
     assert located(invoice) == {
         ("BR-O-11", "vat_breakdown[1].category_code"),
+        ("~BR-O-12@CII", "vat_breakdown[1].category_code"),  # CII 12 tests every ram:ApplicableTradeTax
         ("BR-O-12", "lines[1].vat_information.category_code"),
+        ("~BR-O-11@CII", "lines[1].vat_information.category_code"),
+    }
+    assert {(f.rule_id, f.location) for f in calc.check(invoice, syntax=Syntax.CII)} == {
+        ("BR-O-11", "vat_breakdown[1].category_code"),
+        ("BR-O-12", "vat_breakdown[1].category_code"),
+        ("BR-O-12", "lines[1].vat_information.category_code"),
+        ("BR-O-11", "lines[1].vat_information.category_code"),
     }
 
 
 def test_not_subject_to_vat_with_another_category_on_an_allowance() -> None:
-    """UBL tests allowances (13) and charges (14) apart; CII's 13 and 14 both test either, but every
-    item that adds is already fatal under the partner rule."""
+    """UBL tests allowances (13) and charges (14) apart; CII's 13 and 14 both test either."""
     invoice = calc.complete(
         draft(line("1", "100", "O", None), allowances=(allowance("1.00", "S", "20"),)), exemption_reasons=O_REASON
     )
 
     assert located(invoice) == {
         ("BR-O-11", "vat_breakdown[1].category_code"),
+        ("~BR-O-12@CII", "vat_breakdown[1].category_code"),
         ("BR-O-13", "allowances[0].vat_category_code"),
+        ("~BR-O-14@CII", "allowances[0].vat_category_code"),
     }
+    assert {f.rule_id for f in calc.check(invoice, syntax=Syntax.UBL)} == {"BR-O-11", "BR-O-13"}
 
 
 def test_not_subject_to_vat_with_another_category_on_a_charge() -> None:
@@ -368,7 +378,8 @@ def test_not_subject_to_vat_with_another_category_on_a_charge() -> None:
         draft(line("1", "100", "O", None), charges=(charge("1.00", "Z", "0"),)), exemption_reasons=O_REASON
     )
 
-    assert outcomes(invoice) == {"BR-O-11", "BR-O-14"}
+    assert outcomes(invoice) == {"BR-O-11", "~BR-O-12@CII", "BR-O-14", "~BR-O-13@CII"}
+    assert {f.rule_id for f in calc.check(invoice, syntax=Syntax.CII)} == {"BR-O-11", "BR-O-12", "BR-O-13", "BR-O-14"}
 
 
 def test_split_payment_alone_passes() -> None:
@@ -511,3 +522,17 @@ def test_cii_never_runs_the_breakdown_rules_on_igic_and_ipsi(category: str) -> N
     no_rate = with_breakdown(invoice, (group(0, invoice, rate=None, tax_amount="0.00"),))
 
     assert "~BR-48@UBL" in outcomes(no_rate)
+
+
+def test_syntax_given_as_its_value_selects_that_binding() -> None:
+    invoice = calc.complete(draft(line("1", "10", "Z", "0")))
+    lone_s = with_breakdown(invoice, (*invoice.vat_breakdown, breakdown("S", "20")))  # UBL-only BR-S-01/08
+    assert calc.check(lone_s, syntax=Syntax.UBL)
+
+    assert calc.check(lone_s, syntax="ubl") == calc.check(lone_s, syntax=Syntax.UBL)  # type: ignore[arg-type]
+    assert calc.check(lone_s, syntax="cii") == calc.check(lone_s, syntax=Syntax.CII) == ()  # type: ignore[arg-type]
+
+
+def test_invalid_syntax_is_refused(invoice: Invoice) -> None:
+    with pytest.raises(ValueError, match="pdf"):
+        calc.check(invoice, syntax="pdf")  # type: ignore[arg-type]

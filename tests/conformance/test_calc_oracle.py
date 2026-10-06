@@ -7,12 +7,14 @@ the pinned ``CEN_CII`` / ``CEN_UBL`` rule set; then:
 * every ``fatal`` id of ``check(invoice)`` is reported by that rule set;
 * every portability warning against that syntax names a rule the rule set reports;
 * no portability warning against the other syntax names a rule the rule set reports;
-* ``check(invoice, syntax=...)`` reports only ids the rule set reports.
+* ``check(invoice, syntax=...)`` reports exactly the ids in calc's scope (:data:`IN_SCOPE`) that the
+  rule set reports: no more, no fewer.
 
 The UBL writer refuses an invoice without BT-110 or with BT-6 = BT-5 (UBL cannot express it); for those
 ``check(invoice, syntax=Syntax.UBL)`` must report the rejection instead.
 """
 
+import re
 import typing as t
 from collections.abc import Callable
 from decimal import Decimal
@@ -173,6 +175,8 @@ RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] =
     Syntax.CII: (cii.write, schematron.CEN_CII),
     Syntax.UBL: (ubl.write, schematron.CEN_UBL),
 }
+IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-7]|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
+"""The official rules ``calc.check`` covers (BR-x-02..04 are about party identifiers, not amounts)."""
 CLEAN: t.Final = {"clean", "BR-CO-17 within 1", "BR-AG-08 unused rate"}
 
 
@@ -198,5 +202,9 @@ def test_check_agrees_with_the_official_cen_schematron(name: str, syntax: Syntax
 
     assert fatal <= official, (name, fatal - official, official)
     assert this_only <= official, (name, this_only - official, official)
-    assert not other_only & official, (name, other_only & official)
-    assert {f.rule_id for f in calc.check(invoice, syntax=syntax)} <= official
+    # rule-id granularity: an id the other binding alone rejects at one item may be fatal at another
+    other_only_here = other_only - fatal - this_only
+    assert not other_only_here & official, (name, other_only_here & official)
+    targeted = {f.rule_id for f in calc.check(invoice, syntax=syntax)}
+    assert targeted <= official, (name, targeted - official)
+    assert {rule for rule in official if IN_SCOPE.fullmatch(rule)} <= targeted, (name, official - targeted)

@@ -16,7 +16,7 @@ from euinvoice.calc._common import Verdict, at, fatal, fmt, round_cents, total, 
 from euinvoice.model import Invoice, VatBreakdown
 from euinvoice.model.codes import VatCategory
 
-__all__ = ["CATEGORY_RULES", "CategoryRules", "RateRule", "category_findings", "vat_in_tolerance"]
+__all__ = ["CATEGORY_RULES", "CategoryRules", "RateRule", "category_verdicts", "vat_in_tolerance"]
 
 
 class RateRule(enum.Enum):
@@ -266,36 +266,68 @@ def _presence(invoice: Invoice) -> Iterator[Verdict]:
 def _not_subject_to_vat(invoice: Invoice) -> Iterator[Verdict]:
     """BR-O-11 … BR-O-14: with a category O breakdown, nothing else may carry another category.
 
-    UBL tests each kind separately: other breakdowns (11), lines (12), allowances (13), charges (14).
-    CII tests ``//ram:ApplicableTradeTax`` (breakdowns and lines) for both 11 and 12, and
-    ``//ram:CategoryTradeTax`` (allowances and charges) for both 13 and 14. CII's wider test also
-    counts the partner kind; those items are already fatal under the partner rule, so it never changes
-    the outcome.
+    UBL tests each kind separately: other breakdowns (11), lines (12), allowances (13), charges (14),
+    and so does every binding for its own kind: fatal per offending item. CII's tests are wider: 11 and 12
+    both test ``not(//ram:ApplicableTradeTax[ram:CategoryCode != 'O'])`` (breakdowns and lines), 13 and 14
+    both ``not(//ram:CategoryTradeTax[ram:CategoryCode != 'O'])`` (allowances and charges). So each
+    offending item also fails its partner rule in CII only (a CII-only verdict at that item).
     """
     o = VatCategory.NOT_SUBJECT_TO_VAT
     if not any(group.category_code == o for group in invoice.vat_breakdown):
         return
-    kinds = {
-        ("BR-O-11", "a VAT breakdown"): [
-            at("BT-118", i) for i, g in enumerate(invoice.vat_breakdown) if g.category_code != o
-        ],
-        ("BR-O-12", "an Invoice line"): [
-            at("BT-151", i) for i, ln in enumerate(invoice.lines) if ln.vat_information.category_code != o
-        ],
-        ("BR-O-13", "a Document level allowance"): [
-            at("BT-95", i) for i, x in enumerate(invoice.allowances) if x.vat_category_code != o
-        ],
-        ("BR-O-14", "a Document level charge"): [
-            at("BT-102", i) for i, x in enumerate(invoice.charges) if x.vat_category_code != o
-        ],
-    }
-    for (rule, what), offenders in kinds.items():
-        for location in offenders:  # both bindings reject each of these
+    kinds = [
+        (
+            "BR-O-11",
+            "BR-O-12",
+            "a VAT breakdown (BG-23)",
+            "ram:ApplicableTradeTax",
+            [(at("BT-118", i), g.category_code) for i, g in enumerate(invoice.vat_breakdown) if g.category_code != o],
+        ),
+        (
+            "BR-O-12",
+            "BR-O-11",
+            "an Invoice line (BG-25)",
+            "ram:ApplicableTradeTax",
+            [
+                (at("BT-151", i), ln.vat_information.category_code)
+                for i, ln in enumerate(invoice.lines)
+                if ln.vat_information.category_code != o
+            ],
+        ),
+        (
+            "BR-O-13",
+            "BR-O-14",
+            "a Document level allowance (BG-20)",
+            "ram:CategoryTradeTax",
+            [
+                (at("BT-95", i), x.vat_category_code)
+                for i, x in enumerate(invoice.allowances)
+                if x.vat_category_code != o
+            ],
+        ),
+        (
+            "BR-O-14",
+            "BR-O-13",
+            "a Document level charge (BG-21)",
+            "ram:CategoryTradeTax",
+            [(at("BT-102", i), x.vat_category_code) for i, x in enumerate(invoice.charges) if x.vat_category_code != o],
+        ),
+    ]
+    for rule, partner, what, element, offenders in kinds:
+        for location, category in offenders:
             yield from fatal(
                 rule,
                 location,
                 f"An Invoice with a VAT breakdown of category O (Not subject to VAT) shall not contain {what} "
-                "of another VAT category.",
+                f"of another VAT category, here {category}.",
+            )
+            yield from verdict(
+                partner,
+                location,
+                f"CII's {partner} tests every {element} for a category other than O, so it also rejects {what} "
+                f"of category {category} when there is a VAT breakdown of category O.",
+                ubl=True,
+                cii=False,
             )
 
 
@@ -316,7 +348,7 @@ def _split_payment(invoice: Invoice) -> Iterator[Verdict]:
                 )
 
 
-def category_findings(invoice: Invoice) -> Iterator[Verdict]:
+def category_verdicts(invoice: Invoice) -> Iterator[Verdict]:
     """Every per-category rule, in document order: rates, breakdowns, presence, O and B rules.
 
     Args:

@@ -10,9 +10,9 @@ from collections.abc import Iterable, Iterator
 from decimal import MAX_PREC, ROUND_FLOOR, Context, Decimal
 from fractions import Fraction
 
+from euinvoice._syntax import Syntax
 from euinvoice.model.bt_index import path_of
 from euinvoice.report import Finding, Severity
-from euinvoice.syntax import Syntax
 
 ZERO: t.Final = Decimal("0.00")
 _WIDE = Context(prec=MAX_PREC)  # rescaling must never round digits away

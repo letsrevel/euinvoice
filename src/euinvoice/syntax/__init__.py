@@ -4,11 +4,6 @@ Each syntax module maps :class:`euinvoice.model.Invoice` to and from one XML syn
 CEN/TS 16931-3-2) and ``cii`` (UN/CEFACT CII D16B, CEN/TS 16931-3-3).
 """
 
-import enum
+from euinvoice._syntax import Syntax
 
-
-class Syntax(enum.StrEnum):
-    """An XML syntax for EN 16931 invoices."""
-
-    UBL = "ubl"
-    CII = "cii"
+__all__ = ["Syntax"]

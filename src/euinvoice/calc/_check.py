@@ -9,12 +9,12 @@ BR-45, BR-46 and BR-47 (a VAT breakdown has BT-116, BT-117 and BT-118) cannot fa
 import typing as t
 from collections.abc import Iterator
 
-from euinvoice.calc._categories import category_findings, vat_in_tolerance
+from euinvoice._syntax import Syntax
+from euinvoice.calc._categories import category_verdicts, vat_in_tolerance
 from euinvoice.calc._common import ZERO, Verdict, at, fatal, fmt, total, verdict, xpath_round
 from euinvoice.model import Invoice, VatBreakdown
 from euinvoice.model.codes import VatCategory
 from euinvoice.report import Finding
-from euinvoice.syntax import Syntax
 
 __all__ = ["check"]
 
@@ -168,15 +168,20 @@ def check(invoice: Invoice, *, syntax: Syntax | None = None) -> tuple[Finding, .
 
     Args:
         invoice: A complete invoice.
-        syntax: The syntax the invoice will be written in, or ``None`` for either.
+        syntax: The syntax the invoice will be written in (a :class:`~euinvoice.syntax.Syntax` or its
+            value, ``"ubl"`` / ``"cii"``), or ``None`` for either.
 
     Returns:
         The findings, each with the model path as location (e.g. ``vat_breakdown[0].tax_amount``, see
         :mod:`euinvoice.model.bt_index`) and source ``"calc"``; empty if every rule holds in the target
         syntax (both, without one).
+
+    Raises:
+        ValueError: ``syntax`` is not a syntax.
     """
+    target = None if syntax is None else Syntax(syntax)  # "ubl" must not fall through to the CII verdict
     verdicts = [*_sums(invoice), *_with_vat(invoice), *_accounting_currency(invoice)]
     for index, group in enumerate(invoice.vat_breakdown):
         verdicts += _group(index, group)
-    verdicts += category_findings(invoice)
-    return tuple(finding for v in verdicts if (finding := v.finding(syntax)) is not None)
+    verdicts += category_verdicts(invoice)
+    return tuple(finding for v in verdicts if (finding := v.finding(target)) is not None)
