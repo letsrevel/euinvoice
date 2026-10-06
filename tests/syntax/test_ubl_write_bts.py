@@ -209,7 +209,7 @@ _ADR = "/*/cac:AdditionalDocumentReference"
 
 Row = tuple[str, dict[str, t.Any], str, str]
 
-BT_ROWS: t.Final[list[Row]] = [
+BT_ROWS: t.Final[tuple[Row, ...]] = (
     ("BG-0", {}, "local-name(/*)", "Invoice"),
     ("BT-1", {"number": "INV-42"}, "string(/*/cbc:ID)", "INV-42"),
     ("BT-2", {"issue_date": datetime.date(2026, 3, 4)}, "string(/*/cbc:IssueDate)", "2026-03-04"),
@@ -428,7 +428,7 @@ BT_ROWS: t.Final[list[Row]] = [
     ("BG-32", {"lines": (_LINE,)}, f"string(count({_ITEM}/cac:AdditionalItemProperty))", "1"),
     ("BT-160", {"lines": (_LINE,)}, f"string({_ITEM}/cac:AdditionalItemProperty/cbc:Name)", "Colour"),
     ("BT-161", {"lines": (_LINE,)}, f"string({_ITEM}/cac:AdditionalItemProperty/cbc:Value)", "Blue"),
-]  # fmt: skip
+)  # fmt: skip
 
 
 @pytest.mark.parametrize(

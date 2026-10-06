@@ -295,6 +295,7 @@ is unbounded.
   `NA` there (Peppol upstream structure docs, commit 806866b, `ubl-invoice.xml`, BT-13). BT-32 is written
   with `cac:TaxScheme/cbc:ID` `FC`, as in the XRechnung test suite (CEN only requires a value other than
   `VAT`, UBL-SR-13). BT-90 is written under `cac:PayeeParty` when BG-10 is present, else under the Seller.
+
 ## Library conventions
 
 * **BG-0.** EN 16931-1 gives the root "INVOICE" no identifier (XR §11.1: "besitzt … keine eigene

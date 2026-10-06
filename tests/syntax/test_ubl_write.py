@@ -277,6 +277,13 @@ def test_gross_price_below_net_price_is_refused() -> None:
         ubl.write(minimal_invoice(lines=(simple_line(price_details=details),)))
 
 
+def test_accounting_currency_equal_to_invoice_currency_without_bt111_is_written() -> None:
+    # One cac:TaxTotal only, so the invoice is representable; BR-53 is the validator's job (D8).
+    root = written(minimal_invoice(vat_accounting_currency_code="EUR"))
+    assert xpath(root, "string(/*/cbc:TaxCurrencyCode)") == "EUR"
+    assert xpath(root, "count(/*/cac:TaxTotal)") == 1
+
+
 def test_accounting_currency_equal_to_invoice_currency_is_refused() -> None:
     document = minimal_invoice(
         vat_accounting_currency_code="EUR", totals=_totals(total_vat_in_accounting_currency=Decimal("19.00"))

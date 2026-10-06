@@ -153,8 +153,8 @@ def _price_discount(price: PriceDetails) -> Decimal | None:
     if discount < 0:
         raise cannot_express(
             "BT-148",
-            "an item gross price below the item net price (BT-146) implies a negative item price discount "
-            "(BT-147), which cac:Price/cac:AllowanceCharge cannot carry as an allowance (PEPPOL-EN16931-R044)",
+            "an item gross price below the item net price (BT-146) implies a negative BT-147, which is not a "
+            "discount, and a price-level charge is forbidden by PEPPOL-EN16931-R044",
         )
     return discount.quantize(_CENT) if t.cast(int, discount.as_tuple().exponent) > -2 else discount
 

@@ -291,14 +291,18 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
     BR-DEC-13/15); only the BT-5 one carries ``cac:TaxSubtotal`` (bt-mapping.md BG-23).
 
     Raises:
-        ModelError: BT-6 equals BT-5, BT-110 is missing, or BT-111 is set without BT-6.
+        ModelError: BT-6 equals BT-5 while BT-111 is set, BT-110 is missing, or BT-111 is set without BT-6.
     """
     totals = invoice.totals
-    if invoice.vat_accounting_currency_code == invoice.currency_code:
+    if (
+        totals.total_vat_in_accounting_currency is not None
+        and invoice.vat_accounting_currency_code == invoice.currency_code
+    ):
         raise cannot_express(
             "BT-6",
-            "a VAT accounting currency equal to the invoice currency (BT-5) gives two cac:TaxTotal/cbc:TaxAmount "
-            "with the same currencyID, which CEN BR-CO-15 (exactly one in the invoice currency) rejects",
+            "a VAT accounting currency equal to the invoice currency (BT-5) together with BT-111 gives two "
+            "cac:TaxTotal/cbc:TaxAmount with the same currencyID, which CEN BR-CO-15 (exactly one in the invoice "
+            "currency) rejects",
         )
     if totals.total_vat is None:
         raise cannot_express(
