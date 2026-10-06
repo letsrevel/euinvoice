@@ -1,7 +1,6 @@
 """Synthetic invoices shared by the test suite (fake parties, example.com, test IBAN; CLAUDE.md fixtures rule)."""
 
 import datetime
-import os
 import typing as t
 from collections.abc import Callable
 from decimal import Decimal
@@ -49,14 +48,11 @@ from euinvoice.model import (
 )
 from euinvoice.model.codes import VatCategory
 
-# Hypothesis profiles (CLAUDE.md "Testing"). No wall-clock deadline and no too_slow health check: under a loaded
-# host or parallel xdist workers they fail correct tests (DeadlineExceeded, FlakyFailure) without testing anything
-# about the library. They are runtime knobs only; what each property asserts is unchanged. "default" keeps
-# Hypothesis' 100 examples; "ci" (HYPOTHESIS_PROFILE=ci) runs more for a deeper search. Explicit @settings on a
-# test override only the fields they name.
+# Hypothesis profile (CLAUDE.md "Testing"): no wall-clock deadline and no too_slow health check. Under a loaded host
+# or parallel xdist workers they fail correct tests (DeadlineExceeded, FlakyFailure) without testing anything about
+# the library. They are runtime knobs only; what each property asserts and how many examples it runs are unchanged.
 settings.register_profile("default", deadline=None, suppress_health_check=[HealthCheck.too_slow])
-settings.register_profile("ci", settings.get_profile("default"), max_examples=500)
-settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "default"))
+settings.load_profile("default")
 
 TEST_IBAN: t.Final = "DE02120300000000202051"
 

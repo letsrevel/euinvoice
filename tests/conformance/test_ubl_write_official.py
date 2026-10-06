@@ -5,7 +5,7 @@ import typing as t
 from decimal import Decimal
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from _invoices import TEST_IBAN, full_invoice, minimal_invoice, simple_line
@@ -152,7 +152,7 @@ def _invoices(draw: st.DrawFn) -> Invoice:
     )
 
 
-@settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=50)
 @given(_invoices())
 def test_random_invoices_are_schema_valid(document: Invoice) -> None:
     assert xsd.validate(_xml.parse(ubl.write(document))) == ()

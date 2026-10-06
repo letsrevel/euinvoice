@@ -4,7 +4,7 @@ import datetime
 import typing as t
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given, settings
 
 from _invoices import TEST_IBAN, full_invoice, line, minimal_invoice, payment, price, rebuild
 from _strategies import cii_expressible, invoices
@@ -53,7 +53,7 @@ def test_output_has_no_cen_findings(name: str) -> None:
     assert schematron.run(schematron.CEN_CII, cii.write(INVOICES[name]())) == ()
 
 
-@settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@settings(max_examples=50)
 @given(invoices.map(cii_expressible))
 def test_random_invoices_are_xsd_valid(invoice: Invoice) -> None:
     assert xsd.validate(_xml.parse(cii.write(invoice))) == ()

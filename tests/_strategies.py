@@ -45,11 +45,23 @@ from euinvoice.model import (
     VatBreakdown,
 )
 
-# XML-compatible characters only (no surrogates, controls or noncharacters such as U+FFFE), and not blank:
-# the model rejects whitespace-only mandatory text (normalize-space(.) != '').
-_text = st.text(
-    alphabet=st.characters(codec="utf-8", exclude_categories=("Cs", "Cc", "Cn")), min_size=1, max_size=12
-).filter(lambda s: s.strip(" \t\r\n") != "")
+
+def text(*, max_codepoint: int = 0x10FFFF, include_characters: str = "") -> st.SearchStrategy[str]:
+    """Short non-blank text of XML-compatible characters.
+
+    No surrogates, controls or noncharacters such as U+FFFE, except ``include_characters``; not blank, because
+    the model rejects whitespace-only mandatory text (``normalize-space(.) != ''``).
+    """
+    alphabet = st.characters(
+        codec="utf-8",
+        max_codepoint=max_codepoint,
+        exclude_categories=("Cs", "Cc", "Cn"),
+        include_characters=include_characters,
+    )
+    return st.text(alphabet=alphabet, min_size=1, max_size=12).filter(lambda s: s.strip(" \t\r\n") != "")
+
+
+_text = text()
 _amount = st.decimals(min_value=-(10**6), max_value=10**6, places=2)
 _price = st.decimals(min_value=0, max_value=10**6, places=4)
 _date = st.dates(min_value=datetime.date(1900, 1, 1), max_value=datetime.date(2999, 12, 31))

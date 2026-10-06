@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The format follows
 - Property-based conformance tests (#31): Hypothesis invoices built through `calc.complete` (VAT categories S, Z,
   E, AE, K, G, O, allowances and charges, credit notes, BT-6, payment means) pass `calc.check`, validate without
   fatal or error findings under EN 16931, Peppol BIS and XRechnung in UBL and CII, and round-trip exactly
-  through UBL and CII. Hypothesis profiles `default` (no deadline) and `ci` (more examples, `HYPOTHESIS_PROFILE=ci`).
+  through UBL and CII. The test suite's Hypothesis profile has no deadline.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the

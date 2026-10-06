@@ -41,7 +41,7 @@ BLOCKING: t.Final = (Severity.FATAL, Severity.ERROR)
 @settings(max_examples=MAX_EXAMPLES, derandomize=True)
 @given(data=st.data())
 def test_invoices_validate(target: Target, syntax: Syntax, data: st.DataObject) -> None:
-    invoice: Invoice = data.draw(invoices(target))
+    invoice: Invoice = data.draw(invoices(target, syntax))
     report = validate(WRITERS[syntax](invoice), target.profile)
     assert [f for f in report.findings if f.severity in BLOCKING] == []
     assert report.ok
@@ -51,8 +51,10 @@ def test_invoices_validate(target: Target, syntax: Syntax, data: st.DataObject) 
 
 @pytest.mark.xfail(
     strict=True,
-    reason="SaxonC-HE 13.0.0 regression (12.9 passes): normalize-space() throws ArrayIndexOutOfBoundsException "
-    "on whitespace + a character above U+00FF + one above U+FFFF, so the CEN stylesheet fails at run time",
+    raises=AssertionError,
+    reason="issue #74: SaxonC-HE 13.0.0 regression (12.9 passes): normalize-space() throws "
+    "ArrayIndexOutOfBoundsException on whitespace + a character above U+00FF + one above U+FFFF, so the CEN "
+    "stylesheet fails at run time",
 )
 @pytest.mark.parametrize("syntax", list(WRITERS))
 def test_saxon_normalize_space_regression(syntax: Syntax) -> None:

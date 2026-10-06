@@ -12,10 +12,13 @@ Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16
   O none). O stands alone (BR-O-11 … 14). E, AE, K, G and O get a VATEX exemption reason code from BR-CL-22
   (``VATEX-EU-132``, ``-AE``, ``-IC``, ``-G``, ``-O``), S and Z none (BR-<x>-10).
 * A seller VAT identifier BT-31 unless the category is O (BR-S/Z/E/AE/IC/G-02 require it, BR-O-02 forbids
-  it); a buyer VAT identifier BT-48 with AE or K (BR-AE-04, BR-IC-04), none with O (BR-O-04). VAT ids carry
+  it); a buyer VAT identifier BT-48 with AE or K (BR-AE-02/03/04, BR-IC-02/03/04), none with O (BR-O-02/03/04).
+  VAT ids carry
   their country prefix (BR-CO-09). Without BT-31 the seller has a seller identifier BT-29 (BR-CO-26).
 * K: an actual delivery date BT-72 (BR-IC-11) and a deliver-to country code BT-80 (BR-IC-12).
-* BT-20 always present, so BR-CO-25 holds whatever the amount due. BT-9 is optional, and absent from a credit
+* BT-20 always present, so EN 16931-1 BR-CO-25 (BT-9 or BT-20 when the amount due is positive) holds whatever
+  the amount due; BR-CO-25 is not implemented in the pinned CEN 1.3.16 Schematron. BT-9 is optional, and absent
+  from a credit
   note without BG-16: UBL has no place for it there (the UBL writer raises, ``ubl/_write.py``).
 * Allowances and charges carry a reason or a reason code (BR-33, BR-38, BR-42, BR-44); codes ``95``
   (UNCL 5189, BR-CL-19) and ``FC`` / ``ABL`` (UNCL 7161, BR-CL-20). A drawn base amount and percentage give
@@ -27,14 +30,23 @@ Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16
 * At most one note, without subject code (PEPPOL-EN16931-R002 in CII). Payment means are pure, as
   XRechnung BR-DE-23-a/b, BR-DE-24-a/b and BR-DE-25-a/b want: 30/58 with one credit transfer, 48 with a card,
   59 with a direct debit and its mandate reference (PEPPOL-EN16931-R061).
-* BT-6 differs from BT-5 (BR-53, PEPPOL-EN16931-R005), and BT-111 has the sign of BT-110 (PEPPOL-EN16931-R055).
+* BT-6 differs from BT-5 (PEPPOL-EN16931-R005), BT-111 is present with BT-6 (BR-53) and has the sign of BT-110
+  (PEPPOL-EN16931-R055).
 * Seller in DE or AT, buyer in DE, AT or FR. Of the Peppol national rule sets only the German one (DE-R-*,
-  seller and buyer both in DE) applies; it mirrors the XRechnung terms generated for Peppol anyway. Type code
-  384 only between German parties (PEPPOL-EN16931-P0112).
+  seller and buyer both in DE, in ``PEPPOL-EN16931-UBL.sch`` only; the CII file has no DE-R rules) applies; it
+  mirrors the XRechnung terms generated for Peppol anyway. Type code 384 only between German parties
+  (PEPPOL-EN16931-P0112).
 * No category O where the target requires BT-119 on every VAT breakdown (:attr:`Target.needs_bt119`):
-  XRechnung BR-DE-14, and Peppol DE-R-014 between German parties. The official XRechnung instance
-  ``01.04a-INVOICE_ubl.xml`` writes an O breakdown with ``cbc:Percent`` 0, but :func:`euinvoice.calc.complete`
-  derives an O breakdown without BT-119, so it cannot build those invoices (finding reported on issue #31).
+  XRechnung BR-DE-14 (UBL and CII), and Peppol DE-R-014 between German parties (UBL only). The official
+  XRechnung instance ``01.04a-INVOICE_ubl.xml`` writes an O breakdown with ``cbc:Percent`` 0, but
+  :func:`euinvoice.calc.complete` derives an O breakdown without BT-119, so it cannot build those invoices
+  (issue #75).
+
+ponytail: deliberate narrowings beyond the rules above, each a possible later widening: K always gets BT-72
+(BR-IC-11 also accepts an invoicing period BG-14); BT-20 is one of two fixed strings (no XRechnung BR-DE-18
+Skonto lines); type codes 380, 381 and 384 only; no whole-unit currencies such as HUF (``calc.complete``
+rounds VAT to cents); text is BMP only (issue #74, see :data:`text`). Factur-X targets are not covered yet
+(issue #42).
 
 Profile-mandatory terms (:attr:`Target.mandatory`): BT-10 (BR-DE-15, PEPPOL-EN16931-R003), BT-23
 (PEPPOL-EN16931-R001, re-asserted by XRechnung), BT-34 and BT-49 as GS1 GLNs with valid check digits
@@ -53,6 +65,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from hypothesis import strategies as st
 
+import _strategies as strategies
 from _invoices import TEST_IBAN
 from euinvoice import calc, profiles
 from euinvoice.model import (
@@ -85,6 +98,7 @@ from euinvoice.model import (
     SellerPostalAddress,
 )
 from euinvoice.profiles.peppol import BILLING_PROCESS
+from euinvoice.syntax import Syntax
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -95,17 +109,18 @@ class Target:
         profile: The profile; its BT-24 is written.
         business_process: BT-23, always written; ``None`` draws it optionally.
         mandatory: Always draw the Peppol and XRechnung mandatory terms (module docstring).
-        needs_bt119: When every VAT breakdown needs a VAT category rate BT-119.
+        needs_bt119: When every VAT breakdown needs a VAT category rate BT-119: never, between German parties
+            in UBL only (Peppol DE-R-014), or always (XRechnung BR-DE-14).
     """
 
     profile: profiles.Profile
     business_process: str | None
     mandatory: bool
-    needs_bt119: t.Literal["never", "between German parties", "always"]
+    needs_bt119: t.Literal["never", "between German parties in UBL", "always"]
 
 
 CORE: t.Final = Target(profiles.EN16931, None, mandatory=False, needs_bt119="never")
-PEPPOL: t.Final = Target(profiles.PEPPOL, BILLING_PROCESS, mandatory=True, needs_bt119="between German parties")
+PEPPOL: t.Final = Target(profiles.PEPPOL, BILLING_PROCESS, mandatory=True, needs_bt119="between German parties in UBL")
 # XRechnung fixes no BT-23 value, but its rule set re-asserts PEPPOL-EN16931-R001 (BT-23 present); every
 # instance of the pinned testsuite uses the Peppol billing 01 process.
 XRECHNUNG: t.Final = Target(profiles.XRECHNUNG, BILLING_PROCESS, mandatory=True, needs_bt119="always")
@@ -124,16 +139,12 @@ _VAT_IDS: t.Final = {"DE": "DE000000000", "AT": "ATU00000000", "FR": "FR00000000
 _SELLER_GLN: t.Final = Identifier(value="4000001000005", scheme_id="0088")
 _BUYER_GLN: t.Final = Identifier(value="4000001000036", scheme_id="0088")
 
-# XML characters only (no surrogates, controls or noncharacters), never blank (BR rules test normalize-space).
+# Non-blank XML text, with TAB, LF and CR (they round-trip and validate in both syntaxes).
 # ponytail: BMP only. SaxonC-HE 13.0.0 (12.9 is fine) throws ArrayIndexOutOfBoundsException in normalize-space()
 # on a string mixing whitespace, a character above U+00FF and one above U+FFFF (e.g. " \u0100\U000100000000"), so
-# validate() reports a false SCHEMATRON-RUNTIME fatal; see test_saxon_normalize_space_regression. Lift the cap
-# (max_codepoint) once that xfail passes.
-text: t.Final = st.text(
-    alphabet=st.characters(codec="utf-8", max_codepoint=0xFFFF, exclude_categories=("Cs", "Cc", "Cn")),
-    min_size=1,
-    max_size=12,
-).filter(lambda s: s.strip(" \t\r\n") != "")
+# validate() reports a false SCHEMATRON-RUNTIME fatal (issue #74, test_saxon_normalize_space_regression). Lift the
+# cap once that xfail passes.
+text: t.Final = strategies.text(max_codepoint=0xFFFF, include_characters="\t\n\r")
 
 
 def _decimal(low: str, high: str, places: int) -> st.SearchStrategy[Decimal]:
@@ -236,8 +247,10 @@ def _payment(draw: st.DrawFn) -> PaymentInstructions:
 
 
 @st.composite
-def drafts(draw: st.DrawFn, target: Target) -> tuple[InvoiceDraft, dict[str, calc.ExemptionReason]]:
-    """A draft for ``target`` and the exemption reasons :func:`euinvoice.calc.complete` needs for it."""
+def drafts(
+    draw: st.DrawFn, target: Target, syntax: Syntax | None = None
+) -> tuple[InvoiceDraft, dict[str, calc.ExemptionReason]]:
+    """A draft for ``target`` in ``syntax`` (``None``: valid in both) and the exemption reasons it needs."""
     mandatory = target.mandatory
     seller_country = draw(st.sampled_from(["DE", "AT"]))
     buyer_country = draw(st.sampled_from(["DE", "AT", "FR"]))
@@ -249,14 +262,17 @@ def drafts(draw: st.DrawFn, target: Target) -> tuple[InvoiceDraft, dict[str, cal
         start = issue_date - datetime.timedelta(days=draw(st.integers(0, 60)))
         period = InvoicingPeriod(start_date=start, end_date=start + datetime.timedelta(days=draw(st.integers(0, 30))))
 
-    # ponytail: no O where BT-119 is required (module docstring); lift once calc can write BT-119 = 0 for O.
-    o_allowed = target.needs_bt119 == "never" or (target.needs_bt119 == "between German parties" and not german)
+    # ponytail: no O where BT-119 is required (module docstring, issue #75); lift once calc can write BT-119 = 0
+    # for O.
+    o_allowed = target.needs_bt119 == "never" or (
+        target.needs_bt119 == "between German parties in UBL" and (syntax is Syntax.CII or not german)
+    )
     pairs: list[tuple[str, str | None]] = [("O", None)] if o_allowed and draw(st.integers(0, 5)) == 0 else list(_PAIRS)
     lines = draw(st.lists(_line(pairs, period), min_size=1, max_size=4))
     used = sorted({(ln.vat_information.category_code, ln.vat_information.rate) for ln in lines})
     categories = {category for category, _ in used}
 
-    def document_level(kind: type[DocumentLevelAllowance | DocumentLevelCharge], code: str) -> t.Any:
+    def document_level[K: (DocumentLevelAllowance, DocumentLevelCharge)](kind: type[K], code: str) -> K:
         category, rate = draw(st.sampled_from(used))
         return kind(**draw(_amounts()), vat_category_code=category, vat_rate=rate, **draw(_reason(code)))
 
@@ -346,7 +362,7 @@ def drafts(draw: st.DrawFn, target: Target) -> tuple[InvoiceDraft, dict[str, cal
         payment_instructions=payment,
         allowances=allowances,
         charges=charges,
-        lines=tuple(LineDraft.model_validate({**dict(ln), "identifier": str(i)}) for i, ln in enumerate(lines, 1)),
+        lines=tuple(ln.model_copy(update={"identifier": str(i)}) for i, ln in enumerate(lines, 1)),
     )
     reasons = {
         category: calc.ExemptionReason(code=_VATEX[category], text=draw(st.none() | text))
@@ -356,13 +372,15 @@ def drafts(draw: st.DrawFn, target: Target) -> tuple[InvoiceDraft, dict[str, cal
 
 
 @st.composite
-def invoices(draw: st.DrawFn, target: Target) -> Invoice:
-    """An invoice for ``target``: a :func:`drafts` draft completed with :func:`euinvoice.calc.complete`.
+def invoices(draw: st.DrawFn, target: Target, syntax: Syntax | None = None) -> Invoice:
+    """An invoice for ``target`` in ``syntax``: a :func:`drafts` draft completed with :func:`euinvoice.calc.complete`.
+
+    ``syntax`` ``None`` draws invoices that are valid in both syntaxes.
 
     With a VAT accounting currency BT-6, BT-111 is the completed BT-110 times a drawn exchange rate, so
     both have the same sign (PEPPOL-EN16931-R055).
     """
-    draft, reasons = draw(drafts(target))
+    draft, reasons = draw(drafts(target, syntax))
     paid = draw(st.none() | _decimal("0", "100", 2))
     rounding = draw(st.none() | _decimal("-0.99", "0.99", 2))
     bt111 = None
