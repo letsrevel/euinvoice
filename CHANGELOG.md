@@ -18,6 +18,12 @@ All notable changes to this project are documented here. The format follows
   every pinned upstream example (CEN UBL/CII, Peppol BIS, KoSIT XRechnung testsuite, ZUGFeRD corpus XML and the
   XML of its Factur-X PDFs). `tests/conformance/expected_invalid.toml` is the only list of invariant failures,
   each with its exact rule ids, a reason and an upstream link.
+- `euinvoice.facturx.embed()` (the `[pdf]` extra, pypdf only): embeds an invoice's CII XML, given as bytes or
+  as an `Invoice` (EN 16931 and XRECHNUNG levels), into a PDF that is already PDF/A-3 (a non-PDF/A-3 input raises
+  `PdfError`). It writes the associated file (`factur-x.xml` / `xrechnung.xml`, `/AFRelationship`, `text/xml`,
+  `/ModDate`, catalog `/AF`) and the Factur-X XMP with its PDF/A extension schema, using the values the pinned
+  ZUGFeRD corpus attests until the Factur-X spec package is pinned (#42). The conformance suite runs veraPDF
+  (PDF/A-3B) on the output when `$EUINVOICE_VERAPDF` (e.g. `scripts/verapdf-docker.sh`) or `verapdf` is available.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the
