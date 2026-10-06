@@ -63,3 +63,25 @@ def test_validate_facturx_pdf(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     (tmp_path / "a.pdf").write_bytes(hybrid)
     code, payload = _json_validate([str(tmp_path / "a.pdf")], capsys)
     assert (code, payload["ok"]) == (0, True)
+
+
+@pytest.mark.parametrize(
+    ("file", "core_exit"),
+    [
+        ("ZUGFeRDv2/correct/intarsys/BASIC/zugferd_2p0_BASIC_Einfach.pdf", 0),
+        ("ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/zugferd_2p1_BASIC_Einfach.pdf", 0),
+        # Fails the CEN rules (expected_invalid.toml lists its findings).
+        ("ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf", 1),
+    ],
+    ids=["zugferd-2.0", "zugferd-2.1", "fnfe-colon-bt24"],
+)
+def test_validate_basic_pdf_exits_2_whatever_its_version(
+    file: str, core_exit: int, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # #98: the BASIC Schematron is not pinned (#42), so no BASIC PDF gets the EN 16931 core verdict unasked.
+    path = artifacts.fetch(["zugferd-corpus"])["zugferd-corpus"] / file
+    assert cli.main(["validate", str(path)]) == 2
+    err = capsys.readouterr().err
+    assert "issues/42" in err
+    assert err.endswith("pass --profile en16931\n")
+    assert cli.main(["validate", "--profile", "en16931", str(path)]) == core_exit

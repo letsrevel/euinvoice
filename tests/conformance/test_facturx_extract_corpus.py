@@ -17,9 +17,9 @@ import pypdf
 import pytest
 
 from _pdfa import pdf
-from euinvoice import _xml, facturx, parse, parse_detailed
-from euinvoice.detect import detect_root
-from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
+from euinvoice import _xml, facturx, parse, parse_detailed, profiles, validate
+from euinvoice.detect import detect, detect_root
+from euinvoice.errors import ArtifactsNotAvailableError, ParseError, PdfError, UnsupportedDocumentError
 from euinvoice.syntax import Syntax
 from euinvoice.validate import artifacts
 
@@ -154,3 +154,49 @@ def test_parse_reads_every_correct_pdf_as_its_extracted_xml() -> None:
             outcomes[extracted.conformance_level, None] += 1
     for level, count in (("MINIMUM", 6), ("BASIC WL", 5)):
         assert {key: n for key, n in outcomes.items() if key[0] == level} == {(level, ParseError): count}
+
+
+UNPINNED_LEVELS: t.Final = frozenset({"MINIMUM", "BASIC WL", "BASIC", "EXTENDED"})
+"""XMP levels whose Schematron ships only in the unpinned Factur-X / ZUGFeRD package (#42)."""
+
+REFUSED_BY_VALIDATE: t.Final = {
+    ("factur-x", "MINIMUM"): 7,
+    ("factur-x", "BASIC WL"): 6,
+    # 3 with the registered BT-24, 6 with the colon spelling.
+    ("factur-x", "BASIC"): 9,
+    # 5 with the registered BT-24, 2 with the colon spelling.
+    ("factur-x", "EXTENDED"): 7,
+    ("zugferd-2.0", "MINIMUM"): 1,
+    ("zugferd-2.0", "BASIC"): 3,
+    ("zugferd-2.0", "EXTENDED"): 5,
+}
+"""Factur-X and ZUGFeRD 2.0 PDFs (``correct`` and ``fail``) at a level of :data:`UNPINNED_LEVELS`."""
+
+
+def test_validate_refuses_every_pdf_at_a_level_without_pinned_rules() -> None:
+    # #98: validate() as the CLI calls it for a PDF (the Factur-X level's profile, else BT-24 auto-detection) raises
+    # for every Factur-X / ZUGFeRD 2.0 PDF at such a level, whether its BT-24 is a registered level's or one of
+    # _UNREGISTERED_LEVEL_IDENTIFIERS; it never gives the EN 16931 core verdict. Each unregistered BT-24 comes with the
+    # XMP level the mapping names, in every PDF that carries it.
+    unregistered = profiles.facturx._UNREGISTERED_LEVEL_IDENTIFIERS
+    levels: dict[str, set[str | None]] = collections.defaultdict(set)
+    refused: collections.Counter[tuple[str, str | None]] = collections.Counter()
+    for name, data in _pdfs().items():
+        if name in REFUSED:
+            continue
+        extracted = facturx.extract(data)
+        if extracted.container == "zugferd-1.0":
+            continue  # not CII D16B (see test_every_correct_pdf_extracts)
+        try:
+            bt24 = detect(extracted.xml).specification_identifier
+        except ParseError:
+            assert extracted.conformance_level not in UNPINNED_LEVELS, name
+            continue
+        if bt24 is not None and bt24 in unregistered:
+            levels[bt24].add(extracted.conformance_level)
+        if extracted.conformance_level in UNPINNED_LEVELS:
+            with pytest.raises(ArtifactsNotAvailableError, match=r"issues/42"):
+                validate(extracted.xml, extracted.profile)
+            refused[extracted.container, extracted.conformance_level] += 1
+    assert levels == {bt24: {level} for bt24, level in unregistered.items()}
+    assert dict(refused) == REFUSED_BY_VALIDATE

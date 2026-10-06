@@ -101,7 +101,8 @@ def _validate(args: argparse.Namespace) -> int:
     xml, found = _xml_of(_read(args.file))
     # For a PDF, the Factur-X level in the XMP selects the profile (a level shares its BT-24 with EN 16931 core or
     # XRechnung), as in ``info``. A level whose Factur-X Schematron is not pinned (MINIMUM, BASIC WL, BASIC,
-    # EXTENDED; issue #42) then makes validate() raise ArtifactsNotAvailableError (exit 2) instead of a verdict.
+    # EXTENDED; issue #42) then makes validate() raise ArtifactsNotAvailableError (exit 2) instead of a verdict. A
+    # ZUGFeRD 2.0 PDF selects no profile; validate() refuses its MINIMUM, BASIC and EXTENDED BT-24s the same way (#98).
     profile = args.profile if args.profile is not None or found is None else found.profile
     try:
         report: ValidationReport = validate(xml, profile)

@@ -76,7 +76,8 @@ FACTURX_BASIC: t.Final = Profile(
     title="Factur-X / ZUGFeRD BASIC",
     # BT-24 and level "BASIC": ZUGFeRDv2/correct/symtrax/Beispiele/BASIC/
     # zugferd_2p1_BASIC_{Einfach,Rechnungskorrektur,Taxifahrt}.pdf; plan §5. The FNFE samples write
-    # "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic" instead (needs-human #69).
+    # "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic" instead (needs-human #69), which is not registered
+    # but listed in _UNREGISTERED_LEVEL_IDENTIFIERS (#98).
     specification_identifier="urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic",
     syntaxes=_CII,
     rule_sets=_FACTURX_RULES,
@@ -143,6 +144,32 @@ conformance level (``tests/profiles/test_facturx.py`` checks the lookup finds ev
 _BY_LEVEL: t.Final[Mapping[str, Profile]] = {
     p.facturx_conformance_level: p for p in _LEVELS if p.facturx_conformance_level is not None
 }
+
+_UNREGISTERED_LEVEL_IDENTIFIERS: t.Final[Mapping[str, str]] = {
+    # XMP container _xml.ZUGFERD_2_XMP (ZUGFeRD 2.0), file zugferd-invoice.xml:
+    # level "MINIMUM": ZUGFeRDv2/correct/intarsys/MINIMUM/zugferd_2p0_MINIMUM.pdf (1).
+    "urn:zugferd.de:2p0:minimum": "MINIMUM",
+    # level "BASIC": ZUGFeRDv2/correct/intarsys/BASIC/zugferd_2p0_BASIC_{Einfach,Rechnungskorrektur,Taxifahrt}.pdf (3).
+    "urn:cen.eu:en16931:2017#compliant#urn:zugferd.de:2p0:basic": "BASIC",
+    # level "EXTENDED": ZUGFeRDv2/correct/intarsys/EXTENDED/zugferd_2p0_EXTENDED_*.pdf (5).
+    "urn:cen.eu:en16931:2017#conformant#urn:zugferd.de:2p0:extended": "EXTENDED",
+    # XMP container _xml.FACTURX_XMP, file factur-x.xml, the colon spelling (#69): level "BASIC" in
+    # ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf, ZUGFeRDv2/fail/FNFE-factur-x-examples/
+    # {Avoir_FR_type380_BASIC,Facture_DOM_BASIC,Facture_FR_BASIC,Facture_UE_BASIC}.pdf and
+    # ZUGFeRDv2/fail/python-factur-x/python-factur-x.pdf (6).
+    "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic": "BASIC",
+    # level "EXTENDED": ZUGFeRDv2/fail/MustangRE-20171118_506_ZUGFeRD1and2.pdf and
+    # ZUGFeRDv2/fail/Mustangproject/MustangGnuaccountingBeispielRE-20171118_506.pdf (2).
+    "urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:extended": "EXTENDED",
+}
+"""BT-24 values that name a Factur-X / ZUGFeRD level but belong to no profile, with that XMP conformance level (#98).
+
+Each pair is what the PDFs of the pinned ZUGFeRD corpus carry (the embedded BT-24 and the XMP ``ConformanceLevel``;
+``tests/conformance/test_facturx_extract_corpus.py`` checks it): the ZUGFeRD 2.0 ids, which plan §8 7.2 makes
+extract-only, and the colon spellings of BASIC and EXTENDED. Every level here has no pinned Schematron (#42), so
+``validate()`` refuses these documents as it refuses the registered levels, instead of reporting an EN 16931 core
+verdict. They are never registered (one profile per BT-24) and never written: no profile declares them.
+"""
 
 
 def by_conformance_level(level: str) -> Profile:

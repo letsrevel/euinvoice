@@ -10,6 +10,7 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.profiles import _base as profiles_base
+from euinvoice.profiles import facturx
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
@@ -280,3 +281,32 @@ def test_facturx_levels_without_pinned_rules_raise_naming_issue_42(
     with pytest.raises(ArtifactsNotAvailableError, match=r"issues/42.*profiles\.EN16931"):
         validate(cii(profile.specification_identifier), profile if explicit else None)
     assert spy.ran == []
+
+
+# The ZUGFeRD 2.0 ids and the colon spellings of BASIC / EXTENDED (#98): no profile declares them, but they identify
+# a level whose Schematron is not pinned, so validate() refuses them like the registered levels.
+UNREGISTERED_LEVEL_IDS = sorted(facturx._UNREGISTERED_LEVEL_IDENTIFIERS)
+
+
+@pytest.mark.parametrize("bt24", UNREGISTERED_LEVEL_IDS)
+def test_unregistered_level_identifiers_raise_naming_issue_42(spy: Spy, bt24: str) -> None:
+    level = facturx._UNREGISTERED_LEVEL_IDENTIFIERS[bt24]
+    with pytest.raises(ArtifactsNotAvailableError, match=r"issues/42.*profiles\.EN16931") as error:
+        validate(cii(bt24))
+    assert repr(bt24) in str(error.value)
+    assert f"level {level!r}" in str(error.value)
+    assert spy.ran == []
+
+
+@pytest.mark.parametrize("bt24", UNREGISTERED_LEVEL_IDS)
+def test_unregistered_level_identifiers_run_core_rules_when_asked(spy: Spy, bt24: str) -> None:
+    report = validate(cii(bt24), profiles.EN16931)
+    assert spy.ran == [schematron.CEN_CII]
+    assert all(f.rule_id != PROFILE_FALLBACK_RULE_ID for f in report.findings)
+
+
+def test_unregistered_level_identifier_in_ubl_falls_back_like_a_cii_only_profile(spy: Spy) -> None:
+    # The levels are CII only (plan §1); in UBL the id falls back to core, as a CII-only profile's BT-24 does.
+    report = validate(ubl(UNREGISTERED_LEVEL_IDS[0]))
+    assert spy.ran == [schematron.CEN_UBL]
+    assert_fallback_note(report.findings[0], "is not a registered profile")
