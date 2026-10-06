@@ -10,7 +10,9 @@
 
 A profile whose rule sets include ``"facturx"`` (Factur-X MINIMUM, BASIC WL, BASIC, EXTENDED) raises
 ``ArtifactsNotAvailableError`` before any step: its official Schematron ships only in the Factur-X package, which
-is not pinned (issue #42), and a report without it would claim a verdict no official rule gave.
+is not pinned (issue #42), and a report without it would claim a verdict no official rule gave. So does an
+auto-detected CII document whose BT-24 names such a level without being a profile's (the ZUGFeRD 2.0 ids and the
+colon spellings of BASIC / EXTENDED, :data:`euinvoice.profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS`, #98).
 
 XSD short-circuit: a blocking XSD finding stops validation, as KoSIT skips its Schematron steps after an
 XSD failure. An XSD ``warning`` does not stop it. KoSIT's ``default-report.xsl`` marks the ``val-xsd``
@@ -46,7 +48,9 @@ from euinvoice import _xml, profiles
 from euinvoice.detect import Detection, detect_root
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.profiles._base import FACTURX_RULE_SET
+from euinvoice.profiles.facturx import UNREGISTERED_LEVEL_IDENTIFIERS
 from euinvoice.report import Finding, Severity, ValidationReport
+from euinvoice.syntax import Syntax
 from euinvoice.validate import schematron, xsd
 
 __all__ = ["EUINVOICE_SOURCE", "PROFILE_FALLBACK_RULE_ID", "validate"]
@@ -80,7 +84,10 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
     implemented yet), the document is validated against :data:`euinvoice.profiles.EN16931` (XSD and CEN
     rules) and the report starts with an ``information`` finding :data:`PROFILE_FALLBACK_RULE_ID` saying
     that only the core rules ran. The same fallback applies when the BT-24's profile does not support the
-    document's syntax. The official steps report the BT-24
+    document's syntax. A CII document whose BT-24 is one of
+    :data:`euinvoice.profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS` (a ZUGFeRD 2.0 MINIMUM, BASIC or EXTENDED id,
+    or a colon spelling of Factur-X BASIC / EXTENDED) does not fall back: it raises ``ArtifactsNotAvailableError``
+    like the Factur-X levels below. The official steps report the BT-24
     problem itself: a missing or blank BT-24 fails BR-01 (and, in CII without the context parameter,
     CII-SR-009 and CII-SR-010); a repeated UBL ``cbc:CustomizationID`` or CII ``ram:ID`` fails the XSD
     (each allows at most one); a repeated CII ``ram:GuidelineSpecifiedDocumentContextParameter`` makes the
@@ -103,8 +110,8 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote or a CII D16B
             CrossIndustryInvoice, or ``profile`` does not support the document's syntax.
         ArtifactsNotAvailableError: An artifact the run needs is not in the cache (names the fetch
-            command), ``saxonche`` is not installed, or the profile needs the Factur-X Schematron, which is not
-            pinned yet (issue #42).
+            command), ``saxonche`` is not installed, or the profile (or, auto-detected, the BT-24's level) needs the
+            Factur-X / ZUGFeRD Schematron, which is not pinned yet (issue #42).
     """
     root = _xml.parse(data)
     detection = detect_root(root)
@@ -119,11 +126,7 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
             f"{', '.join(sorted(profile.syntaxes))}"
         )
     if FACTURX_RULE_SET in profile.rule_sets:
-        raise ArtifactsNotAvailableError(
-            f"profile {profile.id!r} is validated by the Factur-X / ZUGFeRD Schematron, which is not pinned yet "
-            "(https://github.com/letsrevel/euinvoice/issues/42); no fetch command can provide it. To run only the "
-            "EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
-        )
+        raise _facturx_not_pinned(f"profile {profile.id!r} is")
     schema_findings = xsd.validate(root)
     findings.extend(schema_findings)
     if not ValidationReport(schema_findings).ok:
@@ -142,11 +145,29 @@ def _rule_findings(rule_set: schematron.RuleSet, root: etree._Element) -> tuple[
     return schematron.run(rule_set, root)
 
 
+def _facturx_not_pinned(subject: str) -> ArtifactsNotAvailableError:
+    """The refusal for a document only the unpinned Factur-X / ZUGFeRD Schematron can judge (#42)."""
+    return ArtifactsNotAvailableError(
+        f"{subject} validated by the Factur-X / ZUGFeRD Schematron, which is not pinned yet "
+        "(https://github.com/letsrevel/euinvoice/issues/42); no fetch command can provide it. To run only the "
+        "EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
+    )
+
+
 def _resolve(detection: Detection) -> tuple[profiles.Profile, tuple[Finding, ...]]:
-    """The detected profile, or EN 16931 core plus an ``information`` note."""
+    """The detected profile, or EN 16931 core plus an ``information`` note.
+
+    Raises:
+        ArtifactsNotAvailableError: A CII document's BT-24 is one of
+            :data:`euinvoice.profiles.facturx.UNREGISTERED_LEVEL_IDENTIFIERS` (#98).
+    """
     bt24, profile, syntax = detection.specification_identifier, detection.profile, detection.syntax
     if bt24 is None:
         reason = "the document has no single non-empty specification identifier (BT-24)"
+    elif profile is None and syntax is Syntax.CII and (level := UNREGISTERED_LEVEL_IDENTIFIERS.get(bt24)):
+        raise _facturx_not_pinned(
+            f"specification identifier (BT-24) {bt24!r} names the Factur-X / ZUGFeRD level {level!r}, which is"
+        )
     elif profile is None:
         reason = f"specification identifier (BT-24) {bt24!r} is not a registered profile"
     elif syntax not in profile.syntaxes:

@@ -303,13 +303,20 @@ def test_convert_unwritable_output_exits_2_naming_it(tmp_path: Path, capsys: pyt
     assert str(target) in err
 
 
+@pytest.mark.parametrize(
+    "bt24",
+    [
+        profiles.FACTURX_BASIC.specification_identifier,
+        # ZUGFeRD 2.0 BASIC (#98): no profile, but the same unpinned level, so the same refusal.
+        "urn:cen.eu:en16931:2017#compliant#urn:zugferd.de:2p0:basic",
+    ],
+    ids=["facturx-basic", "zugferd-2.0-basic"],
+)
 def test_validate_unpinned_facturx_level_hints_at_the_cli_flag(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    bt24: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # The Factur-X BASIC Schematron is not pinned (#42): validate() raises before running anything.
-    invoice = minimal_invoice(
-        process_control=ProcessControl(specification_identifier=profiles.FACTURX_BASIC.specification_identifier)
-    )
+    # The Factur-X / ZUGFeRD BASIC Schematron is not pinned (#42): validate() raises before running anything.
+    invoice = minimal_invoice(process_control=ProcessControl(specification_identifier=bt24))
     assert cli.main(["validate", _write(tmp_path, "a.xml", cii.write(invoice))]) == 2
     err = capsys.readouterr().err
     assert "issues/42" in err

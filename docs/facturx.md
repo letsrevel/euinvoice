@@ -86,5 +86,11 @@ so `ok` is the EN 16931 verdict, not a full Factur-X one:
 True
 ```
 
+The MINIMUM, BASIC WL, BASIC and EXTENDED levels have no pinned Schematron, so `validate()` raises
+`ArtifactsNotAvailableError` for them instead of giving a verdict. The same applies when it detects the profile
+from BT-24 in a ZUGFeRD 2.0 MINIMUM, BASIC or EXTENDED invoice (extract only), or in a BASIC or EXTENDED invoice
+whose BT-24 is spelled with colons (`urn:cen.eu:en16931:2017:compliant:factur-x.eu:1p0:basic`). To get the
+EN 16931 core verdict alone, pass `profiles.EN16931`.
+
 Whether the PDF itself is valid PDF/A-3 is up to your renderer; euinvoice's own conformance suite checks the
 PDFs it writes with veraPDF.
