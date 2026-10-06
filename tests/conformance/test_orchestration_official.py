@@ -10,7 +10,6 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.report import Severity
-from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, artifacts, schematron, validate, xsd
 
 CII_XSD = "xsd:xrechnung-validator-configuration"
@@ -18,13 +17,7 @@ CII_XSD = "xsd:xrechnung-validator-configuration"
 pytestmark = pytest.mark.conformance
 
 PEPPOL = profiles.PEPPOL
-# The XRechnung profile object does not exist yet (#21): a test-local stand-in with the rule sets verified
-# on issue #17 (CEN then XRechnung, as in KoSIT scenarios.xml). Its BT-24 is irrelevant here because it is
-# passed explicitly.
-XRECHNUNG = profiles.Profile(
-    id="test-xrechnung", title="XRechnung (test)", specification_identifier="urn:example.com:xrechnung",
-    syntaxes=frozenset(Syntax), rule_sets=("cen", "xrechnung"),
-)  # fmt: skip
+XRECHNUNG = profiles.XRECHNUNG
 
 EXAMPLE1 = "examples/ubl-tc434-example1.xml"
 PEPPOL_BASE = "rules/examples/base-example.xml"
@@ -246,10 +239,11 @@ CUSTOM_LEVEL_GAP = {
 
 
 @pytest.mark.parametrize("path", XRECHNUNG_INSTANCES, ids=lambda p: f"{p.parent.name}/{p.name}")
-def test_every_xrechnung_testsuite_instance_validates_under_xrechnung(path: Path) -> None:
+def test_every_xrechnung_testsuite_instance_validates_under_its_detected_profile(path: Path) -> None:
+    # Each instance's BT-24 (CIUS, Extension or CVD) auto-detects its XRechnung profile: no core fallback.
     relative = path.relative_to(artifacts.source_dir("xrechnung-testsuite") / "instances").as_posix()
 
-    report = validate(path.read_bytes(), XRECHNUNG)
+    report = validate(path.read_bytes())
 
     blocking = {f.rule_id for f in report.findings if f.severity in BLOCKING}
     assert blocking == CUSTOM_LEVEL_GAP.get(relative, set()), report.findings

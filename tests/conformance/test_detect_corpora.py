@@ -35,8 +35,8 @@ UBL_INVOICE = ("ubl", "Invoice")
 UBL_CREDIT_NOTE = ("ubl", "CreditNote")
 CII = ("cii", "CrossIndustryInvoice")
 
-# ponytail: profile ids are pinned to the registry of today (EN 16931 core and Peppol BIS). XRechnung and
-# Factur-X EXTENDED still detect with profile None; flip their buckets when #21 / #22 register them.
+# ponytail: profile ids are pinned to the registry of today (EN 16931 core, Peppol BIS and XRechnung).
+# Factur-X EXTENDED still detects with profile None; flip its bucket when #22 registers it.
 EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
     "cen-ubl": {
         (*UBL_INVOICE, CORE, "en16931"): 14,
@@ -52,19 +52,19 @@ EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
         (*UBL_CREDIT_NOTE, PEPPOL, "peppol"): 1,
     },
     "xrechnung-testsuite": {
-        (*UBL_INVOICE, XRECHNUNG, None): 39,
-        (*UBL_INVOICE, XRECHNUNG_EXTENSION, None): 5,
-        (*UBL_INVOICE, XRECHNUNG_CVD, None): 1,
-        (*CII, XRECHNUNG, None): 39,
-        (*CII, XRECHNUNG_EXTENSION, None): 1,
-        (*CII, XRECHNUNG_CVD, None): 1,
+        (*UBL_INVOICE, XRECHNUNG, "xrechnung"): 39,
+        (*UBL_INVOICE, XRECHNUNG_EXTENSION, "xrechnung-extension"): 5,
+        (*UBL_INVOICE, XRECHNUNG_CVD, "xrechnung-cvd"): 1,
+        (*CII, XRECHNUNG, "xrechnung"): 39,
+        (*CII, XRECHNUNG_EXTENSION, "xrechnung-extension"): 1,
+        (*CII, XRECHNUNG_CVD, "xrechnung-cvd"): 1,
     },
     "zugferd-corpus": {
         (*UBL_INVOICE, PEPPOL, "peppol"): 25,
-        (*UBL_INVOICE, XRECHNUNG, None): 5,
+        (*UBL_INVOICE, XRECHNUNG, "xrechnung"): 5,
         (*UBL_CREDIT_NOTE, CORE, "en16931"): 1,
         (*CII, CORE, "en16931"): 32,
-        (*CII, XRECHNUNG, None): 5,
+        (*CII, XRECHNUNG, "xrechnung"): 5,
         (*CII, XRECHNUNG_1_2, None): 2,
         (*CII, FACTURX_EXTENDED, None): 3,
     },

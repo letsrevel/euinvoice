@@ -12,6 +12,8 @@ from euinvoice.syntax import Syntax
 CORE = "urn:cen.eu:en16931:2017"
 PEPPOL = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
 XRECHNUNG = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
+# A legacy XRechnung id still found in the corpora; no profile declares it.
+XRECHNUNG_1_2 = "urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_1.2"
 
 
 def ubl(root: str = "Invoice", bt24: str | None = CORE, namespace: str = _xml.UBL_INVOICE) -> bytes:
@@ -60,12 +62,17 @@ def test_bt24_whitespace_is_normalized_like_the_official_rules() -> None:
 
 
 @pytest.mark.parametrize(
-    "data", [ubl(bt24=XRECHNUNG), cii(XRECHNUNG), cii("urn:ferd:CrossIndustryDocument:invoice:1p0:comfort")]
+    "data", [ubl(bt24=XRECHNUNG_1_2), cii(XRECHNUNG_1_2), cii("urn:ferd:CrossIndustryDocument:invoice:1p0:comfort")]
 )
 def test_a_well_formed_invoice_with_an_unregistered_bt24_is_classified_without_a_profile(data: bytes) -> None:
     detection = detect(data)
     assert detection.profile is None
-    assert detection.specification_identifier in {XRECHNUNG, "urn:ferd:CrossIndustryDocument:invoice:1p0:comfort"}
+    assert detection.specification_identifier in {XRECHNUNG_1_2, "urn:ferd:CrossIndustryDocument:invoice:1p0:comfort"}
+
+
+@pytest.mark.parametrize("data", [ubl(bt24=XRECHNUNG), cii(XRECHNUNG)], ids=["ubl", "cii"])
+def test_the_xrechnung_bt24_resolves_to_its_profile(data: bytes) -> None:
+    assert detect(data).profile is profiles.XRECHNUNG
 
 
 @pytest.mark.parametrize("data", [ubl(bt24=PEPPOL), cii(PEPPOL)], ids=["ubl", "cii"])

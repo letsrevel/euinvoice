@@ -20,10 +20,6 @@ NBSP = "\N{NO-BREAK SPACE}"
 NO_BT24 = "no single non-empty specification identifier (BT-24)"
 
 PEPPOL = profiles.PEPPOL
-XRECHNUNG = profiles.Profile(
-    id="test-xrechnung", title="t", specification_identifier="urn:example.com:xr", syntaxes=frozenset(Syntax),
-    rule_sets=("cen", "xrechnung"),
-)  # fmt: skip
 UBL_ONLY = profiles.Profile(
     id="test-ubl", title="t", specification_identifier="urn:example.com:ubl", syntaxes=frozenset({Syntax.UBL}),
     rule_sets=("cen",),
@@ -84,11 +80,11 @@ def spy(monkeypatch: pytest.MonkeyPatch) -> Spy:
         (PEPPOL, ubl(CORE), [schematron.CEN_UBL, schematron.PEPPOL_UBL]),
         (PEPPOL, cii(CORE), [schematron.CEN_CII, schematron.PEPPOL_CII]),
         (
-            XRECHNUNG,
+            profiles.XRECHNUNG,
             ubl(CORE, root="CreditNote", ns=_xml.UBL_CREDIT_NOTE),
             [schematron.CEN_UBL, schematron.XRECHNUNG_UBL],
         ),
-        (XRECHNUNG, cii(CORE), [schematron.CEN_CII, schematron.XRECHNUNG_CII]),
+        (profiles.XRECHNUNG, cii(CORE), [schematron.CEN_CII, schematron.XRECHNUNG_CII]),
     ],
     ids=["core-ubl", "core-cii", "peppol-ubl", "peppol-cii", "xrechnung-ubl-creditnote", "xrechnung-cii"],
 )
@@ -133,6 +129,25 @@ def test_registered_bt24_selects_its_profile_without_a_note(spy: Spy, data: byte
     report = validate(data)
 
     assert len(spy.ran) == 1
+    assert all(f.source != EUINVOICE_SOURCE for f in report.findings)
+
+
+@pytest.mark.parametrize("syntax", ["ubl", "cii"])
+@pytest.mark.parametrize(
+    "profile",
+    [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION, profiles.XRECHNUNG_CVD],
+    ids=lambda p: p.id,
+)
+def test_each_xrechnung_bt24_selects_cen_then_xrechnung(spy: Spy, profile: profiles.Profile, syntax: str) -> None:
+    data = ubl(profile.specification_identifier) if syntax == "ubl" else cii(profile.specification_identifier)
+
+    report = validate(data)
+
+    expected = {
+        "ubl": [schematron.CEN_UBL, schematron.XRECHNUNG_UBL],
+        "cii": [schematron.CEN_CII, schematron.XRECHNUNG_CII],
+    }
+    assert spy.ran == expected[syntax]
     assert all(f.source != EUINVOICE_SOURCE for f in report.findings)
 
 
@@ -193,7 +208,7 @@ def assert_fallback_note(note: Finding, reason: str) -> None:
 
 
 def test_explicit_profile_wins_over_bt24(spy: Spy) -> None:
-    validate(ubl(CORE), XRECHNUNG)
+    validate(ubl(CORE), profiles.XRECHNUNG)
 
     assert spy.ran == [schematron.CEN_UBL, schematron.XRECHNUNG_UBL]
 

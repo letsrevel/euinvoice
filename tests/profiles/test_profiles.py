@@ -45,7 +45,7 @@ class TestRegistry:
         # A CIUS identifier only *starts* with the core one (and an extension with the CIUS one); neither
         # resolves to the profile whose BT-24 it extends.
         with pytest.raises(UnsupportedDocumentError):
-            profiles.get("urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0")
+            profiles.get("urn:cen.eu:en16931:2017#compliant#urn:example.com:cius")
         with pytest.raises(UnsupportedDocumentError):
             profiles.get(PEPPOL_BT24 + "#conformant#urn:example.com:extension")
 
