@@ -16,16 +16,16 @@ tampering).
 Run-time errors (D9): a well-formed document can still make an official stylesheet fail while it runs,
 e.g. ``cbc:PayableAmount`` = ``abc`` raises ``FORG0001`` inside an ``xs:decimal`` cast of CEN's BR-CO
 rules. That is a property of the document, so it becomes one blocking finding
-(:data:`RUNTIME_ERROR_RULE_ID`, ``fatal``) rather than an exception. Saxon also prints that error's
-stack trace to the process's standard error from native code. saxonche (12.10 and 13.0.0) does not route it through
-its Python API, and its ``standardErrorOutputFile`` configuration property does not redirect it.
-Silencing it would mean redirecting file descriptor 2 for the whole process, so it is left alone.
+(:data:`RUNTIME_ERROR_RULE_ID`, ``fatal``) rather than an exception. saxonche 12.x puts the error's
+template trace, with the absolute path of the cached stylesheet, into the ``PySaxonApiError`` message
+(13.0.0 printed it to standard error instead). The finding keeps only Saxon's first two lines: the
+location in the stylesheet and the error code with its description, on one line.
 
 Caching and threads: one :class:`saxonche.PySaxonProcessor` per process, created on first use, and one
 compiled executable per ``(stylesheet path, cache-entry fingerprint)``, so a re-fetched or re-pinned
 artifact is compiled again and an unchanged one is compiled once (about 0.14 s for the CEN UBL
-stylesheet). saxonche (12.10 and 13.0.0) documents a compiled ``PyXsltExecutable`` as "immutable and thread-safe"
-(``PyXslt30Processor.compile_stylesheet`` docstring) but says nothing about the shared processor's
+stylesheet). saxonche (12.10 and 13.0.0) documents a compiled ``PyXsltExecutable`` as "immutable and
+thread-safe" (``PyXslt30Processor.compile_stylesheet`` docstring) but says nothing about the shared processor's
 ``parse_xml`` or about the per-call state of ``transform_to_string``. So one module lock serializes
 compiling, building the XDM node and transforming: :func:`run` is safe to call from any thread, and
 transforms never run in parallel. SVRL parsing happens outside the lock.
@@ -154,7 +154,10 @@ def run(
         try:
             output = executable.transform_to_string(xdm_node=node)
         except saxonche.PySaxonApiError as exc:
-            message = f"{rule_set.stylesheet} could not evaluate the document: {str(exc).strip()}"
+            # Saxon's first two lines are the location ("Error ... of <file>:") and "<code>  <description>".
+            # saxonche 12.x appends the template trace, with absolute cache paths, which is dropped.
+            lines = [line.strip() for line in str(exc).splitlines() if line.strip()]
+            message = f"{rule_set.stylesheet} could not evaluate the document: {' '.join(lines[:2])}"
             return (Finding(RUNTIME_ERROR_RULE_ID, Severity.FATAL, None, message, rule_set.source),)
     try:
         # The pinned stylesheets' xsl:output leaves the encoding at its UTF-8 default, so the declaration

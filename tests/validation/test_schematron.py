@@ -205,7 +205,13 @@ def test_stylesheet_that_does_not_compile_is_an_integrity_error(tmp_path: Path) 
 
 def test_document_the_stylesheet_cannot_evaluate_is_a_fatal_finding(tmp_path: Path) -> None:
     # D9: like CEN's BR-CO rules on a non-numeric amount, abs() casts the ID to a number: FORG0001 on "abc".
-    casting = STYLESHEET.replace('test="not(/*/*:ID)"', 'test="abs(/*/*:ID) lt 0"')
+    # The cast sits in an applied template rule, as in CEN, so Saxon's trace has an "invoked by ... at
+    # file:///<cache path>" line.
+    casting = STYLESHEET.replace(
+        '<xsl:if test="not(/*/*:ID)">', '<xsl:apply-templates select="/*/*:ID"/><xsl:if test="not(/*/*:ID)">'
+    ).replace(
+        "</xsl:stylesheet>", '<xsl:template match="*:ID"><xsl:if test="abs(.) lt 0"/></xsl:template></xsl:stylesheet>'
+    )
     sources = install(tmp_path, casting, sha="3" * 64)
 
     (finding,) = run(b"<Invoice><ID>abc</ID></Invoice>", tmp_path, sources)
@@ -218,6 +224,10 @@ def test_document_the_stylesheet_cannot_evaluate_is_a_fatal_finding(tmp_path: Pa
     )
     assert finding.message.startswith("xslt/rules.xslt could not evaluate the document: ")
     assert '"abc"' in finding.message
+    # saxonche 12.x appends the Java stack trace, with the artifact cache path, to the exception (issue #74).
+    assert "\n" not in finding.message
+    assert str(tmp_path) not in finding.message
+    assert "file:" not in finding.message
     assert run(b"<Invoice><ID>1.5</ID></Invoice>", tmp_path, sources) == ()
 
 
