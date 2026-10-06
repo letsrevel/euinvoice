@@ -5,7 +5,8 @@ XRechnung testsuite: X reads, ``read(write(read(X))) == read(X)`` with nothing u
 ``validate(write(read(X)))`` has no fatal or error finding. The unmapped XPaths of each file are printed
 (``pytest -m conformance -rP``). Files that cannot be read are listed in :data:`EXCLUDED` with the reason; each
 must still fail with a :class:`ParseError` naming that rule. Files that read but break a CEN rule themselves are
-listed in :data:`UPSTREAM_INVALID`; their round trip must give exactly the upstream file's blocking findings.
+listed in :data:`UPSTREAM_INVALID`; their round trip must give exactly the upstream file's blocking findings, plus
+any rule listed in :data:`LOST_WITH_UNMAPPED` (one that needs content the reader reported as unmapped).
 """
 
 import pathlib
@@ -16,11 +17,10 @@ import pytest
 from euinvoice import _xml, detect
 from euinvoice.errors import ParseError, UnsupportedDocumentError
 from euinvoice.syntax import ubl
-from euinvoice.validate import artifacts, schematron, validate
+from euinvoice.validate import artifacts, validate
 
 pytestmark = pytest.mark.conformance
 
-XRECHNUNG: t.Final = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
 
 _DIRECTORIES: t.Final[dict[artifacts.SourceName, str]] = {
     "cen-ubl": "examples",
@@ -53,8 +53,14 @@ UPSTREAM_INVALID: t.Final[dict[str, dict[str, set[str]]]] = {
     },
 }
 
-_EXTRA_RULES: t.Final = {XRECHNUNG: schematron.XRECHNUNG_UBL}
-"""The CIUS rule sets that validate() does not run yet (no registered profile, #21); Peppol runs since #64."""
+LOST_WITH_UNMAPPED: t.Final[dict[str, dict[str, set[str]]]] = {
+    "xrechnung-testsuite": {
+        # BR-DEX-09 (XRechnung extension, fatal) adds the third party payments BT-DEX-002 to BT-115. They are
+        # cac:PrepaidPayment, outside EN 16931, so the reader reports them unmapped and write(read(X)) lacks them.
+        "instances/extension/05.01a-INVOICE_ubl.xml": {"BR-DEX-09"},
+    },
+}
+"""Rules the round trip fails only because content outside the model (reported in ``unmapped``) is not written."""
 
 
 def _ubl_files(source: artifacts.SourceName) -> list[tuple[str, bytes]]:
@@ -106,14 +112,9 @@ def test_every_ubl_file_reads_and_round_trips(source: artifacts.SourceName) -> N
         expected = upstream_invalid.get(name, set())
         if expected:
             assert _fatal_or_error(validate(data).findings) == expected, name  # the exclusion is still true
+        expected = expected | LOST_WITH_UNMAPPED.get(source, {}).get(name, set())
+        # validate() runs the CEN rules plus those of the BT-24 profile (Peppol #64, XRechnung #21).
         found = _fatal_or_error(validate(written).findings)
         if found != expected:
             failures.append(f"{name}: {sorted(found)}")
-        extra = _EXTRA_RULES.get(detect.detect(data).specification_identifier or "")
-        if extra is not None:
-            # ponytail: validate() runs only the CEN rules for XRechnung until #21 registers its profile; until then
-            # its UBL rules run here, and the round trip must not add a fatal or error.
-            added = _fatal_or_error(schematron.run(extra, written)) - _fatal_or_error(schematron.run(extra, data))
-            if added:
-                failures.append(f"{name}: {extra.source} {sorted(added)}")
     assert failures == []
