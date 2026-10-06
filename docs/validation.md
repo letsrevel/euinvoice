@@ -99,6 +99,8 @@ Pre-flight is a convenience. It never replaces `validate()`, which gives the ver
 
 ## Factur-X
 
-The Factur-X / ZUGFeRD Schematron is not pinned yet ([#42](https://github.com/letsrevel/euinvoice/issues/42)), so
-`validate()` raises `ArtifactsNotAvailableError` for the Factur-X profiles. To check the EN 16931 rules of a
-Factur-X invoice, validate its XML with `profile=profiles.EN16931`, as shown in [Factur-X](facturx.md).
+The Factur-X / ZUGFeRD Schematron is not pinned yet ([#42](https://github.com/letsrevel/euinvoice/issues/42)).
+`validate()` therefore raises `ArtifactsNotAvailableError` for the levels that only that Schematron covers:
+MINIMUM, BASIC WL, BASIC and EXTENDED. `profiles.FACTURX_EN16931` and `profiles.FACTURX_XRECHNUNG` validate the
+CII XML against the D16B XSD and the CEN rules (plus the XRechnung rules for `FACTURX_XRECHNUNG`), so their `ok` is
+the EN 16931 (or XRechnung) verdict, not a full Factur-X one. See [Factur-X](facturx.md).

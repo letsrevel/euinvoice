@@ -39,7 +39,7 @@ CHECKOUT_TOTAL = sum(Decimal(quantity) * Decimal(gross) for _, quantity, gross, 
 
 SELLER = Seller(
     name="Example Events GmbH",
-    vat_identifier="ATU00000000",  # BT-31, required for category S (BR-S-02)
+    vat_identifier="ATU00000000",  # BT-31; BR-S-02 needs BT-31, BT-32 or BT-63
     postal_address=SellerPostalAddress(city="Wien", post_code="1010", country_code="AT"),
 )
 BUYER = Buyer(name="Max Example", postal_address=BuyerPostalAddress(country_code="AT"))
@@ -76,10 +76,10 @@ Where the rounding happens, and why:
 1. **The net unit price keeps 6 decimals.** No EN 16931 rule limits the decimals of BT-146: the BR-DEC rules
    cover amounts such as BT-131 and BT-116, not unit prices. Keeping precision here means the next rounding
    step decides the cent, not this one.
-2. **The line net amount (BT-131)** is quantity × net unit price, rounded to 2 decimals half up by
-   `calc.complete` (BR-DEC-23 allows 2 decimals; the formula is Peppol's PEPPOL-EN16931-R120).
+2. **The line net amount (BT-131)** is quantity × net unit price, rounded to 2 decimals by `calc.complete`
+   (BR-DEC-23 allows 2 decimals; the formula is Peppol's PEPPOL-EN16931-R120; euinvoice rounds half up, D11).
 3. **The VAT (BT-117)** is computed once per VAT rate, on the sum of the line net amounts at that rate, and
-   rounded to 2 decimals half up (BR-CO-17). It is not the sum of per-line VAT amounts.
+   rounded to 2 decimals (BR-CO-17; euinvoice rounds half up, D11). It is not the sum of per-line VAT amounts.
 
 ```python
 draft = InvoiceDraft(
@@ -131,9 +131,14 @@ late_entry = calc.complete(
 Decimal('24.91')
 ```
 
-euinvoice does not adjust amounts for you. One option, if your tax advisor agrees, is to record the payment as
-BT-113 and the cent as the rounding amount BT-114, so that the amount due BT-115 = BT-112 − BT-113 + BT-114
-(BR-CO-16) is zero:
+euinvoice does not adjust amounts for you. Your options are to choose gross prices that round-trip, or to let
+your checkout charge the invoice total.
+
+The rules also accept recording the payment as BT-113 and the difference as a rounding amount BT-114: the
+arithmetic of BR-CO-16 (BT-115 = BT-112 − BT-113 + BT-114) holds, and the document validates. The invoice still
+states a total with VAT (BT-112) of 24.91 and a VAT total (BT-110) of 2.87. The pinned rules define BT-114 only
+through that arithmetic, so whether a 0.01 rounding amount is acceptable here is a question for your tax advisor,
+not something the rules decide:
 
 ```python
 charged = Decimal("24.90")
@@ -148,16 +153,16 @@ late_entry_xml = to_xml(late_entry, profile=profiles.EN16931, syntax="ubl")
 ```
 
 ```python
+>>> late_entry.totals.total_with_vat, late_entry.totals.total_vat
+(Decimal('24.91'), Decimal('2.87'))
 >>> late_entry.totals.rounding_amount, late_entry.totals.amount_due
 (Decimal('-0.01'), Decimal('0.00'))
 ```
 
-Other options are to choose gross prices that round-trip, or to let your checkout charge the invoice total.
-
 ## The refund: a credit note
 
 One admission is refunded. A credit note is the same model with BT-3 `381`; in UBL it is written as a
-`CreditNote` document. Its amounts are positive. BT-25 references the invoice it corrects (BG-3, and each BG-3
+`CreditNote` document. In this example its amounts are positive. BT-25 references the invoice it corrects (BG-3, and each BG-3
 needs its BT-25, BR-55); BT-26 adds that invoice's date.
 
 ```python

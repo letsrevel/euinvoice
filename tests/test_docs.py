@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 
 import _docs
 import _markdown_doctest
@@ -29,6 +30,17 @@ def test_only_the_weasyprint_example_is_an_illustration() -> None:
     assert "weasyprint" in body
 
 
+def test_every_code_fence_is_python_or_bash() -> None:
+    # Only ``python`` fences are run; any other language (or none) would be an example no test executes.
+    languages = set()
+    for path in _docs.DOCS.rglob("*.md"):
+        fences = re.findall(r"^```(.*)$", path.read_text(encoding="utf-8"), re.M)
+        assert len(fences) % 2 == 0, path
+        assert all(closing == "" for closing in fences[1::2]), path
+        languages |= {(path.name, opening) for opening in fences[::2]}
+    assert {language for _, language in languages} == {"python", "bash"}, sorted(languages)
+
+
 def test_the_docs_examples_run_without_artifacts() -> None:
     assert _docs.run(with_artifacts=False) == {
         "quickstart.md": 10,
@@ -36,7 +48,7 @@ def test_the_docs_examples_run_without_artifacts() -> None:
         "validation.md": 3,
         "facturx.md": 10,
         "mapping/freelancer.md": 11,
-        "mapping/ticketing.md": 14,
+        "mapping/ticketing.md": 15,
     }
 
 
@@ -55,6 +67,10 @@ The official validation artifacts and example corpora are third-party works unde
 never bundles or redistributes them: `python -m euinvoice artifacts fetch` downloads each archive from its
 upstream URL into your cache and checks its sha256 (`src/euinvoice/validate/manifest.toml`). Using them is
 subject to the licence of each source.
+
+The licence column is the `license` field of the manifest. The `xrechnung-testsuite` and
+`xrechnung-validator-configuration` archives contain no licence file; their entry is the licence recorded in the
+manifest for the upstream repository.
 
 | Source | Version | Licence | Download |
 |---|---|---|---|

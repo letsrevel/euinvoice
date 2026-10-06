@@ -84,7 +84,8 @@ def invoice_draft(number: str, buyer: Buyer, line: LineDraft, seller: Seller = S
 
 ## 1. Domestic customer: standard rated (`S`)
 
-The common case. The seller's VAT identifier is required (BR-S-02), the rate must be greater than zero
+The common case. The seller VAT identifier (BT-31), tax registration identifier (BT-32) or tax representative VAT
+identifier (BT-63) is required (BR-S-02), the rate must be greater than zero
 (BR-S-05), and no exemption reason is allowed (BR-S-10).
 
 ```python
@@ -114,12 +115,13 @@ Under the reverse charge the buyer accounts for the VAT, so the invoice carries 
 
 | Rule | Requires |
 |---|---|
-| BR-AE-02 | the seller VAT identifier (BT-31), and the buyer VAT identifier (BT-48) or legal registration identifier (BT-47) |
+| BR-AE-02 | the seller VAT identifier (BT-31), tax registration identifier (BT-32) or tax representative VAT identifier (BT-63), and the buyer VAT identifier (BT-48) or legal registration identifier (BT-47) |
 | BR-AE-05 | line VAT rate (BT-152) 0 |
 | BR-AE-08, BR-AE-09 | taxable amount = sum of the `AE` lines; tax amount 0 (`calc.complete` derives both) |
 | BR-AE-10 | an exemption reason code (BT-121) meaning "Reverse charge", or the reason text (BT-120) "Reverse charge" |
 
-The code comes from the CEF VATEX list (BR-CL-22): `VATEX-EU-AE`. Give both the code and the text:
+The code comes from the CEF VATEX list (BR-CL-22): `VATEX-EU-AE`, which Peppol pairs with category `AE`
+(PEPPOL-EN16931-P0107). Give both the code and the text:
 
 ```python
 reverse_charge = calc.complete(
@@ -175,16 +177,18 @@ the official rules reject it (BR-AE-02). This is why you validate before sending
 
 ## 3. Customer outside the EU: not subject to VAT (`O`) or export (`G`)?
 
-EN 16931 has two categories for supplies to a customer outside the EU, and their rules differ:
+For a supply to a customer outside the EU, the categories most often considered are `G` (Export outside the EU)
+and `O` (Not subject to VAT; the Peppol example `rules/examples/vat-category-O.xml` labels it "Outside scope of
+VAT"). Their rules differ:
 
 | | `G` Export outside the EU | `O` Not subject to VAT |
 |---|---|---|
 | VAT identifiers | seller VAT identifier (BT-31) or tax representative's (BT-63) **required** (BR-G-02) | seller (BT-31), tax representative (BT-63) and buyer (BT-48) VAT identifiers **forbidden** (BR-O-02) |
 | Line VAT rate (BT-152) | 0 (BR-G-05) | absent (BR-O-05) |
 | Other categories on the invoice | allowed | **none**: no other VAT breakdown, line, allowance or charge category (BR-O-11 … BR-O-14) |
-| Exemption reason | a code meaning "Export outside the EU" (e.g. `VATEX-EU-G`) or that text (BR-G-10) | a code meaning "Not subject to VAT" (e.g. `VATEX-EU-O`) or that text (BR-O-10) |
+| Exemption reason | a code meaning "Export outside the EU" (e.g. `VATEX-EU-G`, paired with `G` by PEPPOL-EN16931-P0104) or that text (BR-G-10) | a code meaning "Not subject to VAT" (e.g. `VATEX-EU-O`, paired with `O` by PEPPOL-EN16931-P0105) or that text (BR-O-10) |
 
-`G` is named for exports; `O` is for supplies outside the scope of VAT. Which one a supply is, is a tax question.
+Which one a supply is, is a tax question.
 This example assumes the freelancer's services to a US business are outside the scope of Austrian VAT, so it
 uses `O`. Two consequences follow from the rules above:
 

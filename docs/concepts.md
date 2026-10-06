@@ -43,9 +43,9 @@ derived: BT-131 per line, the DOCUMENT TOTALS (BG-22) and the VAT BREAKDOWN (BG-
 
 | Derived | Rule |
 |---|---|
-| BT-131 line net amount | BT-129 × BT-146 / BT-149 + line charges − line allowances, rounded to 2 decimals half up (formula of Peppol rule PEPPOL-EN16931-R120; EN 16931 itself only limits BT-131 to 2 decimals, BR-DEC-23) |
+| BT-131 line net amount | BT-129 × BT-146 / BT-149 + line charges − line allowances, rounded to 2 decimals (euinvoice rounds half up, D11; formula of Peppol rule PEPPOL-EN16931-R120; EN 16931 itself only limits BT-131 to 2 decimals, BR-DEC-23) |
 | BT-106 … BT-109 | sums of the line net amounts, allowances and charges (BR-CO-10 … BR-CO-13) |
-| BG-23 VAT breakdown | one group per VAT category code and rate; BT-117 = BT-116 × BT-119 / 100, rounded to 2 decimals (BR-CO-17) |
+| BG-23 VAT breakdown | one group per VAT category code and rate; BT-117 = BT-116 × BT-119 / 100, rounded to 2 decimals (BR-CO-17; euinvoice rounds half up, D11) |
 | BT-110, BT-112, BT-115 | BR-CO-14, BR-CO-15, BR-CO-16 |
 
 You can also supply the totals yourself and build an `Invoice` directly;

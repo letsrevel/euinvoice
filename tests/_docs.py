@@ -51,7 +51,7 @@ def run(*, with_artifacts: bool) -> dict[str, int]:
         globs: dict[str, t.Any] = {}
         if page in CONTINUES_QUICKSTART:
             globs = {**quickstart, "rendered_pdf": pdf()}
-        ran[page], globs = _markdown_doctest.run(DOCS / page, globs, prefix=PREFIX, with_artifacts=with_artifacts)
+        ran[page] = _markdown_doctest.run(DOCS / page, globs, prefix=PREFIX, with_artifacts=with_artifacts)
         if page == QUICKSTART:
             quickstart = globs
     return ran

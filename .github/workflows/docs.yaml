@@ -3,7 +3,10 @@ name: Docs
 # Builds the mkdocs-material site (mkdocs.yml, docs/) with --strict on every PR and push to main, and deploys it
 # to GitHub Pages on push to main (issue #33). The Python examples in docs/ are run by the unit and conformance
 # suites (tests/test_docs.py, tests/conformance/test_docs_examples.py), not here.
-# Deploying needs Pages enabled with "Source: GitHub Actions" in the repository settings (a maintainer action).
+#
+# Deploying is opt-in through the repository variable DOCS_DEPLOY. Until a maintainer enables Pages
+# (Settings -> Pages -> Source: "GitHub Actions") and sets DOCS_DEPLOY=true, main only builds the site and the
+# upload step and deploy job are skipped. Then run this workflow manually (workflow_dispatch) on main.
 
 on:
   workflow_dispatch: {}
@@ -24,18 +27,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup
       - name: mkdocs build --strict
         run: uv run mkdocs build --strict
       - name: Upload the site for GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DOCS_DEPLOY == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && vars.DOCS_DEPLOY == 'true'
     needs: build
     runs-on: ubuntu-24.04
     permissions:

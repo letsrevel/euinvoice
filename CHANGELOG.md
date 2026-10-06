@@ -8,7 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - Documentation site (#33): mkdocs-material in `docs/` (`mkdocs.yml`, `make docs`), built with `--strict` on every
-  PR and deployed to GitHub Pages on push to main by `.github/workflows/docs.yaml`. Pages: quickstart, concepts,
+  PR and on main by `.github/workflows/docs.yaml`. Deploying to GitHub Pages is opt-in: once Pages is enabled
+  (Source: GitHub Actions), setting the repository variable `DOCS_DEPLOY=true` makes pushes to main (and manual
+  runs) deploy. Pages: quickstart, concepts,
   validation, Factur-X with a WeasyPrint `pdf/a-3b` illustration, a mapping guide with a synthetic freelancer
   example (domestic `S`, intra-EU reverse charge `AE` with `VATEX-EU-AE`, non-EU `O`) and a synthetic ticketing
   example (per-line VAT rates, VAT-inclusive prices converted to net, credit note 381 referencing the invoice in

@@ -56,5 +56,4 @@ def run(*, with_artifacts: bool) -> int:
         AssertionError: An example failed; the message is doctest's report.
     """
     globs: dict[str, t.Any] = {"draft": readme_draft(), "rendered_pdf": pdf()}
-    ran, _ = _markdown_doctest.run(README, globs, prefix=PREFIX, with_artifacts=with_artifacts)
-    return ran
+    return _markdown_doctest.run(README, globs, prefix=PREFIX, with_artifacts=with_artifacts)

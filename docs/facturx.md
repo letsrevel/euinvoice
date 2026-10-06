@@ -75,13 +75,14 @@ True
 
 ## 4. Validate the embedded XML
 
-The Factur-X Schematron is not pinned yet ([#42](https://github.com/letsrevel/euinvoice/issues/42)). The EN 16931
-level uses the EN 16931 BT-24, so validate the extracted XML against the EN 16931 rules:
+Validate the extracted XML under the level's profile. For `FACTURX_EN16931` that runs the D16B XSD and the CEN
+rules; the Factur-X Schematron itself is not pinned yet ([#42](https://github.com/letsrevel/euinvoice/issues/42)),
+so `ok` is the EN 16931 verdict, not a full Factur-X one:
 
 <!-- doctest: needs-artifacts -->
 ```python
 >>> from euinvoice import validate
->>> validate(found.xml, profiles.EN16931).ok
+>>> validate(found.xml, profiles.FACTURX_EN16931).ok
 True
 ```
 

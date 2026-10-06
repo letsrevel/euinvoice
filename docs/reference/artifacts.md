@@ -8,6 +8,10 @@ never bundles or redistributes them: `python -m euinvoice artifacts fetch` downl
 upstream URL into your cache and checks its sha256 (`src/euinvoice/validate/manifest.toml`). Using them is
 subject to the licence of each source.
 
+The licence column is the `license` field of the manifest. The `xrechnung-testsuite` and
+`xrechnung-validator-configuration` archives contain no licence file; their entry is the licence recorded in the
+manifest for the upstream repository.
+
 | Source | Version | Licence | Download |
 |---|---|---|---|
 | `cen-ubl` | 1.3.16 | EUPL-1.2 | <https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-1.3.16/en16931-ubl-1.3.16.zip> |

@@ -52,13 +52,13 @@ def blocks(path: pathlib.Path, *, prefix: str) -> list[Block]:
     return found
 
 
-def run(
-    path: pathlib.Path, globs: dict[str, t.Any], *, prefix: str, with_artifacts: bool
-) -> tuple[int, dict[str, t.Any]]:
+def run(path: pathlib.Path, globs: dict[str, t.Any], *, prefix: str, with_artifacts: bool) -> int:
     """Run the blocks of ``path`` in ``globs``; skip the ``needs-artifacts`` ones unless ``with_artifacts``.
 
+    ``globs`` is updated in place, so the caller sees every name the blocks defined.
+
     Returns:
-        The number of doctest examples plus script blocks that ran, and the namespace afterwards.
+        The number of doctest examples plus script blocks that ran.
 
     Raises:
         AssertionError: A doctest example failed; the message is doctest's report.
@@ -84,4 +84,4 @@ def run(
         result = runner.run(test, out=report.append, clear_globs=False)
         assert result.failed == 0, "".join(report)
         ran += result.attempted
-    return ran, globs
+    return ran
