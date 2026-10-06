@@ -106,9 +106,11 @@ def _validate(args: argparse.Namespace) -> int:
     profile = args.profile if args.profile is not None or found is None else found.profile
     try:
         report: ValidationReport = validate(xml, profile)
-    except ArtifactsNotAvailableError as exc:  # the unpinned Factur-X Schematron (#42) names the Python spelling
+    except ArtifactsNotAvailableError as exc:  # the unpinned Factur-X Schematron (#42): spell the fallback as a flag
+        if exc.fallback_profile_id is None:
+            raise
         raise ArtifactsNotAvailableError(
-            str(exc).replace("pass profile=euinvoice.profiles.EN16931", "pass --profile en16931")
+            f"{exc.reason}. To run only the EN 16931 core rules, pass --profile {exc.fallback_profile_id}"
         ) from exc
     if args.json:
         payload = {"ok": report.ok, "findings": [dataclasses.asdict(f) for f in report.findings]}

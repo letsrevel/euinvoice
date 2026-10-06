@@ -185,6 +185,20 @@ def test_validate_reads_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls == [(b"<x/>", None)]
 
 
+def test_validate_builds_the_fallback_hint_from_the_attribute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # #108: the CLI spells the fallback from ``fallback_profile_id``, whatever the library's wording of the reason.
+    def unpinned(data: bytes, profile: profiles.Profile | None = None) -> ValidationReport:
+        raise ArtifactsNotAvailableError("some new wording", fallback_profile_id="en16931")
+
+    monkeypatch.setattr(cli, "validate", unpinned)
+    assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 2
+    assert capsys.readouterr().err == (
+        "error: some new wording. To run only the EN 16931 core rules, pass --profile en16931\n"
+    )
+
+
 def test_validate_missing_artifacts_exit_2_with_the_fix_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -1,7 +1,9 @@
+import pickle  # ruff: ignore[suspicious-pickle-import] - round-trips our own exception
+
 import pydantic
 import pytest
 
-from euinvoice import errors
+from euinvoice import errors, profiles
 
 
 @pytest.mark.parametrize(
@@ -52,3 +54,35 @@ def test_parse_error_with_location() -> None:
 def test_parse_error_location_is_keyword_only() -> None:
     with pytest.raises(TypeError):
         errors.ParseError("msg", "3:7")  # type: ignore[call-arg]  # positional location must be refused
+
+
+def test_artifacts_not_available_without_fallback() -> None:
+    err = errors.ArtifactsNotAvailableError("cen-ubl is missing; run: python -m euinvoice artifacts fetch")
+    assert err.fallback_profile_id is None
+    assert err.reason == str(err) == "cen-ubl is missing; run: python -m euinvoice artifacts fetch"
+
+
+def test_artifacts_not_available_with_fallback_appends_the_python_hint() -> None:
+    err = errors.ArtifactsNotAvailableError("rules not pinned", fallback_profile_id="en16931")
+    assert err.fallback_profile_id == "en16931"
+    assert err.reason == "rules not pinned"
+    assert str(err) == "rules not pinned. To run only the EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [p for name in profiles.__all__ if isinstance(p := getattr(profiles, name), profiles.Profile)],
+    ids=lambda p: p.id,
+)
+def test_artifacts_not_available_hint_names_the_exported_profile_constant(profile: profiles.Profile) -> None:
+    # The hint derives the constant from the id (hyphens become underscores); every exported profile keeps that rule.
+    constant = profile.id.upper().replace("-", "_")
+    assert getattr(profiles, constant) is profile
+    err = errors.ArtifactsNotAvailableError("rules not pinned", fallback_profile_id=profile.id)
+    assert str(err).endswith(f", pass profile=euinvoice.profiles.{constant}")
+
+
+def test_artifacts_not_available_keeps_its_fallback_through_pickle() -> None:
+    err = errors.ArtifactsNotAvailableError("rules not pinned", fallback_profile_id="en16931")
+    copy = pickle.loads(pickle.dumps(err))  # ruff: ignore[suspicious-pickle-usage] - our own object
+    assert (str(copy), copy.reason, copy.fallback_profile_id) == (str(err), err.reason, err.fallback_profile_id)
