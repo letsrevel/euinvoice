@@ -43,8 +43,7 @@ Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16
 ponytail: deliberate narrowings beyond the rules above, each a possible later widening: K always gets BT-72
 (BR-IC-11 also accepts an invoicing period BG-14); BT-20 is one of two fixed strings (no XRechnung BR-DE-18
 Skonto lines); type codes 380, 381 and 384 only; no whole-unit currencies such as HUF (``calc.complete``
-rounds VAT to cents); text is BMP only (issue #74, see :data:`text`). Factur-X targets are not covered yet
-(issue #42).
+rounds VAT to cents). Factur-X targets are not covered yet (issue #42).
 
 Profile-mandatory terms (:attr:`Target.mandatory`): BT-10 (BR-DE-15, PEPPOL-EN16931-R003), BT-23
 (PEPPOL-EN16931-R001, re-asserted by XRechnung), BT-34 and BT-49 as GS1 GLNs with valid check digits
@@ -134,11 +133,7 @@ _SELLER_GLN: t.Final = Identifier(value="4000001000005", scheme_id="0088")
 _BUYER_GLN: t.Final = Identifier(value="4000001000036", scheme_id="0088")
 
 # Non-blank XML text, with TAB, LF and CR (they round-trip and validate in both syntaxes).
-# ponytail: BMP only. SaxonC-HE 13.0.0 (12.9 is fine) throws ArrayIndexOutOfBoundsException in normalize-space()
-# on a string mixing whitespace, a character above U+00FF and one above U+FFFF (e.g. " \u0100\U000100000000"), so
-# validate() reports a false SCHEMATRON-RUNTIME fatal (issue #74, test_saxon_normalize_space_regression). Lift the
-# cap once that xfail passes.
-text: t.Final = strategies.text(max_codepoint=0xFFFF, include_characters="\t\n\r")
+text: t.Final = strategies.text(include_characters="\t\n\r")
 
 
 def _decimal(low: str, high: str, places: int) -> st.SearchStrategy[Decimal]:

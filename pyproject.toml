@@ -30,7 +30,7 @@ dependencies = [
 [project.optional-dependencies]
 # Official Schematron validation (XSLT 3.0). SaxonC-HE is MPL-2.0.
 validate = [
-    "saxonche>=13.0.0",
+    "saxonche>=12.9,!=13.0.0",
 ]
 # Factur-X / ZUGFeRD PDF/A-3 embedding and extraction.
 pdf = [
