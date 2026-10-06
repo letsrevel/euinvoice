@@ -147,6 +147,12 @@ def test_sales_order_reference_alone_gets_na_order_id() -> None:
     assert xpath(root, "string(/*/cac:OrderReference/cbc:SalesOrderID)") == "SO-1"
 
 
+def test_empty_purchase_order_reference_is_written_empty() -> None:
+    # Issue #79: "NA" stands in for a missing BT-13 only; an empty BT-13 is written as given.
+    root = written(minimal_invoice(purchase_order_reference="", sales_order_reference="SO-1"))
+    assert xpath(root, "count(/*/cac:OrderReference/cbc:ID[. = ''])") == 1
+
+
 def test_card_network_id_is_na() -> None:
     card = PaymentCardInformation(primary_account_number="******1234")
     root = written(minimal_invoice(payment_instructions=_payment(payment_means_type_code="48", payment_card=card)))

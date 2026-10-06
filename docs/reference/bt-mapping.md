@@ -343,6 +343,18 @@ syntax's writer reports the gap.
   requires exactly one `cbc:TaxAmount` in BT-5. Both writers raise `ModelError` (#71). Without BT-111 both write
   BT-6 = BT-5, which fails CII BR-53 only.
 
+* **Empty text is kept (#79).** Optional Text and Identifier terms admit `""` (`model/datatypes.py`, `Text`; only
+  the mandatory terms typed `NonBlankText` refuse blank text). Both writers write `""` as an empty element and both
+  readers read an empty element back as `""`, so it round-trips. This is what the pinned sources allow: the UBL 2.1
+  `IdentifierType` extends `xsd:normalizedString` (`common/CCTS_CCT_SchemaModule-2.1.xsd`) and the CII D16B
+  `udt:IDType` / `udt:TextType` extend `xsd:token` / `xsd:string` (`..._UnqualifiedDataType_100pD16B.xsd`), all of
+  which admit the empty string, the CEN 1.3.16 Schematron tests no optional term for non-emptiness (e.g. ZUGFeRD corpus
+  `UBL/EN16931_Elektron.ubl.xml`, with an empty `cac:OrderReference/cbc:ID`, passes XSD and CEN), and XRechnung 2.6.0
+  exempts exactly that element from PEPPOL-EN16931-R008 in UBL (`ubl/XRechnung-UBL-validation.sch`,
+  `self::cbc:ID[parent::cac:OrderReference]`). The CIUS rules that forbid empty elements report it instead:
+  PEPPOL-EN16931-R008 in Peppol UBL (pre-flighted on the UBL writer's output) and XRechnung's CII R008
+  (`cii/XRechnung-CII-validation.sch`, no exemption; left to the Schematron).
+
 ## Normalizations
 
 A writer may add a value the model leaves out when a syntax requires it and the value follows from other
@@ -417,7 +429,9 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
   refused). A BT-22 without BT-21 that itself starts with such a pair reads back as BT-21 + BT-22. An empty
   `cbc:Note` is unmapped.
 * **BT-13**: `cac:OrderReference/cbc:ID` `NA` next to a `cbc:SalesOrderID` is the writer's placeholder and reads as
-  no BT-13. Known ambiguity: a genuine purchase order reference "NA" together with a BT-14 cannot be told apart.
+  no BT-13. Known ambiguity: a genuine purchase order reference "NA" together with a BT-14 cannot be told apart. An
+  empty `cbc:ID` is BT-13 `""` and the writer writes it back empty: the placeholder replaces an absent BT-13 only
+  (see "Empty text is kept", #79).
 * **Credit notes**: BT-9 is `cac:PaymentMeans/cbc:PaymentDueDate` (in an `Invoice` that element is unmapped), BT-11
   is `cac:AdditionalDocumentReference` with `cbc:DocumentTypeCode` 50 (in an `Invoice` such a reference is unmapped,
   CEN UBL-SR-43). An `Invoice` with BT-3 = 81 reads like a `CreditNote` (see the code 81 normalization).

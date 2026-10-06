@@ -233,12 +233,16 @@ CASES: t.Final[list[tuple[str, Callable[[], Invoice], tuple[Syntax, ...], set[st
     ("R121", lambda: peppol_invoice(lines=(simple_line(price_details=PriceDetails(
         item_net_price=Decimal("50"), base_quantity=Decimal("0"))),)), BOTH, {"R121"}),
     ("R008", lambda: peppol_invoice(buyer_reference=" ", notes=(InvoiceNote(note="\t"),)), BOTH, set()),
+    # Issue #79: an empty BT-13 is written empty, as in the ZUGFeRD corpus file UBL/EN16931_Elektron.ubl.xml.
+    ("R008-empty-bt13", lambda: peppol_invoice(purchase_order_reference="", sales_order_reference="SO-1"), BOTH,
+        set()),
 ]  # fmt: skip
 
 # R002 with a subject code fires in CII only; R008 in UBL only (the CII rules have no R008).
 EXTRA: t.Final[dict[tuple[str, Syntax], set[str]]] = {
     ("R002-subject-code", CII): {"R002"},
     ("R008", UBL): {"R008"},
+    ("R008-empty-bt13", UBL): {"R008"},
 }
 
 

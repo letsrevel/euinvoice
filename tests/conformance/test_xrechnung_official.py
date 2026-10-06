@@ -63,6 +63,19 @@ def test_valid_invoice_passes_cen_and_xrechnung(profile: profiles.Profile, synta
     assert {f.rule_id for f in report.findings} <= {"BR-DE-TMP-32"}
 
 
+@pytest.mark.parametrize(("syntax", "blocking"), [(Syntax.UBL, set()), (Syntax.CII, {"PEPPOL-EN16931-R008"})])
+def test_empty_purchase_order_reference(syntax: Syntax, blocking: set[str]) -> None:
+    # Issue #79: an empty BT-13 is written empty. No CEN rule tests BT-13's content. XRechnung 2.6.0 exempts
+    # exactly this UBL element from PEPPOL-EN16931-R008 (ubl/XRechnung-UBL-validation.sch:190-191,
+    # `self::cbc:ID[parent::cac:OrderReference]`); its CII R008 (cii/XRechnung-CII-validation.sch:297-298) has no
+    # such exemption.
+    invoice = xrechnung_invoice(purchase_order_reference="", sales_order_reference="SO-1")
+    ids, report = agreement(profiles.XRECHNUNG, invoice, syntax)
+
+    assert ids == set()
+    assert {f.rule_id for f in report.findings if f.severity in BLOCKING} == blocking
+
+
 @pytest.mark.parametrize("syntax", list(WRITERS))
 @pytest.mark.parametrize("rule_id", list(VIOLATIONS))
 def test_each_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) -> None:
