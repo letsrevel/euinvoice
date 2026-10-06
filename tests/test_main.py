@@ -1,5 +1,6 @@
 """Tests for the ``python -m euinvoice`` CLI (#28): ``validate``, ``convert``, ``info`` and ``artifacts fetch``."""
 
+import dataclasses
 import io
 import json
 import logging
@@ -184,6 +185,21 @@ def test_validate_json_carries_the_kosit_verdict(
             {"rule_id": "BR-02", "severity": "fatal", "effective_severity": "fatal"},
         ],
     }
+
+
+def test_validate_json_matches_a_hand_built_override_by_equality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # #112: a hand-built KositAssessment may hold equal but distinct Finding objects in overrides and blocking.
+    copy = dataclasses.replace(_WARNING)
+    assert copy == _WARNING
+    assert copy is not _WARNING
+    kosit = KositAssessment("s", overrides=(SeverityOverride(_WARNING, Severity.ERROR),), blocking=(copy,))
+    _fake_validate(monkeypatch, ValidationReport((_WARNING,), kosit=kosit))
+    cli.main(["validate", "--json", _write(tmp_path, "a.xml", b"<x/>")])
+    assert json.loads(capsys.readouterr().out)["kosit"]["blocking"] == [
+        {"rule_id": "UBL-CR-001", "severity": "warning", "effective_severity": "error"}
+    ]
 
 
 @pytest.mark.parametrize(
