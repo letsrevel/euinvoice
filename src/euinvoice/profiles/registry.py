@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.profiles._base import Profile
 from euinvoice.profiles.en16931 import EN16931
+from euinvoice.profiles.peppol import PEPPOL
 
 __all__ = ["get"]
 
@@ -34,7 +35,7 @@ def _index(profiles: Iterable[Profile]) -> dict[str, Profile]:
 # XRECHNUNG with XRechnung; plan §5) stay out of _PROFILES: the Factur-X container selects them by its XMP
 # fx:ConformanceLevel. Levels with their own BT-24 register here normally. The shared core BT-24 is
 # corroborated by the ZUGFeRD corpus, but the Factur-X spec package is not pinned yet (#42).
-_PROFILES: t.Final = (EN16931,)
+_PROFILES: t.Final = (EN16931, PEPPOL)
 _BY_BT24: t.Final[Mapping[str, Profile]] = _index(_PROFILES)
 
 

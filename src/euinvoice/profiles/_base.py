@@ -2,15 +2,16 @@
 
 import dataclasses
 import typing as t
+from collections.abc import Callable
 
 from euinvoice.model import Invoice, ProcessControl
+from euinvoice.report import Finding
+from euinvoice.syntax import Syntax
 
-__all__ = ["RULE_SETS", "SYNTAXES", "Profile"]
+__all__ = ["RULE_SETS", "SYNTAXES", "Preflight", "Profile", "no_preflight"]
 
-# ponytail: plain strings until ``euinvoice.syntax.Syntax`` (a StrEnum with these values) lands; switch the
-# annotations to the enum then. StrEnum members compare equal to these strings, so callers keep working.
-SYNTAXES: t.Final = frozenset({"ubl", "cii"})
-"""The syntaxes a profile can support: UBL 2.1 (``"ubl"``) and UN/CEFACT CII D16B (``"cii"``)."""
+SYNTAXES: t.Final[frozenset[Syntax]] = frozenset(Syntax)
+"""The syntaxes a profile can support: UBL 2.1 (``Syntax.UBL``) and UN/CEFACT CII D16B (``Syntax.CII``)."""
 
 RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung"})
 """The official Schematron rule-set names a profile can declare (see :attr:`Profile.rule_sets`)."""
@@ -19,13 +20,29 @@ RULE_SETS: t.Final = frozenset({"cen", "peppol", "xrechnung"})
 # (spec-auditor findings, https://github.com/letsrevel/euinvoice/issues/17#issuecomment-6004767546).
 _EXCLUSIVE_RULE_SETS: t.Final = frozenset({"peppol", "xrechnung"})
 
+type Preflight = Callable[[Invoice, Syntax], tuple[Finding, ...]]
+"""A pre-flight check: ``(invoice, syntax) -> findings``, ``syntax`` being one of the profile's syntaxes."""
+
+
+def no_preflight(invoice: Invoice, syntax: Syntax) -> tuple[Finding, ...]:
+    """The pre-flight of a profile without one (EN 16931 core): no findings.
+
+    Args:
+        invoice: The invoice (unused).
+        syntax: The target syntax (unused).
+
+    Returns:
+        An empty tuple.
+    """
+    return ()
+
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
 class Profile:
     """A specification an invoice is written, read and validated under (IMPLEMENTATION_PLAN.md D5).
 
-    A profile is data plus :meth:`prepare`. Pre-flight checks are a later addition of the CIUS
-    profiles; the official Schematron stays the oracle (D8).
+    A profile is data plus :meth:`prepare` and an optional :attr:`preflight`. Pre-flight checks give
+    early, model-level messages for a CIUS's rules; the official Schematron stays the oracle (D8).
 
     Attributes:
         id: Short stable name, e.g. ``"en16931"``.
@@ -42,16 +59,24 @@ class Profile:
         facturx_filename: Name of the embedded XML in a Factur-X / ZUGFeRD PDF; ``None`` otherwise.
         facturx_conformance_level: XMP ``fx:ConformanceLevel`` of a Factur-X / ZUGFeRD profile;
             ``None`` otherwise.
+        preflight: Checks an invoice for the profile's rules before it is written in a syntax, e.g.
+            ``PEPPOL.preflight(PEPPOL.prepare(invoice), Syntax.UBL)``. Call contract: it runs on the
+            invoice **after** :meth:`prepare`, right before writing; ``to_xml`` (#27) calls it.
+            ``validate()`` never does, because there the official Schematron is the oracle (D8). A
+            pre-flight never reports a ``fatal`` official rule id that the oracle would not raise for
+            the written document; extra semantic checks use ``EUINV-*`` ids at ``warning`` severity.
+            Defaults to :func:`no_preflight`.
     """
 
     id: str
     title: str
     specification_identifier: str
-    syntaxes: frozenset[str]
+    syntaxes: frozenset[Syntax]
     rule_sets: tuple[str, ...]
     business_process_type: str | None = None
     facturx_filename: str | None = None
     facturx_conformance_level: str | None = None
+    preflight: Preflight = no_preflight
 
     def __post_init__(self) -> None:
         """Reject declarations no syntax module or validator could serve.
@@ -63,7 +88,10 @@ class Profile:
         if not self.syntaxes:
             raise ValueError(f"profile {self.id!r} must support at least one syntax")
         if unknown := self.syntaxes - SYNTAXES:
-            raise ValueError(f"profile {self.id!r} has unknown syntaxes {sorted(unknown)}; known: {sorted(SYNTAXES)}")
+            raise ValueError(
+                f"profile {self.id!r} has unknown syntaxes {sorted(map(str, unknown))}; "
+                f"known: {sorted(map(str, SYNTAXES))}"
+            )
         if not self.rule_sets:
             raise ValueError(f"profile {self.id!r} must run at least one rule set")
         if unknown_sets := set(self.rule_sets) - RULE_SETS:

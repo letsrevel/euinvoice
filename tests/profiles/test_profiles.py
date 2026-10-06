@@ -10,6 +10,7 @@ from euinvoice import profiles
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice, ProcessControl
 from euinvoice.profiles import EN16931, Profile, registry
+from euinvoice.syntax import Syntax
 
 MakeInvoice = Callable[..., Invoice]
 
@@ -41,9 +42,12 @@ class TestRegistry:
         assert "urn:cen.eu:en16931:2017" in message
 
     def test_lookup_is_exact(self) -> None:
-        # A CIUS identifier only *starts* with the core one; it must not resolve to the core profile.
+        # A CIUS identifier only *starts* with the core one (and an extension with the CIUS one); neither
+        # resolves to the profile whose BT-24 it extends.
         with pytest.raises(UnsupportedDocumentError):
-            profiles.get(PEPPOL_BT24)
+            profiles.get("urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0")
+        with pytest.raises(UnsupportedDocumentError):
+            profiles.get(PEPPOL_BT24 + "#conformant#urn:example.com:extension")
 
     def test_index_rejects_two_profiles_with_the_same_bt24(self) -> None:
         with pytest.raises(ValueError, match="urn:example:test"):
@@ -95,7 +99,7 @@ class TestEn16931:
         assert EN16931.id == "en16931"
         assert EN16931.specification_identifier == "urn:cen.eu:en16931:2017"
         assert EN16931.business_process_type is None
-        assert EN16931.syntaxes == frozenset({"ubl", "cii"})
+        assert EN16931.syntaxes == frozenset(Syntax)
 
     def test_runs_the_cen_rules_only(self) -> None:
         assert EN16931.rule_sets == ("cen",)

@@ -10,22 +10,20 @@ from lxml import etree
 from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.report import Severity
+from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, artifacts, schematron, validate, xsd
 
 CII_XSD = "xsd:xrechnung-validator-configuration"
 
 pytestmark = pytest.mark.conformance
 
-# Peppol BIS and XRechnung profile objects do not exist yet (#20, #21): test-local stand-ins with the rule
-# sets verified on issue #17 (Peppol: CEN then Peppol; XRechnung: CEN then XRechnung, as in KoSIT
-# scenarios.xml). Their BT-24 is irrelevant here because they are passed explicitly.
-PEPPOL = profiles.Profile(
-    id="test-peppol", title="Peppol BIS (test)", specification_identifier="urn:example.com:peppol",
-    syntaxes=frozenset({"ubl", "cii"}), rule_sets=("cen", "peppol"),
-)  # fmt: skip
+PEPPOL = profiles.PEPPOL
+# The XRechnung profile object does not exist yet (#21): a test-local stand-in with the rule sets verified
+# on issue #17 (CEN then XRechnung, as in KoSIT scenarios.xml). Its BT-24 is irrelevant here because it is
+# passed explicitly.
 XRECHNUNG = profiles.Profile(
     id="test-xrechnung", title="XRechnung (test)", specification_identifier="urn:example.com:xrechnung",
-    syntaxes=frozenset({"ubl", "cii"}), rule_sets=("cen", "xrechnung"),
+    syntaxes=frozenset(Syntax), rule_sets=("cen", "xrechnung"),
 )  # fmt: skip
 
 EXAMPLE1 = "examples/ubl-tc434-example1.xml"
@@ -216,11 +214,19 @@ def test_corpora_are_complete() -> None:
     assert set(CUSTOM_LEVEL_GAP) <= {p.relative_to(instances).as_posix() for p in XRECHNUNG_INSTANCES}
 
 
+# CEN examples with the Peppol BT-24 now auto-detect the Peppol profile and run its rules too. CEN only
+# promises them valid against the CEN rules: issue116.xml's fake Swedish organization numbers (EAS 0007,
+# e.g. CompanyID 1234567890) fail the check digit test of PEPPOL-COMMON-R049 (fatal, peppol-bis 3.0.21
+# rules/sch/PEPPOL-EN16931-UBL.sch line 413).
+PEPPOL_FAILURES: t.Final = {"issue116.xml": {("PEPPOL-COMMON-R049", "peppol-bis")}}
+
+
 @pytest.mark.parametrize("path", CEN_EXAMPLES, ids=lambda p: p.name)
 def test_every_cen_example_is_ok_with_auto_detection(path: Path) -> None:
     report = validate(path.read_bytes())
 
-    assert report.ok, [f for f in report.findings if f.severity in BLOCKING]
+    blocking = {(f.rule_id, f.source) for f in report.findings if f.severity in BLOCKING}
+    assert blocking == PEPPOL_FAILURES.get(path.name, set())
     # Examples with a non-core BT-24 (BIS3_*, an Italian CIUS, ...) are checked against core only, and say so.
     assert {f.rule_id for f in report.findings if f.source == EUINVOICE_SOURCE} <= {PROFILE_FALLBACK_RULE_ID}
 

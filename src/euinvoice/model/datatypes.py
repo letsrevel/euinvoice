@@ -65,10 +65,28 @@ __all__ = [
     "VatCategoryCode",
     "VatExemptionReasonCode",
     "VatPointDateCode",
+    "normalize_space",
 ]
 
 _XPATH_SPACE: t.Final = " \t\r\n"
 """The characters XPath ``normalize-space`` strips (#x20, #x9, #xD, #xA)."""
+_XPATH_SPACE_RUN: t.Final = re.compile(f"[{re.escape(_XPATH_SPACE)}]+")
+
+
+def normalize_space(value: str) -> str:
+    """XPath ``normalize-space()``: strip XML whitespace and collapse its runs to one space.
+
+    Only #x20, #x9, #xD and #xA count (XPath 2.0 F&O §7.4.4), so a no-break space is kept, unlike
+    :meth:`str.split`.
+
+    Args:
+        value: The text.
+
+    Returns:
+        The normalized text.
+    """
+    return _XPATH_SPACE_RUN.sub(" ", value).strip(" ")
+
 
 _NOT_XML_CHAR: t.Final = re.compile(r"[^\t\n\r\x20-\uD7FF\uE000-\uFFFD\U00010000-\U0010FFFF]")
 """Any character outside the XML 1.0 ``Char`` production (W3C XML 1.0 5th edition, §2.2):

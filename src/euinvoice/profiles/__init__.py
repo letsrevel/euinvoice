@@ -6,8 +6,9 @@ Example:
     True
 """
 
-from euinvoice.profiles._base import Profile
+from euinvoice.profiles._base import Preflight, Profile, no_preflight
 from euinvoice.profiles.en16931 import EN16931
+from euinvoice.profiles.peppol import PEPPOL
 from euinvoice.profiles.registry import get
 
-__all__ = ["EN16931", "Profile", "get"]
+__all__ = ["EN16931", "PEPPOL", "Preflight", "Profile", "get", "no_preflight"]

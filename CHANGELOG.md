@@ -109,6 +109,18 @@ All notable changes to this project are documented here. The format follows
   cross-checks `check()` against the official CEN UBL and CII Schematron on mutated invoices.
   `ExemptionReason` carries BT-120/BT-121 per category. `complete()` reproduces the totals of every
   CEN 1.3.16 and Peppol 3.0.21 example (except one HUF example that rounds VAT to whole forints).
+- `euinvoice.profiles.PEPPOL`: Peppol BIS Billing 3.0 (UBL and CII, BT-24
+  `urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0`, default BT-23
+  `urn:fdc:peppol.eu:2017:poacc:billing:01:1.0`; XSD, CEN, then Peppol rules), registered by its BT-24,
+  so `detect()` and `validate()` resolve Peppol documents to it. Its pre-flight
+  (`PEPPOL.preflight(invoice, syntax)`) reports PEPPOL-EN16931-R001/R002/R003/R004/R005/R007/R008/R010/
+  R020/R041/R042/R061/R110/R111/R121 on the model, as each syntax binding tests them, before writing,
+  and never a fatal official id the Schematron would not raise. A UBL invoice whose only order
+  reference is BT-14 (written as `cbc:ID` "NA", which passes R003) gets the warning
+  `EUINV-PEPPOL-R003-NA`.
+- `Profile.preflight`: an optional pre-flight hook `(invoice, Syntax) -> findings`, run after
+  `prepare()` (`no_preflight` by default, as for EN 16931 core). `Profile.syntaxes` is now a
+  `frozenset[Syntax]`; `euinvoice.model.datatypes.normalize_space()` implements XPath `normalize-space`.
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from

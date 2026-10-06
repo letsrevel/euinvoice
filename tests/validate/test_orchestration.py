@@ -11,6 +11,7 @@ from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.profiles import _base as profiles_base
 from euinvoice.report import Finding, Severity
+from euinvoice.syntax import Syntax
 from euinvoice.validate import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
 
 CORE = "urn:cen.eu:en16931:2017"
@@ -18,16 +19,13 @@ CIUS = "urn:cen.eu:en16931:2017#compliant#urn:example.com:cius"
 NBSP = "\N{NO-BREAK SPACE}"
 NO_BT24 = "no single non-empty specification identifier (BT-24)"
 
-PEPPOL = profiles.Profile(
-    id="test-peppol", title="t", specification_identifier="urn:example.com:peppol", syntaxes=frozenset({"ubl", "cii"}),
-    rule_sets=("cen", "peppol"),
-)  # fmt: skip
+PEPPOL = profiles.PEPPOL
 XRECHNUNG = profiles.Profile(
-    id="test-xrechnung", title="t", specification_identifier="urn:example.com:xr", syntaxes=frozenset({"ubl", "cii"}),
+    id="test-xrechnung", title="t", specification_identifier="urn:example.com:xr", syntaxes=frozenset(Syntax),
     rule_sets=("cen", "xrechnung"),
 )  # fmt: skip
 UBL_ONLY = profiles.Profile(
-    id="test-ubl", title="t", specification_identifier="urn:example.com:ubl", syntaxes=frozenset({"ubl"}),
+    id="test-ubl", title="t", specification_identifier="urn:example.com:ubl", syntaxes=frozenset({Syntax.UBL}),
     rule_sets=("cen",),
 )  # fmt: skip
 
@@ -135,6 +133,21 @@ def test_registered_bt24_selects_its_profile_without_a_note(spy: Spy, data: byte
     report = validate(data)
 
     assert len(spy.ran) == 1
+    assert all(f.source != EUINVOICE_SOURCE for f in report.findings)
+
+
+@pytest.mark.parametrize(
+    ("data", "ran"),
+    [
+        (ubl(PEPPOL.specification_identifier), [schematron.CEN_UBL, schematron.PEPPOL_UBL]),
+        (cii(PEPPOL.specification_identifier), [schematron.CEN_CII, schematron.PEPPOL_CII]),
+    ],
+    ids=["ubl", "cii"],
+)
+def test_peppol_bt24_selects_the_peppol_rules(spy: Spy, data: bytes, ran: list[schematron.RuleSet]) -> None:
+    report = validate(data)
+
+    assert spy.ran == ran
     assert all(f.source != EUINVOICE_SOURCE for f in report.findings)
 
 
