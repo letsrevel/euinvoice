@@ -298,6 +298,23 @@ def test_unregistered_level_identifiers_raise_naming_issue_42(spy: Spy, bt24: st
     assert spy.ran == []
 
 
+@pytest.mark.parametrize(
+    ("bt24", "profile"),
+    [(profiles.FACTURX_BASIC.specification_identifier, profiles.FACTURX_BASIC), (UNREGISTERED_LEVEL_IDS[0], None)],
+    ids=["profile", "unregistered-bt24"],
+)
+def test_unpinned_level_refusal_names_the_en16931_fallback_as_data(
+    spy: Spy, bt24: str, profile: profiles.Profile | None
+) -> None:
+    # The CLI builds its ``--profile`` hint from this attribute (#108), not from the message text.
+    with pytest.raises(ArtifactsNotAvailableError) as error:
+        validate(cii(bt24), profile)
+    assert error.value.fallback_profile_id == profiles.EN16931.id
+    assert str(error.value) == (
+        f"{error.value.reason}. To run only the EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
+    )
+
+
 @pytest.mark.parametrize("bt24", UNREGISTERED_LEVEL_IDS)
 def test_unregistered_level_identifiers_run_core_rules_when_asked(spy: Spy, bt24: str) -> None:
     report = validate(cii(bt24), profiles.EN16931)

@@ -85,7 +85,29 @@ class ArtifactsNotAvailableError(EuInvoiceError):
     Either they are missing from the local cache, and the message names the command that fetches them
     (``python -m euinvoice artifacts fetch``), or the profile needs a rule set that is not pinned yet (the
     Factur-X / ZUGFeRD Schematron, issue #42), and the message says so; no fetch command can provide it.
+
+    Attributes:
+        reason: The message without the fallback hint.
+        fallback_profile_id: The ``id`` of the profile that runs only the EN 16931 core rules on the same document
+            (``"en16931"``) when the refusal is for an unpinned rule set, else ``None``. The message then ends with a
+            hint naming it in Python spelling; the CLI builds its ``--profile`` hint from this attribute instead (#108).
     """
+
+    def __init__(self, message: str, *, fallback_profile_id: str | None = None) -> None:
+        """Create the error.
+
+        Args:
+            message: Human-readable description, without the fallback hint.
+            fallback_profile_id: The ``id`` of the EN 16931 core profile to suggest instead, if any.
+        """
+        hint = (
+            ""
+            if fallback_profile_id is None
+            else f". To run only the EN 16931 core rules, pass profile=euinvoice.profiles.{fallback_profile_id.upper()}"
+        )
+        super().__init__(message + hint)
+        self.reason = message
+        self.fallback_profile_id = fallback_profile_id
 
 
 class ArtifactIntegrityError(EuInvoiceError):

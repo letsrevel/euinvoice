@@ -148,12 +148,13 @@ def _rule_findings(rule_set: schematron.RuleSet, root: etree._Element) -> tuple[
 def _facturx_not_pinned(clause: str) -> ArtifactsNotAvailableError:
     """The refusal for a document only the unpinned Factur-X / ZUGFeRD Schematron can judge (#42).
 
-    ``clause`` is a complete clause naming the profile or BT-24; the reason and the EN 16931 hint follow it.
+    ``clause`` is a complete clause naming the profile or BT-24; the reason follows it, and the error carries the
+    EN 16931 core profile as its fallback (its message ends with the hint).
     """
     return ArtifactsNotAvailableError(
         f"{clause}; it is validated by the Factur-X / ZUGFeRD Schematron, which is not pinned yet "
-        "(https://github.com/letsrevel/euinvoice/issues/42); no fetch command can provide it. To run only the "
-        "EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
+        "(https://github.com/letsrevel/euinvoice/issues/42); no fetch command can provide it",
+        fallback_profile_id=profiles.EN16931.id,
     )
 
 
