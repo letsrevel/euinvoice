@@ -1,8 +1,9 @@
 """veraPDF PDF/A-3B on the Factur-X PDFs ``facturx.embed`` writes (``make conformance``, AC of #23; plan §5).
 
 veraPDF is a Java CLI, so it is found through ``$EUINVOICE_VERAPDF`` (a command, e.g. ``scripts/verapdf-docker.sh``,
-which runs the pinned ``verapdf/cli`` image) or ``verapdf`` on ``PATH``. Without either the module skips; wiring
-veraPDF into the CI conformance job is #25.
+which runs the pinned ``verapdf/cli`` image) or ``verapdf`` on ``PATH``. Without either the module skips locally;
+with ``EUINVOICE_VERAPDF_REQUIRED=1`` (set by the CI conformance job, #25) it fails instead, so CI cannot go green
+without running veraPDF.
 
 One veraPDF run checks every fixture: the synthetic PDF/A-3B input (``tests/_pdfa.py``), a Factur-X PDF per level,
 one embedded next to an existing associated file, and a negative control that is not PDF/A, which must fail, so
@@ -57,6 +58,8 @@ def _verapdf() -> list[str]:
     if command:
         return shlex.split(command)
     message = "veraPDF not found: set EUINVOICE_VERAPDF (e.g. to scripts/verapdf-docker.sh) or put verapdf on PATH"
+    if os.environ.get("EUINVOICE_VERAPDF_REQUIRED") == "1":
+        pytest.fail(f"{message} (EUINVOICE_VERAPDF_REQUIRED=1)")
     pytest.skip(message)
 
 

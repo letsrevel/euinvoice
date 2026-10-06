@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format follows
   `/ModDate`, catalog `/AF`) and the Factur-X XMP with its PDF/A extension schema, using the values the pinned
   ZUGFeRD corpus attests until the Factur-X spec package is pinned (#42). The conformance suite runs veraPDF
   (PDF/A-3B) on the output when `$EUINVOICE_VERAPDF` (e.g. `scripts/verapdf-docker.sh`) or `verapdf` is available.
+- The CI conformance job runs veraPDF (PDF/A-3B) on the Factur-X PDFs through the digest-pinned
+  `verapdf/cli` image (#25). With `EUINVOICE_VERAPDF_REQUIRED=1`, as set in CI, a missing veraPDF fails the veraPDF
+  tests instead of skipping them.
 - `euinvoice.syntax.ubl.read()`: the UBL 2.1 reader (`Invoice` and `CreditNote`) returning a `ParseResult`
   (`euinvoice.syntax.result`) with the invoice and the XPath of every element or attribute that carries no
   business term (`unmapped`). Reads every CEN, Peppol BIS and XRechnung UBL example and round-trips them; the
