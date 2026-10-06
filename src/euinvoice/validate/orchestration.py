@@ -8,6 +8,10 @@
    :attr:`~euinvoice.profiles.Profile.rule_sets`, in that order (EN 16931: CEN; Peppol BIS: CEN, Peppol;
    XRechnung: CEN, XRechnung).
 
+A profile whose rule sets include ``"facturx"`` (Factur-X MINIMUM, BASIC WL, BASIC, EXTENDED) raises
+``ArtifactsNotAvailableError`` before any step: its official Schematron ships only in the Factur-X package, which
+is not pinned (issue #42), and a report without it would claim a verdict no official rule gave.
+
 XSD short-circuit: a blocking XSD finding stops validation, as KoSIT skips its Schematron steps after an
 XSD failure. An XSD ``warning`` does not stop it. KoSIT's ``default-report.xsl`` marks the ``val-xsd``
 step invalid on warnings (template ``in:validationResultsXmlSchema``), but its assessment (template
@@ -40,7 +44,8 @@ from lxml import etree
 
 from euinvoice import _xml, profiles
 from euinvoice.detect import Detection, detect_root
-from euinvoice.errors import UnsupportedDocumentError
+from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
+from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.validate import schematron, xsd
 
@@ -98,7 +103,8 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote or a CII D16B
             CrossIndustryInvoice, or ``profile`` does not support the document's syntax.
         ArtifactsNotAvailableError: An artifact the run needs is not in the cache (names the fetch
-            command), or ``saxonche`` is not installed.
+            command), ``saxonche`` is not installed, or the profile needs the Factur-X Schematron, which is not
+            pinned yet (issue #42).
     """
     root = _xml.parse(data)
     detection = detect_root(root)
@@ -111,6 +117,12 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         raise UnsupportedDocumentError(
             f"profile {profile.id!r} does not support {syntax.upper()} documents; it supports "
             f"{', '.join(sorted(profile.syntaxes))}"
+        )
+    if FACTURX_RULE_SET in profile.rule_sets:
+        raise ArtifactsNotAvailableError(
+            f"profile {profile.id!r} is validated by the Factur-X / ZUGFeRD Schematron, which is not pinned yet "
+            "(https://github.com/letsrevel/euinvoice/issues/42); no fetch command can provide it. To run only the "
+            "EN 16931 core rules, pass profile=euinvoice.profiles.EN16931"
         )
     schema_findings = xsd.validate(root)
     findings.extend(schema_findings)

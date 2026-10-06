@@ -35,8 +35,8 @@ UBL_INVOICE = ("ubl", "Invoice")
 UBL_CREDIT_NOTE = ("ubl", "CreditNote")
 CII = ("cii", "CrossIndustryInvoice")
 
-# ponytail: profile ids are pinned to the registry of today (EN 16931 core, Peppol BIS and XRechnung).
-# Factur-X EXTENDED still detects with profile None; flip its bucket when #22 registers it.
+# Profile ids are pinned to the registry of today (EN 16931 core, Peppol BIS, XRechnung and the Factur-X levels
+# with a BT-24 of their own); a newly registered profile flips its buckets here.
 EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
     "cen-ubl": {
         (*UBL_INVOICE, CORE, "en16931"): 14,
@@ -66,7 +66,7 @@ EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
         (*CII, CORE, "en16931"): 32,
         (*CII, XRECHNUNG, "xrechnung"): 5,
         (*CII, XRECHNUNG_1_2, None): 2,
-        (*CII, FACTURX_EXTENDED, None): 3,
+        (*CII, FACTURX_EXTENDED, "facturx-extended"): 3,
     },
 }
 

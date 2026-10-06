@@ -64,6 +64,9 @@ SCHEMATRON: t.Final = "http://purl.oclc.org/dsdl/schematron"
 """ISO Schematron (ISO/IEC 19757-3), the default namespace of the pinned Peppol 3.0.21 ``rules/sch/*.sch``."""
 XSLT: t.Final = "http://www.w3.org/1999/XSL/Transform"
 """XSLT, the namespace of every compiled rule set."""
+FACTURX_XMP: t.Final = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
+"""The Factur-X 1.0 / ZUGFeRD 2.1+ XMP extension schema (prefix ``fx``; plan §5), as declared in the XMP of the
+Factur-X PDFs of the pinned ZUGFeRD corpus (e.g. ``ZUGFeRDv2/correct/symtrax/Beispiele``, ``XML-Rechnung/FX``)."""
 VEFA: t.Final = "http://difi.no/xsd/vefa/validator/1.0"
 """vefa-validator test sets: the format of the Peppol rules' unit tests (``rules/unit-*/*.xml``, ``testSet``)."""
 

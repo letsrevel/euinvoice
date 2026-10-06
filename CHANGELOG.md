@@ -135,8 +135,22 @@ All notable changes to this project are documented here. The format follows
   checkable on the model (BR-DE-1..11, 14..16, 22, 23..25, 30, 31; BR-DE-CVD-01..03 for CVD) and the
   re-asserted PEPPOL-EN16931-R001 (BT-23 required; no default, #67) under the official ids, exactly when
   the official rule fires on that syntax's writer output.
+- Factur-X / ZUGFeRD level profiles `profiles.FACTURX_MINIMUM`, `FACTURX_BASIC_WL`, `FACTURX_BASIC`,
+  `FACTURX_EN16931`, `FACTURX_EXTENDED` and `FACTURX_XRECHNUNG` (CII only), with BT-24, embedded file name and
+  XMP conformance level taken from the pinned ZUGFeRD corpus. `profiles.by_conformance_level()` looks a level
+  up by its XMP `fx:ConformanceLevel`; MINIMUM, BASIC WL, BASIC and EXTENDED are also found by their BT-24,
+  while EN 16931 and XRECHNUNG share their BT-24 with the core / XRechnung and are selected by the PDF's XMP
+  only; `FACTURX_XRECHNUNG` is `XRECHNUNG` (rule sets, BR-DE pre-flight) restricted to CII with the Factur-X
+  container fields. EN 16931 and XRECHNUNG are generated with `prepare()` and the CII writer and validated with the CEN
+  (and XRechnung) rules. BASIC, EN 16931, EXTENDED and XRECHNUNG documents read into the model, with EXTENDED
+  content beyond EN 16931 listed in `unmapped`; MINIMUM and BASIC WL have no lines and raise a `ParseError`
+  naming the missing terms (reading them is open, #69). `validate()` raises `ArtifactsNotAvailableError` for MINIMUM, BASIC WL, BASIC and EXTENDED,
+  whose official Schematron is in the Factur-X package, not pinned yet (#42).
 
 ### Changed
+- `validate()` no longer falls back to EN 16931 core for auto-detected Factur-X MINIMUM, BASIC WL, BASIC and
+  EXTENDED documents (now registered by their BT-24): it raises `ArtifactsNotAvailableError` until their
+  Factur-X Schematron is pinned (#42). Pass `profile=profiles.EN16931` to run the core rules.
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
   hardened-parsed XML instead of by file path (same compiled output). A `.sch` that pulls in other
   files (`sch:include`, `sch:extends[@href]`, `sch:pattern[@documents]`) is refused.

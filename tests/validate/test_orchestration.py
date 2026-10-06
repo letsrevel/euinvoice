@@ -244,4 +244,39 @@ def test_missing_artifacts_surface(monkeypatch: pytest.MonkeyPatch, tmp_path: pa
 
 
 def test_every_rule_set_name_maps_for_every_syntax() -> None:
-    assert set(orchestration._RULE_SETS) == set(itertools.product(profiles_base.RULE_SETS, profiles_base.SYNTAXES))
+    # "facturx" has no pinned artifact (#42): validate() refuses it before any step instead of mapping it.
+    runnable = profiles_base.RULE_SETS - {profiles_base.FACTURX_RULE_SET}
+    assert profiles_base.FACTURX_RULE_SET in profiles_base.RULE_SETS
+    assert set(orchestration._RULE_SETS) == set(itertools.product(runnable, profiles_base.SYNTAXES))
+
+
+# --- Factur-X levels (#22) -------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected"),
+    [
+        (profiles.FACTURX_EN16931, [schematron.CEN_CII]),
+        (profiles.FACTURX_XRECHNUNG, [schematron.CEN_CII, schematron.XRECHNUNG_CII]),
+    ],
+    ids=["en16931", "xrechnung"],
+)
+def test_facturx_levels_with_pinned_rules_run_them(
+    spy: Spy, profile: profiles.Profile, expected: list[schematron.RuleSet]
+) -> None:
+    validate(cii(profile.specification_identifier), profile)
+    assert spy.ran == expected
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [profiles.FACTURX_MINIMUM, profiles.FACTURX_BASIC_WL, profiles.FACTURX_BASIC, profiles.FACTURX_EXTENDED],
+    ids=lambda p: p.id,
+)
+@pytest.mark.parametrize("explicit", [False, True], ids=["detected", "explicit"])
+def test_facturx_levels_without_pinned_rules_raise_naming_issue_42(
+    spy: Spy, profile: profiles.Profile, explicit: bool
+) -> None:
+    with pytest.raises(ArtifactsNotAvailableError, match=r"issues/42.*profiles\.EN16931"):
+        validate(cii(profile.specification_identifier), profile if explicit else None)
+    assert spy.ran == []

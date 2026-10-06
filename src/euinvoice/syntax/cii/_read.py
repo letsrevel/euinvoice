@@ -56,8 +56,9 @@ def read(root: etree._Element) -> ParseResult:
             outside its list, ...). The message names the BT/BG id, and ``location`` is the XPath of the element
             being read.
     """
-    # ponytail: Factur-X MINIMUM and BASIC WL lack terms the model requires (lines, BG-25), so they raise
-    # ParseError naming the missing term; reading them as an EN 16931 subset is #22's job (profiles/facturx).
+    # ponytail: Factur-X MINIMUM and BASIC WL have no lines (BG-25, BR-16; MINIMUM also lacks BT-106 and BG-23), so
+    # they raise ParseError naming the missing terms. Reading them as an EN 16931 subset needs a maintainer decision
+    # on D1 (needs-human #69); BASIC, EN 16931, EXTENDED and XRECHNUNG read fully.
     if root.tag != _ROOT:
         raise ParseError(f"expected the CII root {_ROOT}, got {root.tag}", location=root.getroottree().getpath(root))
     reader = Reader(root)

@@ -40,9 +40,11 @@ class UnsupportedDocumentError(EuInvoiceError):
 
 
 class ArtifactsNotAvailableError(EuInvoiceError):
-    """The official validation artifacts are missing from the local cache.
+    """The official validation artifacts a run needs are not available.
 
-    The message names the command that fetches them (``python -m euinvoice artifacts fetch``).
+    Either they are missing from the local cache, and the message names the command that fetches them
+    (``python -m euinvoice artifacts fetch``), or the profile needs a rule set that is not pinned yet (the
+    Factur-X / ZUGFeRD Schematron, issue #42), and the message says so; no fetch command can provide it.
     """
 
 
