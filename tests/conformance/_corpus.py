@@ -178,6 +178,50 @@ def samples() -> list[Sample]:
     return found + [Sample("zugferd-corpus", pdf.name, pdf.level) for pdf in facturx_pdfs()]
 
 
+@dataclasses.dataclass(frozen=True)
+class CrossSyntax:
+    """A sample whose cross-syntax round trip (``test_cross_syntax.py``) is a documented exception.
+
+    Attributes:
+        outcome: ``refuses``: the other syntax's writer raises a ``ModelError`` naming exactly ``rules`` (a
+            documented gap of that syntax). ``reads``: ``validate`` of the other syntax's output has exactly
+            ``rules`` as its fatal or error rule ids.
+        rules: See ``outcome``.
+        differs: For ``reads``: the BT/BG ids where the round trip differs beyond the documented writer
+            normalizations, exactly (a tracked gap; ``reason`` names its issue).
+        reason: Why, citing ``docs/reference/bt-mapping.md`` or the rule texts.
+    """
+
+    outcome: t.Literal["refuses", "reads"]
+    rules: frozenset[str]
+    differs: frozenset[str]
+    reason: str
+
+
+@functools.cache
+def cross_syntax() -> dict[str, CrossSyntax]:
+    """The ``[[cross_syntax]]`` section of ``expected_invalid.toml`` keyed by :attr:`Sample.id`."""
+    with EXPECTED_INVALID.open("rb") as file:
+        entries = t.cast(list[dict[str, t.Any]], tomllib.load(file)["cross_syntax"])
+    found: dict[str, CrossSyntax] = {}
+    for entry in entries:
+        assert {"source", "file", "outcome", "rules", "reason"} <= set(entry), entry
+        assert set(entry) <= {"source", "file", "outcome", "rules", "differs", "reason"}, entry
+        assert entry["outcome"] in ("refuses", "reads"), entry
+        differs = entry.get("differs", [])
+        for ids in (entry["rules"], differs):
+            assert isinstance(ids, list), entry  # a bare string would become a set of characters
+            assert all(isinstance(value, str) for value in ids), entry
+        assert entry["rules"] or differs, f"{entry} documents no exception"
+        assert entry["outcome"] == "reads" or not differs, entry
+        assert isinstance(entry["reason"], str), entry
+        assert entry["reason"], entry
+        key = f"{entry['source']}:{entry['file']}"
+        assert key not in found, f"duplicate entry {key}"
+        found[key] = CrossSyntax(entry["outcome"], frozenset(entry["rules"]), frozenset(differs), entry["reason"])
+    return found
+
+
 @functools.cache
 def expected_invalid() -> dict[str, ExpectedInvalid]:
     """``expected_invalid.toml`` keyed by :attr:`Sample.id`; a malformed or duplicate entry fails loudly."""

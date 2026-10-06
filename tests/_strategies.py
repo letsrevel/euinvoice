@@ -3,7 +3,8 @@
 :data:`invoices` are random, structurally valid models, not arithmetically consistent ones (``calc`` is not
 involved). They may hold what a syntax cannot express; each syntax maps them onto what its writer accepts before
 use: :func:`cii_expressible` here, ``ubl_expressible`` in ``tests/syntax/_ubl_strategies.py``. The results feed the
-writers' XSD property tests and the readers' round-trip property tests.
+writers' XSD property tests and the readers' round-trip property tests; :func:`cii_normalized` is what a CII round
+trip gives back.
 """
 
 import datetime
@@ -11,7 +12,7 @@ import typing as t
 
 from hypothesis import strategies as st
 
-from _invoices import TEST_IBAN
+from _invoices import TEST_IBAN, rebuild
 from euinvoice.model import (
     Buyer,
     BuyerPostalAddress,
@@ -228,3 +229,37 @@ def cii_expressible(invoice: Invoice) -> Invoice:
     if invoice.vat_accounting_currency_code in (None, invoice.currency_code):
         totals = totals.model_validate({**dict(totals), "total_vat_in_accounting_currency": None})
     return Invoice.model_validate({**dict(invoice), "totals": totals})
+
+
+def cii_normalized(invoice: Invoice) -> Invoice:
+    """What a CII round trip of ``invoice`` returns: the model with the CII writer's normalizations applied.
+
+    See ``docs/reference/bt-mapping.md`` "Normalizations": empty BG-1, BG-13 and BG-19 are not written; BT-29
+    identifiers without a scheme come first (``ram:ID`` precedes ``ram:GlobalID`` in the XSD); a BT-147 without
+    BT-148 gains BT-148 = BT-146 + BT-147.
+    """
+    delivery = invoice.delivery
+    if delivery is not None and all(v is None for v in dict(delivery).values()):
+        delivery = None
+    payment_instructions = invoice.payment_instructions
+    debit = None if payment_instructions is None else payment_instructions.direct_debit
+    if payment_instructions is not None and debit is not None and all(v is None for v in dict(debit).values()):
+        payment_instructions = payment_instructions.model_copy(update={"direct_debit": None})
+    lines: list[InvoiceLine] = []
+    for item in invoice.lines:
+        prices = item.price_details
+        if prices.item_gross_price is None and prices.item_price_discount is not None:
+            gross = prices.item_net_price + prices.item_price_discount
+            prices = PriceDetails.model_validate({**dict(prices), "item_gross_price": gross})
+        lines.append(rebuild(item, price_details=prices))
+    seller = invoice.seller.model_copy(
+        update={"identifiers": tuple(sorted(invoice.seller.identifiers, key=lambda i: i.scheme_id is not None))}
+    )
+    return rebuild(
+        invoice,
+        notes=tuple(n for n in invoice.notes if (n.note, n.subject_code) != (None, None)),
+        delivery=delivery,
+        payment_instructions=payment_instructions,
+        lines=tuple(lines),
+        seller=seller,
+    )

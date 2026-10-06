@@ -530,3 +530,314 @@ rules = ["BG-25", "BR-16"]
 upstream = ["BR-16", "BR-CO-10", "BR-S-08"]
 reason = "Level BASIC WL: no lines (BG-25, BR-16 'An Invoice shall have at least one Invoice line'). No EN 16931 invoice, so no model instance (needs-human #69); upstream fails the EN 16931 core rules accordingly (validated with them because the Factur-X Schematron is not pinned, #42)."
 link = "https://github.com/ZUGFeRD/corpus/blob/d891458e9822e34271a5438497bf924e89955979/ZUGFeRDv2/correct/symtrax/Beispiele/BASIC%20WL/zugferd_2p1_BASIC-WL_Einfach.pdf"
+
+# ==============================================================================================================
+# Cross-syntax round trip (test_cross_syntax.py, issue #30): UBL -> model -> CII -> model and CII -> model -> UBL
+# ==============================================================================================================
+#
+# Only samples that read (the [[sample]] entries above with outcome "parse-error" never get here). Every entry is
+# asserted exactly, never skipped:
+#
+#   source, file  the sample, as above
+#   outcome       "refuses": the other syntax's writer raises a ModelError naming exactly `rules` (a documented gap
+#                 of that syntax, docs/reference/bt-mapping.md)
+#                 "reads": validate() of the other syntax's output has exactly `rules` as fatal/error rule ids
+#   reason        why, citing bt-mapping.md or the rule texts
+#
+# The writer normalizations of bt-mapping.md ("Normalizations": BT-148 derived in CII, BT-147 derived in UBL) are
+# applied by the test itself (_as_written), not listed here.
+
+[[cross_syntax]]
+source = "xrechnung-testsuite"
+file = "instances/extension/04.03a-INVOICE_ubl.xml"
+outcome = "refuses"
+rules = ["BG-3"]
+reason = "Three PRECEDING INVOICE REFERENCEs (BG-3). bt-mapping.md 'CII gap · more than one BG-3': ram:InvoiceReferencedDocument has maxOccurs 1 in ram:HeaderTradeSettlementType (D16B XSD), so the CII writer refuses the second one."
+
+[[cross_syntax]]
+source = "xrechnung-testsuite"
+file = "instances/technical-cases/cius/01.01_comprehensive_test_ubl.xml"
+outcome = "refuses"
+rules = ["BG-3"]
+reason = "Two PRECEDING INVOICE REFERENCEs (BG-3). bt-mapping.md 'CII gap · more than one BG-3': ram:InvoiceReferencedDocument has maxOccurs 1 in ram:HeaderTradeSettlementType (D16B XSD), so the CII writer refuses the second one."
+
+# -- CII -> UBL: refusals of the UBL writer --------------------------------------------------------------------
+
+[[cross_syntax]]
+source = "cen-cii"
+file = "examples/CII_example7.xml"
+outcome = "refuses"
+rules = ["BG-23", "BR-CO-15", "BT-110"]
+reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
+
+[[cross_syntax]]
+source = "cen-cii"
+file = "examples/XRechnung-O.xml"
+outcome = "refuses"
+rules = ["BG-23", "BR-CO-15", "BT-110"]
+reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
+
+[[cross_syntax]]
+source = "xrechnung-testsuite"
+file = "instances/technical-cases/cius/01.05_minimal_test_uncefact.xml"
+outcome = "refuses"
+rules = ["BG-23", "BR-CO-15", "BT-110"]
+reason = "No invoice total VAT amount (BT-110). bt-mapping.md 'UBL gap · no BT-110': CEN UBL BR-CO-15 needs exactly one cac:TaxTotal/cbc:TaxAmount in the invoice currency and the UBL 2.1 XSD TaxTotalType requires cbc:TaxAmount, so the UBL writer refuses."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/Mustangproject/testout-ZF2PushItemChargesAllowances.xml"
+outcome = "refuses"
+rules = ["BT-146", "BT-147", "BT-148"]
+reason = "An item gross price (BT-148) below the item net price (BT-146). bt-mapping.md 'BT-147 derived from BT-148 - BT-146 in UBL': the derived BT-147 would be negative, a price-level charge that PEPPOL-EN16931-R044 forbids, so the UBL writer refuses."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/Mustangproject/testout-ZF2PushRelativeChargesAllowances.xml"
+outcome = "refuses"
+rules = ["BT-146", "BT-147", "BT-148"]
+reason = "An item gross price (BT-148) below the item net price (BT-146). bt-mapping.md 'BT-147 derived from BT-148 - BT-146 in UBL': the derived BT-147 would be negative, a price-level charge that PEPPOL-EN16931-R044 forbids, so the UBL writer refuses."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
+outcome = "refuses"
+rules = ["BG-16", "BR-49", "BT-81", "BT-9"]
+reason = "A credit note (BT-3 = 381) with a payment due date (BT-9) and no PAYMENT INSTRUCTIONS (BG-16). bt-mapping.md N3: a UBL CreditNote carries BT-9 only in cac:PaymentMeans/cbc:PaymentDueDate, which needs BT-81 (BR-49), so the UBL writer refuses."
+
+# -- Differences beyond the documented normalizations (tracked) ------------------------------------------------
+
+[[cross_syntax]]
+source = "cen-cii"
+file = "examples/CII-BR-CO-10-RoundingIssue.xml"
+outcome = "reads"
+rules = []
+differs = ["BT-13"]
+reason = "Its empty ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID reads as BT-13 '', which the UBL writer replaces by the 'NA' placeholder (bt-mapping.md N4); with no BT-14 next to it, 'NA' reads back as BT-13 'NA' (#79, fixed by PR #82: remove this entry when it lands)."
+
+# -- Validation of the other syntax's output ---------------------------------------------------------------------
+
+[[cross_syntax]]
+source = "cen-ubl"
+file = "examples/issue116.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R049"]
+reason = "Peppol BT-24, so the CII output runs the CEN and Peppol CII rules. Its placeholder Swedish organisation numbers (EAS 0007) fail the check digit of PEPPOL-COMMON-R049 in CII as in UBL (see its [[sample]] entry)."
+
+[[cross_syntax]]
+source = "cen-ubl"
+file = "examples/sample-discount-price.xml"
+outcome = "reads"
+rules = ["BR-53"]
+reason = "BT-6 = BT-5 (EUR) without BT-111. bt-mapping.md 'Gap in both syntaxes \u00b7 BT-6 = BT-5 with BT-111': without BT-111 both writers write BT-6 = BT-5, which fails CEN CII BR-53 only ('If the VAT accounting currency code (BT-6) is present, then the Invoice total VAT amount in accounting currency (BT-111) shall be provided'); CEN UBL accepts it because its one cac:TaxTotal/cbc:TaxAmount is in BT-6."
+
+[[cross_syntax]]
+source = "peppol-bis"
+file = "rules/examples/base-creditnote-correction.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R040"]
+reason = "Peppol example, so the CII output runs the CEN and Peppol CII rules. Its placeholder GLNs (schemeID 0088 on the delivery location BT-71 and the item standard identifier BT-157) fail the GS1 check digit of PEPPOL-COMMON-R040. The CII rule's context is every 'ram:URIID | ram:ID | ram:GlobalID' with schemeID 0088 (PEPPOL-EN16931-CII.sch), the UBL rule's only 'cbc:EndpointID | cac:PartyIdentification/cbc:ID | cbc:CompanyID' (PEPPOL-EN16931-UBL.sch), so the upstream UBL file passes."
+
+[[cross_syntax]]
+source = "peppol-bis"
+file = "rules/examples/base-example.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R040"]
+reason = "Peppol example, so the CII output runs the CEN and Peppol CII rules. Its placeholder GLNs (schemeID 0088 on the delivery location BT-71 and the item standard identifier BT-157) fail the GS1 check digit of PEPPOL-COMMON-R040. The CII rule's context is every 'ram:URIID | ram:ID | ram:GlobalID' with schemeID 0088 (PEPPOL-EN16931-CII.sch), the UBL rule's only 'cbc:EndpointID | cac:PartyIdentification/cbc:ID | cbc:CompanyID' (PEPPOL-EN16931-UBL.sch), so the upstream UBL file passes."
+
+[[cross_syntax]]
+source = "peppol-bis"
+file = "rules/examples/base-example_profile02.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R040"]
+reason = "Peppol example, so the CII output runs the CEN and Peppol CII rules. Its placeholder GLNs (schemeID 0088 on the delivery location BT-71 and the item standard identifier BT-157) fail the GS1 check digit of PEPPOL-COMMON-R040. The CII rule's context is every 'ram:URIID | ram:ID | ram:GlobalID' with schemeID 0088 (PEPPOL-EN16931-CII.sch), the UBL rule's only 'cbc:EndpointID | cac:PartyIdentification/cbc:ID | cbc:CompanyID' (PEPPOL-EN16931-UBL.sch), so the upstream UBL file passes."
+
+[[cross_syntax]]
+source = "peppol-bis"
+file = "rules/examples/base-negative-inv-correction.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R040"]
+reason = "Peppol example, so the CII output runs the CEN and Peppol CII rules. Its placeholder GLNs (schemeID 0088 on the delivery location BT-71 and the item standard identifier BT-157) fail the GS1 check digit of PEPPOL-COMMON-R040. The CII rule's context is every 'ram:URIID | ram:ID | ram:GlobalID' with schemeID 0088 (PEPPOL-EN16931-CII.sch), the UBL rule's only 'cbc:EndpointID | cac:PartyIdentification/cbc:ID | cbc:CompanyID' (PEPPOL-EN16931-UBL.sch), so the upstream UBL file passes."
+
+[[cross_syntax]]
+source = "peppol-bis"
+file = "rules/examples/sales-order-example.xml"
+outcome = "reads"
+rules = ["PEPPOL-COMMON-R040"]
+reason = "Peppol example, so the CII output runs the CEN and Peppol CII rules. Its placeholder GLNs (schemeID 0088 on the delivery location BT-71 and the item standard identifier BT-157) fail the GS1 check digit of PEPPOL-COMMON-R040. The CII rule's context is every 'ram:URIID | ram:ID | ram:GlobalID' with schemeID 0088 (PEPPOL-EN16931-CII.sch), the UBL rule's only 'cbc:EndpointID | cac:PartyIdentification/cbc:ID | cbc:CompanyID' (PEPPOL-EN16931-UBL.sch), so the upstream UBL file passes."
+
+[[cross_syntax]]
+source = "xrechnung-testsuite"
+file = "instances/extension/05.01a-INVOICE_ubl.xml"
+outcome = "reads"
+rules = ["BR-CO-16"]
+reason = "XRechnung extension with cac:PrepaidPayment (BT-DEX-002), outside EN 16931 and unmapped by the UBL reader, so the CII output fails BR-CO-16 (BT-115 = BT-112 - BT-113 + BT-114) as the upstream file does (see its [[sample]] entry; KoSIT customLevel, #49). BR-DEX-09 is in XRechnung-UBL-validation.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_1_Teilrechnung.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_2_Teilrechnung.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_AbweichenderZahlungsempf.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Betriebskostenabrechnung.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach_DueDate.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Einfach_negativePaymentDue.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Elektron.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Gutschrift.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Haftpflichtversicherung_Versicherungssteuer.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Innergemeinschaftliche_Lieferungen.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Kraftfahrversicherung_Bruttopreise.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Miete.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_OEPNV.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Physiotherapeut.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Rabatte.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R042"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Rechnungskorrektur.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Reisekostenabrechnung.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_SEPA_Prenotification.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/EN16931_Sachversicherung_berechneter_Steuersatz.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R002", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020", "PEPPOL-EN16931-R120"]
+reason = "Carries the Peppol BIS BT-24, so its CII output runs the CEN and Peppol CII rules (peppol-bis 3.0.21 PEPPOL-EN16931-CII.sch); the upstream file was written for EN 16931 and fails the Peppol rules itself (see its [[sample]] entry). Rules: R002 ('count(ram:IncludedNote) <= 1 and not(ram:IncludedNote/ram:SubjectCode)': unlike PEPPOL-EN16931-UBL.sch it has no exception for German seller and buyer and also refuses BT-21); R003 (BT-10 or BT-13); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34); R042 (allowance/charge percentage with base amount); R120 (line net amount = quantity x net price / base quantity + charges - allowances). DE-R-001/002/015 and P0100 exist in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/XRECHNUNG_Elektron.ubl.xml"
+outcome = "reads"
+rules = ["PEPPOL-EN16931-R008"]
+reason = "Its empty cac:OrderReference/cbc:ID is BT-13 '', which the CII writer writes as an empty ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID. XRechnung 2.6.0 exempts exactly that element from PEPPOL-EN16931-R008 in UBL (ubl/XRechnung-UBL-validation.sch:190, self::cbc:ID[parent::cac:OrderReference]) but not in CII (cii/XRechnung-CII-validation.sch:297-298, 'Document MUST not contain empty elements'), so the CII output fails R008 (#79)."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "XML-Rechnung/UBL/not_validating_full_invoice_based_onTest_EeISI_300_CENfullmodel.ubl.xml"
+outcome = "reads"
+rules = ["BR-CO-10", "BR-CO-15", "PEPPOL-EN16931-CL008", "PEPPOL-EN16931-R002", "PEPPOL-EN16931-R120"]
+reason = "Upstream marks it not validating (file name): it fails BR-CO-10 and BR-CO-15, and under its Peppol BT-24 PEPPOL-EN16931-CL008, R002 and R120 in CII as in UBL (see its [[sample]] entry). P0105 is in PEPPOL-EN16931-UBL.sch only."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Kostenrechnung.pdf"
+outcome = "reads"
+rules = ["BR-CO-12", "BR-S-08"]
+reason = "Level EXTENDED; the UBL output runs the CEN UBL rules (Factur-X levels are CII only). EXTENDED content beyond EN 16931 is unmapped, so BR-CO-12 (BT-108 = sum of BT-99) and BR-S-08 (BT-116 per rate) fail as on the upstream XML (see its [[sample]] entry)."
+
+[[cross_syntax]]
+source = "zugferd-corpus"
+file = "ZUGFeRDv2/correct/symtrax/Beispiele/EXTENDED/zugferd_2p1_EXTENDED_Warenrechnung.pdf"
+outcome = "reads"
+rules = ["BR-CO-12", "BR-S-08"]
+reason = "Level EXTENDED; the UBL output runs the CEN UBL rules (Factur-X levels are CII only). EXTENDED content beyond EN 16931 is unmapped, so BR-CO-12 (BT-108 = sum of BT-99) and BR-S-08 (BT-116 per rate) fail as on the upstream XML (see its [[sample]] entry)."
+

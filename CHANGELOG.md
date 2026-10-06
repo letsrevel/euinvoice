@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Cross-syntax conformance (#30, `tests/conformance/test_cross_syntax.py`): every upstream sample that reads goes
+  UBL → model → CII → model (and CII → model → UBL → model) and comes back equal up to the documented writer
+  normalizations, with nothing unmapped, and the other syntax's output is validated under the sample's profile.
+  Writer refusals and blocking findings are listed exactly in the `[[cross_syntax]]` section of
+  `expected_invalid.toml`. A Hypothesis property checks the same round trip for random invoices expressible in both
+  syntaxes.
 - BT coverage gate (`tests/syntax/test_bt_coverage.py`): fails if any EN 16931 term or group lacks a write
   and a read test in UBL and in CII (or a reasoned exemption), and generates `docs/reference/bt-coverage.md`
   (197 ids, all covered in all four cells, no exemptions).
@@ -180,6 +186,8 @@ All notable changes to this project are documented here. The format follows
   `cac:OrderReference/cbc:ID` instead of the `NA` placeholder, which now stands in for an absent BT-13 only, so
   an invoice with an empty `cbc:ID` (e.g. ZUGFeRD corpus `UBL/EN16931_Elektron.ubl.xml`) round-trips. Under
   Peppol the UBL pre-flight now reports PEPPOL-EN16931-R008 for it, as the official Schematron does (#79).
+- `syntax.ubl.read()` maps an empty `cac:Contact` to the empty BG-6 / BG-9 it builds instead of also listing it in
+  `unmapped`, as the CII reader does for an empty `ram:DefinedTradeContact` (#30).
 - Model text, code, identifier (value and scheme ids) and binary object (filename, mime code) fields
   now refuse characters outside the XML 1.0 `Char` production (NUL and other C0 controls except tab,
   LF and CR, lone surrogates, U+FFFE, U+FFFF) with a `ModelError` naming the code point and its index,
