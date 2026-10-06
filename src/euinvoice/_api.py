@@ -1,6 +1,7 @@
 """The top-level API: :func:`to_xml`, :func:`parse` and :func:`parse_detailed` (plan §4 "Public API", "Data flow").
 
-Writing: ``profile.prepare(invoice)`` → ``profile.preflight(prepared, syntax)`` → the syntax writer. Reading:
+Writing: ``profile.prepare(invoice)`` → ``profile.preflight(prepared, syntax)`` and
+``calc.check(prepared, syntax=syntax)`` → the syntax writer. Reading:
 (a Factur-X / ZUGFeRD PDF goes through :func:`euinvoice.facturx.extract` first) → :func:`euinvoice._xml.parse`
 (D10) → :func:`euinvoice.detect.detect_root` → the syntax reader. This module sits above every other package;
 nothing below imports it.
@@ -8,7 +9,7 @@ nothing below imports it.
 
 import typing as t
 
-from euinvoice import _xml, profiles
+from euinvoice import _xml, calc, profiles
 from euinvoice.detect import detect_root, is_pdf
 from euinvoice.errors import PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice
@@ -26,16 +27,18 @@ def to_xml(
     profile: profiles.Profile | None = None,
     syntax: Syntax | t.Literal["ubl", "cii"] | None = None,
 ) -> bytes:
-    """Write an invoice as UBL 2.1 or CII D16B XML under a profile, after its pre-flight checks.
+    """Write an invoice as UBL 2.1 or CII D16B XML under a profile, after its pre-flight and calculation checks.
 
     The invoice is first set up for the profile with :meth:`~euinvoice.profiles.Profile.prepare` (BT-24 becomes
     the profile's, BT-23 gets its default; see there), so the written document reads back as
-    ``profile.prepare(invoice)``, not as ``invoice``. Then :attr:`~euinvoice.profiles.Profile.preflight` runs
-    on the prepared invoice: any ``fatal`` or ``error`` finding refuses the write with :class:`PreflightError`,
-    because the profile's official rules would reject the document. Pre-flight warnings do not block and are not
-    returned; call ``profile.preflight(profile.prepare(invoice), syntax)`` to see them. The pre-flight checks are
-    early, model-level messages; the official Schematron stays the oracle (D8), so run :func:`euinvoice.validate`
-    on the result for the verdict.
+    ``profile.prepare(invoice)``, not as ``invoice``. Then two checks run on the prepared invoice:
+    :attr:`~euinvoice.profiles.Profile.preflight` (the profile's rules) and :func:`euinvoice.calc.check` with the
+    target syntax (the CEN calculation, VAT category and period rules, each ``fatal`` exactly when that syntax's
+    official CEN binding rejects it; ``tests/conformance/test_calc_oracle.py``). Any ``fatal`` or ``error``
+    finding refuses the write with :class:`PreflightError`, because the official rules would reject the document.
+    Warnings do not block and are not returned; call ``profile.preflight(prepared, syntax)`` and
+    ``calc.check(prepared, syntax=syntax)`` to see them. Both checks are early, model-level messages; the official
+    Schematron stays the oracle (D8), so run :func:`euinvoice.validate` on the result for the verdict.
 
     Args:
         invoice: The invoice, e.g. from :func:`euinvoice.calc.complete`.
@@ -43,13 +46,15 @@ def to_xml(
             (:func:`euinvoice.profiles.get`); a Factur-X level shares its BT-24 with another profile, so pass it
             explicitly (and see :func:`euinvoice.facturx.embed` for the PDF).
         syntax: ``Syntax.UBL`` / ``"ubl"`` or ``Syntax.CII`` / ``"cii"``. ``None`` is allowed only when the
-            profile supports a single syntax (e.g. Peppol BIS: UBL), which is then used.
+            profile supports a single syntax, which is then used (e.g. ``FACTURX_EN16931`` /
+            ``FACTURX_XRECHNUNG``: CII).
 
     Returns:
         The serialized XML document.
 
     Raises:
-        PreflightError: The pre-flight checks report a ``fatal`` or ``error`` finding; ``findings`` holds them.
+        PreflightError: The pre-flight or calculation checks report a ``fatal`` or ``error`` finding; ``findings``
+            holds every finding of both.
         UnsupportedDocumentError: ``profile`` is ``None`` and no profile is registered for the invoice's BT-24;
             the profile does not support ``syntax``; or it is a Factur-X level that is not generated (MINIMUM,
             BASIC WL, BASIC, EXTENDED, plan §1), whose official Schematron is not pinned (issue #42), so nothing
@@ -65,7 +70,7 @@ def to_xml(
         )
     target = _target_syntax(profile, syntax)
     prepared = profile.prepare(invoice)
-    findings = profile.preflight(prepared, target)
+    findings = (*profile.preflight(prepared, target), *calc.check(prepared, syntax=target))
     if not ValidationReport(findings).ok:
         raise PreflightError(profile.id, target, findings)
     return ubl.write(prepared) if target is Syntax.UBL else cii.write(prepared)

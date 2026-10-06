@@ -136,7 +136,8 @@ def test_round_trip_of_every_factur_x_pdf_through_embed() -> None:
 def test_parse_reads_every_correct_pdf_as_its_extracted_xml() -> None:
     # euinvoice.parse on a PDF is parse_detailed of the XML extract() selects. Factur-X MINIMUM and BASIC WL lack terms
     # EN 16931 requires (BG-25 lines, BR-16; MINIMUM also BG-23 and BT-106), so they raise ParseError (#69).
-    outcomes: collections.Counter[tuple[str | None, bool]] = collections.Counter()
+    # (XMP level, the error parse raised or None) -> PDFs.
+    outcomes: collections.Counter[tuple[str | None, type[Exception] | None]] = collections.Counter()
     for name, data in _pdfs().items():
         if _kind(name) != "correct":
             continue
@@ -146,12 +147,10 @@ def test_parse_reads_every_correct_pdf_as_its_extracted_xml() -> None:
         except (ParseError, UnsupportedDocumentError) as exc:
             with pytest.raises(type(exc)):
                 parse(data)
-            outcomes[extracted.conformance_level, False] += 1
+            outcomes[extracted.conformance_level, type(exc)] += 1
         else:
             assert parse_detailed(data) == expected, name
             assert parse(data) == expected.invoice, name
-            outcomes[extracted.conformance_level, True] += 1
-    assert outcomes["MINIMUM", True] == 0
-    assert outcomes["BASIC WL", True] == 0
-    assert outcomes["MINIMUM", False] == 6
-    assert outcomes["BASIC WL", False] == 5
+            outcomes[extracted.conformance_level, None] += 1
+    for level, count in (("MINIMUM", 6), ("BASIC WL", 5)):
+        assert {key: n for key, n in outcomes.items() if key[0] == level} == {(level, ParseError): count}

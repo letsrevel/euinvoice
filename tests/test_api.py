@@ -1,6 +1,7 @@
 """The top-level API: ``to_xml``, ``parse``, ``parse_detailed`` and the package's re-exports (#27)."""
 
 import dataclasses
+import pickle  # ruff: ignore[suspicious-pickle-import] - round-trips our own exception
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - runs this interpreter on a fixed snippet
 import sys
 import typing as t
@@ -9,6 +10,7 @@ import pytest
 from lxml import etree
 
 import euinvoice
+from _calc_drafts import with_totals
 from _invoices import CEN, minimal_invoice, peppol_invoice, rebuild
 from _pdfa import pdf
 from _xrechnung_cases import xrechnung_invoice
@@ -100,7 +102,9 @@ def test_to_xml_refuses_an_invoice_with_blocking_preflight_findings() -> None:
         "PEPPOL-EN16931-R020",
     ]
     message = str(caught.value)
-    assert message.startswith("invoice fails the peppol pre-flight checks for ubl: PEPPOL-EN16931-R003 (fatal) at")
+    assert message.startswith(
+        "invoice fails the peppol pre-flight and calculation checks for ubl: PEPPOL-EN16931-R003 (fatal) at"
+    )
     assert "PEPPOL-EN16931-R020 (fatal) at seller.electronic_address" in message
 
 
@@ -125,7 +129,48 @@ def test_preflight_error_keeps_every_finding_and_names_only_the_blocking_ones() 
     with pytest.raises(PreflightError) as caught:
         to_xml(_core_invoice(), profile=profile, syntax="cii")
     assert caught.value.findings == findings
-    assert str(caught.value) == "invoice fails the en16931 pre-flight checks for cii: EUINV-BLOCK (error) at note: test"
+    assert str(caught.value) == (
+        "invoice fails the en16931 pre-flight and calculation checks for cii: EUINV-BLOCK (error) at note: test"
+    )
+    assert (caught.value.profile_id, caught.value.syntax) == ("en16931", "cii")
+
+
+@pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
+def test_to_xml_refuses_a_wrong_total_with_vat(syntax: Syntax) -> None:
+    # BT-112 != BT-109 + BT-110: BR-CO-15 (fatal in both CEN bindings; calc.check is oracle-tested against them).
+    invoice = with_totals(_core_invoice(), total_with_vat="999.99")
+    with pytest.raises(PreflightError) as caught:
+        to_xml(invoice, profile=profiles.EN16931, syntax=syntax)
+    assert "BR-CO-15" in {f.rule_id for f in caught.value.findings}
+    assert all(f.source == "calc" for f in caught.value.findings)
+
+
+def test_to_xml_refuses_a_vat_breakdown_with_a_wrong_tax_amount() -> None:
+    # BT-117 off by more than 1 from BT-116 x BT-119: BR-CO-17.
+    invoice = _core_invoice()
+    group = invoice.vat_breakdown[0]
+    tampered = type(group).model_validate({**dict(group), "tax_amount": group.tax_amount + 5})
+    with pytest.raises(PreflightError) as caught:
+        to_xml(rebuild(invoice, vat_breakdown=(tampered,)), profile=profiles.EN16931, syntax="cii")
+    assert "BR-CO-17" in {f.rule_id for f in caught.value.findings}
+
+
+def test_preflight_error_pickles() -> None:
+    findings = (dataclasses.replace(_finding(Severity.FATAL), rule_id="BR-CO-15"),)
+    error = PreflightError("en16931", "ubl", findings)
+    again = pickle.loads(pickle.dumps(error))  # ruff: ignore[suspicious-pickle-usage] - our own object
+    assert (type(again), str(again), again.profile_id, again.syntax, again.findings) == (
+        PreflightError,
+        str(error),
+        "en16931",
+        "ubl",
+        findings,
+    )
+
+
+def test_preflight_error_needs_a_blocking_finding() -> None:
+    with pytest.raises(ValueError, match="at least one fatal or error finding"):
+        PreflightError("en16931", "ubl", (_finding(Severity.WARNING),))
 
 
 # --- parse / parse_detailed --------------------------------------------------------------------------------------
@@ -181,9 +226,18 @@ def test_parse_of_a_pdf_without_the_pdf_extra_names_it(monkeypatch: pytest.Monke
 # --- package ------------------------------------------------------------------------------------------------------
 
 
-def test_every_name_in_all_resolves() -> None:
-    for name in euinvoice.__all__:
-        assert getattr(euinvoice, name) is not None
+def test_every_name_in_all_resolves_and_star_imports_without_pypdf() -> None:
+    snippet = (
+        "import sys\n"
+        "sys.modules['pypdf'] = None\n"  # makes `import pypdf` raise ImportError
+        "import euinvoice\n"
+        "from euinvoice import *\n"
+        "assert all(getattr(euinvoice, name) is not None for name in euinvoice.__all__)\n"
+        "assert 'facturx' not in euinvoice.__all__\n"
+        "print('ok')\n"
+    )
+    out = subprocess.run([sys.executable, "-c", snippet], capture_output=True, text=True, check=True)  # ruff: ignore[subprocess-without-shell-equals-true] - fixed argv
+    assert out.stdout == "ok\n"
 
 
 def test_the_reexports_are_the_functions() -> None:
@@ -197,7 +251,7 @@ def test_the_reexports_are_the_functions() -> None:
 
 def test_an_unknown_attribute_raises_attribute_error() -> None:
     with pytest.raises(AttributeError, match="has no attribute 'nope'"):
-        euinvoice.nope  # ruff: ignore[useless-expression] # the access is the test
+        euinvoice.nope  # type: ignore[attr-defined] # ruff: ignore[useless-expression] - the bad access is the test
 
 
 def test_import_euinvoice_loads_neither_pypdf_nor_saxonche() -> None:
