@@ -79,6 +79,11 @@ All notable changes to this project are documented here. The format follows
   missing, empty or repeated BT-24 gives `specification_identifier=None` and `profile=None` (the
   official rules report it). Only PDF input and an unsupported root raise `UnsupportedDocumentError`;
   malformed XML raises `ParseError`.
+- `euinvoice.validate.validate(data, profile=None)`: validates a UBL or CII document against the
+  official XSD, then (unless the XSD step found an error) each Schematron rule set of the profile in
+  order (EN 16931: CEN; Peppol: CEN, Peppol; XRechnung: CEN, XRechnung), with the raw official
+  severities. Without a profile it is picked by BT-24; an unregistered or missing BT-24 falls back to
+  EN 16931 core and the report says so in an `information` finding (`EUINVOICE-PROFILE-FALLBACK`).
 
 ### Changed
 - The Peppol Schematron precompile now hands each `.sch` to SchXslt as an XDM node built from
