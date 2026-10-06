@@ -33,15 +33,42 @@ pytestmark = pytest.mark.conformance
 _BLOCKING = {Severity.FATAL, Severity.ERROR}
 
 INVOICES: t.Final = {
-    "minimal-invoice": lambda: minimal_invoice(),
+    "minimal-invoice": minimal_invoice,
     "minimal-credit-note": lambda: minimal_invoice(type_code="381"),
-    "full-invoice": lambda: full_invoice(),
+    "full-invoice": full_invoice,
     # 381 credit note: BT-9 in cac:PaymentMeans, BT-11 as DocumentTypeCode 50, BT-17 after the ADRs.
     "full-credit-note": lambda: full_invoice(type_code="381"),
     "credit-note-code-81": lambda: full_invoice(type_code="81"),
     # BT-8 instead of BT-7 (BR-CO-03 forbids both).
     "vat-point-date-code": lambda: full_invoice(vat_point_date=None, vat_point_date_code="35"),
+    # bt-mapping.md N5: BT-148 without BT-147 writes cbc:Amount = BT-148 - BT-146.
+    "gross-equals-net": lambda: _gross_only(Decimal("50"), Decimal("50")),
+    "gross-above-net": lambda: _gross_only(Decimal("50"), Decimal("50.75")),
 }
+
+
+def _gross_only(net: Decimal, gross: Decimal) -> Invoice:
+    document = minimal_invoice()
+    details = PriceDetails(item_net_price=net, item_gross_price=gross)
+    return minimal_invoice(lines=(document.lines[0].model_copy(update={"price_details": details}),))
+
+
+@pytest.mark.parametrize("build", [INVOICES["gross-equals-net"], INVOICES["gross-above-net"]], ids=["equal", "above"])
+def test_implied_price_discount_satisfies_peppol_price_rules(build: t.Callable[[], Invoice]) -> None:
+    # PEPPOL-EN16931-R046: net = gross - allowance; R044: price level allowance only (ChargeIndicator false).
+    rule_ids = {f.rule_id for f in schematron.run(schematron.PEPPOL_UBL, ubl.write(build()))}
+    assert not rule_ids & {"PEPPOL-EN16931-R044", "PEPPOL-EN16931-R046"}
+
+
+def test_wrong_price_discount_fires_peppol_r046() -> None:
+    # Guard for the test above: a discount that does not match gross - net is caught.
+    document = minimal_invoice()
+    details = PriceDetails(
+        item_net_price=Decimal("50"), item_price_discount=Decimal("1"), item_gross_price=Decimal("50")
+    )
+    wrong = minimal_invoice(lines=(document.lines[0].model_copy(update={"price_details": details}),))
+    rule_ids = {f.rule_id for f in schematron.run(schematron.PEPPOL_UBL, ubl.write(wrong))}
+    assert "PEPPOL-EN16931-R046" in rule_ids
 
 
 @pytest.mark.parametrize("build", INVOICES.values(), ids=INVOICES.keys())

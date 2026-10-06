@@ -3,8 +3,9 @@
 Document-level element order follows ``InvoiceType`` (``maindoc/UBL-Invoice-2.1.xsd``) or
 ``CreditNoteType`` (``maindoc/UBL-CreditNote-2.1.xsd``). The two differ where this writer cares:
 
-* ``CreditNote`` has no ``cbc:DueDate``: BT-9 is ``cac:PaymentMeans/cbc:PaymentDueDate`` (Peppol BIS
-  3.0.21 ``structure/syntax/ubl-creditnote.xml``; KoSIT xrechnung-visualization ``ubl-creditnote-xr.xsl``);
+* ``CreditNote`` has no ``cbc:DueDate``: BT-9 is ``cac:PaymentMeans/cbc:PaymentDueDate`` (Peppol upstream
+  structure docs, peppol-bis-invoice-3 commit 806866b, not a pinned artifact:
+  ``structure/syntax/ubl-creditnote.xml``; KoSIT xrechnung-visualization ``ubl-creditnote-xr.xsl``);
 * ``CreditNote`` writes ``cbc:TaxPointDate`` before ``cbc:CreditNoteTypeCode``, ``Invoice`` after the notes;
 * ``CreditNote`` has no ``cac:ProjectReference``: BT-11 is ``cac:AdditionalDocumentReference`` with
   ``cbc:DocumentTypeCode`` 50 (same two sources; CEN UBL-SR-43 allows 50 only in a ``CreditNote``);
@@ -18,10 +19,18 @@ import typing as t
 from lxml import etree
 
 from euinvoice import _xml
-from euinvoice.errors import ModelError
 from euinvoice.model import AdditionalSupportingDocument, Invoice, InvoiceNote, PaymentInstructions
 from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL
-from euinvoice.syntax.ubl._build import Context, aggregate, amount, basic, date, identifier, tax_category
+from euinvoice.syntax.ubl._build import (
+    Context,
+    aggregate,
+    amount,
+    basic,
+    cannot_express,
+    date,
+    identifier,
+    tax_category,
+)
 from euinvoice.syntax.ubl._lines import OBJECT_DOCUMENT_TYPE, AllowanceOrCharge, write_allowance_charge, write_line
 from euinvoice.syntax.ubl._parties import write_delivery, write_parties
 
@@ -33,14 +42,20 @@ PROJECT_DOCUMENT_TYPE: t.Final = "50"
 MISSING_ORDER_REFERENCE: t.Final = "NA"
 """``cac:OrderReference/cbc:ID`` written when only the sales order reference BT-14 is known.
 
-``cbc:ID`` is mandatory in ``OrderReferenceType`` (UBL 2.1 XSD). Peppol BIS 3.0.21
-``structure/syntax/ubl-invoice.xml`` (BT-13): "In cases where sales order reference is provided, but
-there's no purchase order reference, then use value 'NA' as this element is mandatory in UBL"."""
+``cbc:ID`` is mandatory in ``OrderReferenceType`` (UBL 2.1 XSD). Peppol upstream structure docs
+(peppol-bis-invoice-3 commit 806866b, not a pinned artifact), ``structure/syntax/ubl-invoice.xml``
+(BT-13): "In cases where sales order reference is provided, but there's no purchase order reference,
+then use value 'NA' as this element is mandatory in UBL"."""
 
 CARD_NETWORK_ID: t.Final = "NA"
-"""``cac:CardAccount/cbc:NetworkID``, mandatory in ``CardAccountType`` (UBL 2.1 XSD) but bound to no
-business term (bt-mapping.md note N2). Peppol BIS 3.0.21 ``structure/syntax/part/card-payment.xml``:
-"Syntax required element not related to a business term", example value ``NA``."""
+"""``cac:CardAccount/cbc:NetworkID``, bound to no business term (bt-mapping.md note N2).
+
+Pinned evidence: ``CardAccountType`` has ``cbc:NetworkID`` minOccurs=1 maxOccurs=1
+(``common/UBL-CommonAggregateComponents-2.1.xsd``), and the CEN rules only restrict it by UBL-CR-675
+(``UBL/EN16931-UBL-syntax.sch``: no ``@schemeID``, which is not written). The value comes from the
+Peppol upstream structure docs (peppol-bis-invoice-3 commit 806866b, not a pinned artifact),
+``structure/syntax/part/card-payment.xml``: "Syntax required element not related to a business term",
+example value ``NA``."""
 
 
 def is_credit_note(type_code: str) -> bool:
@@ -77,8 +92,8 @@ def write(invoice: Invoice) -> bytes:
     Raises:
         ModelError: The invoice holds something UBL cannot express: BT-87 or the BT-125 mime code or
             filename missing (decisions M2, M3 in bt-mapping.md), BT-110 missing, BT-111 without BT-6,
-            BT-9 in a credit note without PAYMENT INSTRUCTIONS (BG-16), BT-148 without BT-147, or BT-150
-            without BT-149. The message names the terms.
+            BT-6 equal to BT-5, BT-9 in a credit note without PAYMENT INSTRUCTIONS (BG-16), BT-148 below
+            BT-146, or BT-150 without BT-149. The message starts with the BT id.
     """
     credit_note = is_credit_note(invoice.type_code)
     namespace = _xml.UBL_CREDIT_NOTE if credit_note else _xml.UBL_INVOICE
@@ -103,10 +118,16 @@ def write(invoice: Invoice) -> bytes:
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
 
 
-def _note_text(note: InvoiceNote) -> str:
-    """BT-21 is the text between a leading ``#…#`` of ``cbc:Note`` (CEN UBL BR-CL-08, issue #10)."""
+def _note_text(note: InvoiceNote) -> str | None:
+    """BT-21 is the text between a leading ``#…#`` of ``cbc:Note`` (CEN UBL BR-CL-08, issue #10).
+
+    A note with neither BT-21 nor BT-22 text writes nothing: an empty ``cbc:Note`` carries no business
+    term and Peppol PEPPOL-EN16931-R008 forbids empty elements.
+    """
     text = note.note or ""
-    return text if note.subject_code is None else f"#{note.subject_code}#{text}"
+    if note.subject_code is None:
+        return text or None
+    return f"#{note.subject_code}#{text}"
 
 
 def _header(root: etree._Element, invoice: Invoice, credit_note: bool) -> None:
@@ -182,9 +203,10 @@ def _supporting_document(element: etree._Element, document: AdditionalSupporting
     attachment = aggregate(element, "Attachment")
     if attached is not None:
         if attached.mime_code is None or attached.filename is None:
-            raise ModelError(
-                "UBL requires the mime code and filename of an attached document (BT-125): CEN UBL-DT-06 and "
-                "UBL-DT-07 are fatal (decision M3 in docs/reference/bt-mapping.md)"
+            raise cannot_express(
+                "BT-125",
+                "an attached document needs its mime code and filename: CEN UBL-DT-06 and UBL-DT-07 are fatal "
+                "(decision M3 in docs/reference/bt-mapping.md)",
             )
         content = base64.b64encode(attached.content).decode("ascii")
         basic(
@@ -197,18 +219,19 @@ def _supporting_document(element: etree._Element, document: AdditionalSupporting
 def _payment_means(root: etree._Element, invoice: Invoice, credit_note: bool) -> None:
     """Append one ``cac:PaymentMeans`` per credit transfer (at least one) for BG-16.
 
-    UBL repeats ``cac:PaymentMeans`` per account (Peppol ``ubl-invoice.xml``: ``cac:PaymentMeans`` 0..n,
-    ``cac:PayeeFinancialAccount`` 0..1). The terms that may occur only once across them, BT-82
-    (UBL-SR-46), the credit note BT-9 (UBL-SR-45), the card (UBL-SR-54) and the mandate (UBL-SR-55), go in
-    the first one, as does BT-83 (UBL-SR-44 allows one distinct value). BT-81 is repeated in each
-    (UBL-SR-47 requires one code).
+    UBL repeats ``cac:PaymentMeans`` per account (Peppol upstream structure docs, commit 806866b,
+    ``ubl-invoice.xml``: ``cac:PaymentMeans`` 0..n, ``cac:PayeeFinancialAccount`` 0..1). The terms that
+    may occur only once across them, BT-82 (UBL-SR-46), the credit note BT-9 (UBL-SR-45), the card
+    (UBL-SR-54) and the mandate (UBL-SR-55), go in the first one, as does BT-83 (UBL-SR-44 allows one
+    distinct value). BT-81 is repeated in each (UBL-SR-47 requires one code).
     """
     instructions = invoice.payment_instructions
     if instructions is None:
         if credit_note and invoice.payment_due_date is not None:
-            raise ModelError(
-                "a UBL CreditNote carries the payment due date (BT-9) only in cac:PaymentMeans/cbc:PaymentDueDate, "
-                "which needs PAYMENT INSTRUCTIONS (BG-16) with a payment means type code (BT-81)"
+            raise cannot_express(
+                "BT-9",
+                "a CreditNote carries the payment due date only in cac:PaymentMeans/cbc:PaymentDueDate, which needs "
+                "PAYMENT INSTRUCTIONS (BG-16) with a payment means type code (BT-81, BR-49)",
             )
         return
     for index, account in enumerate(instructions.credit_transfers or (None,)):
@@ -239,9 +262,10 @@ def _card(element: etree._Element, instructions: PaymentInstructions) -> None:
     if card is None:
         return
     if card.primary_account_number is None:
-        raise ModelError(
-            "UBL requires the payment card primary account number (BT-87) in PAYMENT CARD INFORMATION (BG-18): "
-            "cbc:PrimaryAccountNumberID is mandatory in CardAccountType (decision M2 in docs/reference/bt-mapping.md)"
+        raise cannot_express(
+            "BT-87",
+            "PAYMENT CARD INFORMATION (BG-18) needs the primary account number: cbc:PrimaryAccountNumberID is "
+            "mandatory in CardAccountType (decision M2 in docs/reference/bt-mapping.md)",
         )
     account = aggregate(element, "CardAccount")
     basic(account, "PrimaryAccountNumberID", card.primary_account_number)
@@ -265,12 +289,22 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
 
     The two ``cbc:TaxAmount`` are told apart by ``currencyID`` (BT-5 vs BT-6; CEN BR-CO-15, BR-53 and
     BR-DEC-13/15); only the BT-5 one carries ``cac:TaxSubtotal`` (bt-mapping.md BG-23).
+
+    Raises:
+        ModelError: BT-6 equals BT-5, BT-110 is missing, or BT-111 is set without BT-6.
     """
     totals = invoice.totals
+    if invoice.vat_accounting_currency_code == invoice.currency_code:
+        raise cannot_express(
+            "BT-6",
+            "a VAT accounting currency equal to the invoice currency (BT-5) gives two cac:TaxTotal/cbc:TaxAmount "
+            "with the same currencyID, which CEN BR-CO-15 (exactly one in the invoice currency) rejects",
+        )
     if totals.total_vat is None:
-        raise ModelError(
-            "UBL requires the invoice total VAT amount (BT-110): the VAT BREAKDOWN (BG-23) lives in cac:TaxTotal, "
-            "whose cbc:TaxAmount is mandatory (UBL 2.1 XSD TaxTotalType; CEN BR-CO-15)"
+        raise cannot_express(
+            "BT-110",
+            "the invoice total VAT amount is required: the VAT BREAKDOWN (BG-23) lives in cac:TaxTotal, whose "
+            "cbc:TaxAmount is mandatory (UBL 2.1 XSD TaxTotalType; CEN BR-CO-15)",
         )
     tax_total = aggregate(root, "TaxTotal")
     amount(tax_total, "TaxAmount", totals.total_vat, invoice.currency_code)
@@ -288,9 +322,10 @@ def _tax_totals(root: etree._Element, invoice: Invoice) -> None:
         )
     if totals.total_vat_in_accounting_currency is not None:
         if invoice.vat_accounting_currency_code is None:
-            raise ModelError(
-                "the invoice total VAT amount in accounting currency (BT-111) needs the VAT accounting currency "
-                "code (BT-6): it is its currencyID in UBL"
+            raise cannot_express(
+                "BT-111",
+                "the invoice total VAT amount in accounting currency needs the VAT accounting currency code (BT-6), "
+                "its currencyID",
             )
         accounting = aggregate(root, "TaxTotal")
         amount(accounting, "TaxAmount", totals.total_vat_in_accounting_currency, invoice.vat_accounting_currency_code)

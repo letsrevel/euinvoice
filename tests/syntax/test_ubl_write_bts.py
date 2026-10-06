@@ -1,6 +1,6 @@
 """One write test per EN 16931 business term and group in UBL (``docs/reference/bt-mapping.md``).
 
-``ROWS`` is keyed by the BT/BG id (first element of each row) so the BT coverage gate (#32) can introspect
+``BT_ROWS`` is keyed by the BT/BG id (first element of each row) so the BT coverage gate (#32) can introspect
 it. Each row: the id, the invoice fields set on top of the minimal invoice, an XPath (``string(...)``) and
 the text it must yield in the output. Paths use the ``Invoice`` root; credit-note specifics are tested in
 ``test_ubl_write.py``.
@@ -191,7 +191,7 @@ _ADR = "/*/cac:AdditionalDocumentReference"
 
 Row = tuple[str, dict[str, t.Any], str, str]
 
-ROWS: t.Final[list[Row]] = [
+BT_ROWS: t.Final[list[Row]] = [
     ("BG-0", {}, "local-name(/*)", "Invoice"),
     ("BT-1", {"number": "INV-42"}, "string(/*/cbc:ID)", "INV-42"),
     ("BT-2", {"issue_date": datetime.date(2026, 3, 4)}, "string(/*/cbc:IssueDate)", "2026-03-04"),
@@ -413,10 +413,12 @@ ROWS: t.Final[list[Row]] = [
 ]  # fmt: skip
 
 
-@pytest.mark.parametrize(("bt", "changes", "path", "expected"), ROWS, ids=[f"{r[0]}:{i}" for i, r in enumerate(ROWS)])
+@pytest.mark.parametrize(
+    ("bt", "changes", "path", "expected"), BT_ROWS, ids=[f"{r[0]}:{i}" for i, r in enumerate(BT_ROWS)]
+)
 def test_business_term_is_written(bt: str, changes: dict[str, t.Any], path: str, expected: str) -> None:
     assert xpath(written(invoice(**changes)), path) == expected, bt
 
 
 def test_every_business_term_has_a_write_row() -> None:
-    assert {row[0] for row in ROWS} == set(BT_INDEX)
+    assert {row[0] for row in BT_ROWS} == set(BT_INDEX)

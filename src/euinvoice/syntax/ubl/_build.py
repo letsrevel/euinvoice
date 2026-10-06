@@ -12,6 +12,7 @@ from decimal import Decimal
 from lxml import etree
 
 from euinvoice import _xml
+from euinvoice.errors import ModelError
 from euinvoice.model import Identifier
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "aggregate",
     "amount",
     "basic",
+    "cannot_express",
     "date",
     "identifier",
     "number",
@@ -34,6 +36,19 @@ VAT_SCHEME: t.Final = "VAT"
 """``cac:TaxScheme/cbc:ID`` of every VAT category and VAT identifier: the CEN UBL binding selects VAT
 terms with ``cac:TaxScheme/normalize-space(upper-case(cbc:ID))='VAT'`` (BR-32, BR-47, BR-CO-04, BR-56,
 ``UBL/EN16931-UBL-model.sch``)."""
+
+
+def cannot_express(term: str, reason: str) -> ModelError:
+    """Build the error for a model value the UBL 2.1 syntax has no place for.
+
+    Args:
+        term: The business term id(s), first in the message (e.g. ``"BT-87"``).
+        reason: Why UBL cannot carry it, citing the XSD type or rule.
+
+    Returns:
+        The error to raise.
+    """
+    return ModelError(f"{term} cannot be written in UBL: {reason}")
 
 
 class Context(t.NamedTuple):

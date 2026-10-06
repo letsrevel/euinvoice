@@ -28,7 +28,8 @@ __all__ = ["SEPA_SCHEME", "TAX_REGISTRATION_SCHEME", "write_delivery", "write_pa
 
 SEPA_SCHEME: t.Final = "SEPA"
 """``schemeID`` of the bank assigned creditor identifier BT-90 in ``cac:PartyIdentification`` of the Seller
-or the Payee (CEN UBL BR-CO-26 and UBL-SR-29, ``UBL/EN16931-UBL-{model,syntax}.sch``; Peppol BIS 3.0.21
+or the Payee (CEN UBL BR-CO-26 and UBL-SR-29, ``UBL/EN16931-UBL-{model,syntax}.sch``; Peppol upstream
+structure docs, peppol-bis-invoice-3 commit 806866b, not a pinned artifact:
 ``structure/syntax/part/payee-party.xml``: "For bank assigned creditor identifier (BT-90), value MUST be
 'SEPA'")."""
 
@@ -36,7 +37,8 @@ TAX_REGISTRATION_SCHEME: t.Final = "FC"
 """``cac:TaxScheme/cbc:ID`` of the Seller tax registration identifier BT-32.
 
 The CEN binding only requires a value other than ``VAT`` (UBL-SR-13 counts
-``PartyTaxScheme[cac:TaxScheme/upper-case(cbc:ID)!='VAT']``; Peppol ``part/supplier-party.xml``: "for the
+``PartyTaxScheme[cac:TaxScheme/upper-case(cbc:ID)!='VAT']``; Peppol upstream structure docs (commit
+806866b) ``part/supplier-party.xml``: "for the
 seller tax registration identifier (BT-32), use != 'VAT'"). ``FC`` is what the XRechnung test suite uses
 (e.g. ``instances/technical-cases/cius/01.03_comprehensive_test_ubl.xml``) and matches the CII
 ``schemeID='FC'`` of BT-32."""

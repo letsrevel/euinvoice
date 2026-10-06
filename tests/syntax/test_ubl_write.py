@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from _ubl_support import TEST_IBAN, invoice, item, line, payment, price, totals, written, xpath
+from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ModelError
@@ -27,8 +28,8 @@ from euinvoice.syntax.ubl._write import is_credit_note
 DAY = datetime.date(2026, 2, 14)
 
 
-def _local_names(element: object) -> list[str]:
-    return [child.xpath("local-name()") for child in element]  # type: ignore[attr-defined]  # lxml element
+def _local_names(element: etree._Element) -> list[str]:
+    return [etree.QName(child).localname for child in element]
 
 
 @pytest.mark.parametrize("code", sorted(UNTDID_1001_CREDIT_NOTE_TYPE_UBL))
@@ -83,7 +84,7 @@ def test_credit_note_due_date_goes_into_the_first_payment_means() -> None:
 
 
 def test_credit_note_due_date_without_payment_instructions_is_refused() -> None:
-    with pytest.raises(ModelError, match=r"BT-9.*BG-16"):
+    with pytest.raises(ModelError, match=r"^BT-9 cannot be written in UBL: .*BG-16"):
         ubl.write(invoice(type_code="381", payment_due_date=DAY))
 
 
@@ -127,7 +128,7 @@ def test_card_network_id_is_na() -> None:
 
 def test_card_without_primary_account_number_is_refused() -> None:
     instructions = payment(payment_means_type_code="48", payment_card=PaymentCardInformation(holder_name="A"))
-    with pytest.raises(ModelError, match=r"BT-87.*M2"):
+    with pytest.raises(ModelError, match=r"^BT-87 cannot be written in UBL: .*M2"):
         ubl.write(invoice(payment_instructions=instructions))
 
 
@@ -187,12 +188,12 @@ def test_delivery_location_identifier_alone_writes_no_address() -> None:
 
 
 def test_total_vat_is_required() -> None:
-    with pytest.raises(ModelError, match="BT-110"):
+    with pytest.raises(ModelError, match=r"^BT-110 cannot be written in UBL"):
         ubl.write(invoice(totals=totals(total_vat=None)))
 
 
 def test_accounting_currency_total_needs_its_currency() -> None:
-    with pytest.raises(ModelError, match=r"BT-111.*BT-6"):
+    with pytest.raises(ModelError, match=r"^BT-111 cannot be written in UBL: .*BT-6"):
         ubl.write(invoice(totals=totals(total_vat_in_accounting_currency=Decimal("1.00"))))
 
 
@@ -211,7 +212,7 @@ def test_attachment_needs_mime_code_and_filename(mime: str | None, filename: str
     document = AdditionalSupportingDocument(
         reference="D", attached_document=BinaryObject(content=b"x", mime_code=mime, filename=filename)
     )
-    with pytest.raises(ModelError, match=r"BT-125.*M3"):
+    with pytest.raises(ModelError, match=r"^BT-125 cannot be written in UBL: .*M3"):
         ubl.write(invoice(additional_supporting_documents=(document,)))
 
 
@@ -221,13 +222,44 @@ def test_supporting_document_reference_alone_has_no_attachment() -> None:
 
 
 def test_base_quantity_unit_needs_base_quantity() -> None:
-    with pytest.raises(ModelError, match=r"BT-150.*BT-149"):
+    with pytest.raises(ModelError, match=r"^BT-150 cannot be written in UBL: .*BT-149"):
         ubl.write(invoice(lines=(line(price_details=price(base_quantity_unit_code="C62")),)))
 
 
-def test_gross_price_needs_price_discount() -> None:
-    with pytest.raises(ModelError, match=r"BT-148.*BT-147"):
-        ubl.write(invoice(lines=(line(price_details=price(item_gross_price=Decimal("50"))),)))
+@pytest.mark.parametrize(
+    ("net", "gross", "discount"),
+    [("50", "50", "0.00"), ("50", "50.00", "0.00"), ("49.9", "50.50", "0.60"), ("1.2345", "2", "0.7655")],
+)
+def test_gross_price_without_discount_writes_the_implied_discount(net: str, gross: str, discount: str) -> None:
+    # bt-mapping.md N5: cbc:Amount is mandatory, so BT-147 = BT-148 - BT-146 (PEPPOL-EN16931-R046).
+    details = price(item_net_price=Decimal(net), item_gross_price=Decimal(gross))
+    root = written(invoice(lines=(line(price_details=details),)))
+    allowance = xpath(root, "//cac:Price/cac:AllowanceCharge")[0]
+    assert _local_names(allowance) == ["ChargeIndicator", "Amount", "BaseAmount"]
+    assert xpath(allowance, "string(cbc:ChargeIndicator)") == "false"
+    assert xpath(allowance, "string(cbc:Amount)") == discount
+    assert xpath(allowance, "string(cbc:BaseAmount)") == gross
+
+
+def test_gross_price_below_net_price_is_refused() -> None:
+    details = price(item_net_price=Decimal("50"), item_gross_price=Decimal("49.99"))
+    with pytest.raises(ModelError, match=r"^BT-148 cannot be written in UBL: .*R044"):
+        ubl.write(invoice(lines=(line(price_details=details),)))
+
+
+def test_accounting_currency_equal_to_invoice_currency_is_refused() -> None:
+    document = invoice(
+        vat_accounting_currency_code="EUR", totals=totals(total_vat_in_accounting_currency=Decimal("19.00"))
+    )
+    with pytest.raises(ModelError, match=r"^BT-6 cannot be written in UBL: .*BR-CO-15"):
+        ubl.write(document)
+
+
+@pytest.mark.parametrize("note", [InvoiceNote(), InvoiceNote(note="")])
+def test_empty_note_is_not_written(note: InvoiceNote) -> None:
+    # PEPPOL-EN16931-R008: no empty elements; an empty note carries neither BT-21 nor BT-22.
+    root = written(invoice(notes=(note, InvoiceNote(note="kept"))))
+    assert xpath(root, "/*/cbc:Note/text()") == ["kept"]
 
 
 def test_price_discount_without_gross_price() -> None:

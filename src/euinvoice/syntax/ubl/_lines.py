@@ -7,10 +7,10 @@ Element order follows ``InvoiceLineType`` / ``CreditNoteLineType``, ``ItemType``
 """
 
 import typing as t
+from decimal import Decimal
 
 from lxml import etree
 
-from euinvoice.errors import ModelError
 from euinvoice.model import (
     DocumentLevelAllowance,
     DocumentLevelCharge,
@@ -25,6 +25,7 @@ from euinvoice.syntax.ubl._build import (
     aggregate,
     amount,
     basic,
+    cannot_express,
     date,
     identifier,
     number,
@@ -46,7 +47,8 @@ def write_allowance_charge(parent: etree._Element, entry: AllowanceOrCharge, cur
 
     ``cbc:ChargeIndicator`` is ``true`` for charges and ``false`` for allowances, which is how the CEN
     binding tells them apart (``Document_level_charges`` etc. in ``UBL/EN16931-UBL-model.sch``). Only
-    document level entries carry a VAT category (BR-32, BR-37).
+    document level entries carry a VAT category: BR-32 and BR-37 require it there, and UBL-CR-558
+    (``UBL/EN16931-UBL-syntax.sch:640``) forbids ``cac:TaxCategory`` in a line's ``cac:AllowanceCharge``.
 
     Args:
         parent: The document root or a line element.
@@ -129,32 +131,56 @@ def _item(line_element: etree._Element, line: InvoiceLine) -> None:
         basic(property_element, "Value", attribute.value)
 
 
+_CENT: t.Final = Decimal("0.01")
+
+
+def _price_discount(price: PriceDetails) -> Decimal | None:
+    """Return the BT-147 to write: the model's, or the one implied by BT-148 when only the gross price is set.
+
+    ``cbc:Amount`` is mandatory in ``AllowanceChargeType`` (UBL 2.1 XSD), so a gross price BT-148 without a
+    discount BT-147 is written with the discount BT-148 - BT-146, which is what Peppol
+    PEPPOL-EN16931-R046 (``rules/sch/PEPPOL-EN16931-UBL.sch:363``: net price = gross price - allowance
+    amount) and the EN 16931 definition of the net price require. ``0`` is written as ``0.00``. Model → UBL
+    → model therefore gains BT-147: a deliberate normalization (bt-mapping.md note N5).
+
+    Raises:
+        ModelError: BT-148 is below BT-146: the implied discount is negative, i.e. a charge, which UBL
+            writes with ``cbc:ChargeIndicator`` ``true`` and Peppol PEPPOL-EN16931-R044 forbids.
+    """
+    if price.item_price_discount is not None or price.item_gross_price is None:
+        return price.item_price_discount
+    discount = price.item_gross_price - price.item_net_price
+    if discount < 0:
+        raise cannot_express(
+            "BT-148",
+            "an item gross price below the item net price (BT-146) implies a negative item price discount "
+            "(BT-147), which cac:Price/cac:AllowanceCharge cannot carry as an allowance (PEPPOL-EN16931-R044)",
+        )
+    return discount.quantize(_CENT) if t.cast(int, discount.as_tuple().exponent) > -2 else discount
+
+
 def _price(line_element: etree._Element, price: PriceDetails, currency: str) -> None:
     """Append ``cac:Price`` (BG-29).
 
     The item price discount BT-147 and gross price BT-148 share one ``cac:AllowanceCharge`` with
-    ``cbc:ChargeIndicator`` ``false`` (bt-mapping.md; Peppol ``part/price.xml`` fixes the indicator).
+    ``cbc:ChargeIndicator`` ``false`` (bt-mapping.md; Peppol PEPPOL-EN16931-R044 allows only ``false``).
 
     Raises:
         ModelError: BT-150 without BT-149 (``cbc:BaseQuantity`` needs a value to carry ``unitCode``), or
-            BT-148 without BT-147 (``cbc:Amount`` is mandatory in ``AllowanceChargeType``, UBL 2.1 XSD).
+            BT-148 below BT-146 (see :func:`_price_discount`).
     """
     if price.base_quantity_unit_code is not None and price.base_quantity is None:
-        raise ModelError(
-            "UBL cannot carry the item price base quantity unit of measure code (BT-150) without the item "
-            "price base quantity (BT-149): it is the unitCode attribute of cac:Price/cbc:BaseQuantity"
+        raise cannot_express(
+            "BT-150",
+            "the item price base quantity unit of measure code needs the item price base quantity (BT-149): "
+            "it is the unitCode attribute of cac:Price/cbc:BaseQuantity",
         )
-    if price.item_gross_price is not None and price.item_price_discount is None:
-        raise ModelError(
-            "UBL cannot carry the item gross price (BT-148) without the item price discount (BT-147): "
-            "cac:Price/cac:AllowanceCharge requires cbc:Amount (UBL 2.1 XSD AllowanceChargeType). "
-            "Set BT-147, e.g. to BT-148 minus BT-146"
-        )
+    discount = _price_discount(price)
     element = aggregate(line_element, "Price")
     amount(element, "PriceAmount", price.item_net_price, currency)
     quantity(element, "BaseQuantity", price.base_quantity, price.base_quantity_unit_code)
-    if price.item_price_discount is not None:
-        discount = aggregate(element, "AllowanceCharge")
-        basic(discount, "ChargeIndicator", "false")
-        amount(discount, "Amount", price.item_price_discount, currency)
-        amount(discount, "BaseAmount", price.item_gross_price, currency)
+    if discount is not None:
+        allowance = aggregate(element, "AllowanceCharge")
+        basic(allowance, "ChargeIndicator", "false")
+        amount(allowance, "Amount", discount, currency)
+        amount(allowance, "BaseAmount", price.item_gross_price, currency)
