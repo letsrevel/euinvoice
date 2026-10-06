@@ -28,12 +28,15 @@ stylesheet). saxonche (12.10 and 13.0.0) documents a compiled ``PyXsltExecutable
 thread-safe" (``PyXslt30Processor.compile_stylesheet`` docstring) but says nothing about the shared processor's
 ``parse_xml`` or about the per-call state of ``transform_to_string``. So one module lock serializes
 compiling, building the XDM node and transforming: :func:`run` is safe to call from any thread, and
-transforms never run in parallel. SVRL parsing happens outside the lock.
+transforms never run in parallel. SVRL parsing happens outside the lock. :func:`saxon` hands the same processor,
+under the same lock, to the other Saxon user (the KoSIT scenario match, :mod:`euinvoice.validation.kosit`).
 """
 
+import contextlib
 import dataclasses
 import threading
 import typing as t
+from collections.abc import Generator
 from pathlib import Path
 
 from lxml import etree
@@ -54,6 +57,7 @@ __all__ = [
     "XRECHNUNG_UBL",
     "RuleSet",
     "run",
+    "saxon",
     "svrl_findings",
 ]
 
@@ -167,6 +171,22 @@ def run(
         raise ArtifactIntegrityError(f"{rule_set.source}: {rule_set.stylesheet} produced no SVRL: {exc}") from exc
 
 
+@contextlib.contextmanager
+def saxon() -> Generator[tuple[t.Any, t.Any]]:  # saxonche ships no type information
+    """The ``saxonche`` module and the per-process processor, with the module lock held (see the module docs).
+
+    Yields:
+        ``(saxonche, processor)``: the module, for its ``PySaxonApiError``, and the shared
+        ``saxonche.PySaxonProcessor``. Use them only inside the ``with`` block.
+
+    Raises:
+        ArtifactsNotAvailableError: ``saxonche`` is missing (names the ``euinvoice[validate]`` extra).
+    """
+    saxonche = _saxonche()
+    with _lock:
+        yield saxonche, _shared_processor(saxonche)
+
+
 def svrl_findings(svrl: bytes, *, source: str) -> tuple[Finding, ...]:
     """Map an SVRL report to findings.
 
@@ -225,15 +245,21 @@ def _saxonche() -> t.Any:  # saxonche ships no type information
 
 def _executable(saxonche: t.Any, stylesheet: Path, fingerprint: str, rule_set: RuleSet) -> t.Any:
     """Return the compiled stylesheet, compiling it on first use. Call with ``_lock`` held."""
-    global _processor
     key = (stylesheet, fingerprint)
     if key not in _executables:
-        if _processor is None:
-            _processor = saxonche.PySaxonProcessor(license=False)
+        processor = _shared_processor(saxonche)
         try:
             # The one load by path: a pinned artifact from a recipe-fingerprint-checked cache entry (catches
             # a stale cache, not tampering); by path because xsl:include / xsl:import need a base URI.
-            _executables[key] = _processor.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(stylesheet))
+            _executables[key] = processor.new_xslt30_processor().compile_stylesheet(stylesheet_file=str(stylesheet))
         except saxonche.PySaxonApiError as exc:
             raise ArtifactIntegrityError(f"{rule_set.source}: cannot compile {rule_set.stylesheet}: {exc}") from exc
     return _executables[key]
+
+
+def _shared_processor(saxonche: t.Any) -> t.Any:
+    """Return the per-process ``PySaxonProcessor``, creating it on first use. Call with ``_lock`` held."""
+    global _processor
+    if _processor is None:
+        _processor = saxonche.PySaxonProcessor(license=False)
+    return _processor

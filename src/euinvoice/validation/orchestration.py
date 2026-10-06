@@ -22,27 +22,13 @@ step invalid on warnings (template ``in:validationResultsXmlSchema``), but its a
 stopping on a warning would report ``ok`` with no Schematron having run. libxml2 practically never emits
 schema warnings.
 
-Severities are the raw official flags. KoSIT's ``customLevel`` overrides in ``scenarios.xml``
-(xrechnung-validator-configuration 2026-08-31) are not applied (open question, issue #49), and they move
-the verdict in both directions:
-
-* Downgrades of CEN ``fatal`` rules, so the raw flags reject what KoSIT accepts. To ``information``:
-  BR-CL-13 (CVD scenarios); BR-CL-10, BR-CL-11, BR-CL-21, BR-CL-24, BR-CL-25, BR-CL-26 (Extension
-  scenarios); BR-CO-16 (Extension UBL). To ``warning``: BR-CL-23 (every XRechnung scenario) and BR-CL-21
-  (every non-Extension XRechnung scenario).
-* Downgrades of CEN ``warning`` rules to ``information`` (no verdict change): UBL-CR-470, UBL-CR-646
-  (Extension UBL); CII-SR-475, CII-SR-476 (XRechnung, Extension and CVD CII).
-* Upgrades (``level="error"``) of CEN ``warning`` rules, so the raw flags accept what KoSIT rejects:
-  UBL-CR-646 (XRechnung UBL Invoice, CVD UBL Invoice and CreditNote); CII-SR-452, CII-SR-453,
-  CII-SR-454, CII-SR-465, CII-SR-466 (XRechnung, Extension and CVD CII).
-
-The hook for applying them is :func:`_rule_findings`, the single place every Schematron finding passes
-through.
+Severities are the raw official flags: :attr:`~euinvoice.report.ValidationReport.findings` and ``ok`` never
+change. For the XRechnung profiles (CIUS, Extension, CVD) the report also carries ``kosit``, the verdict of the KoSIT
+validator: the scenario of the pinned ``scenarios.xml`` that matches the document, the ``customLevel`` overrides it
+applies to the findings, and whether KoSIT would accept the document (issue #49; :mod:`euinvoice.validation.kosit`).
 """
 
 import typing as t
-
-from lxml import etree
 
 from euinvoice import _xml, profiles
 from euinvoice.detection import Detection, detect_root
@@ -51,7 +37,7 @@ from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.profiles.facturx import _UNREGISTERED_LEVEL_IDENTIFIERS
 from euinvoice.report import Finding, Severity, ValidationReport
 from euinvoice.syntax import Syntax
-from euinvoice.validation import schematron, xsd
+from euinvoice.validation import kosit, schematron, xsd
 
 __all__ = ["EUINVOICE_SOURCE", "PROFILE_FALLBACK_RULE_ID", "validate"]
 
@@ -100,9 +86,14 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         data: The serialized XML document.
         profile: The profile to validate under; ``None`` auto-detects it from BT-24.
 
+    For the XRECHNUNG, XRECHNUNG_EXTENSION and XRECHNUNG_CVD profiles, ``kosit`` holds the KoSIT validator's
+    verdict when a scenario of the pinned KoSIT configuration matches the document and runs the same rule sets
+    (:func:`euinvoice.validation.kosit.assessment`); otherwise it is ``None``. It never changes ``findings``
+    or ``ok``.
+
     Returns:
         The XSD findings, then the findings of each rule set in profile order (none if the XSD step had
-        a ``fatal`` or ``error`` finding), each tagged with its ``source``.
+        a ``fatal`` or ``error`` finding), each tagged with its ``source``; and the KoSIT verdict.
 
     Raises:
         TypeError: ``data`` is not ``bytes``.
@@ -110,7 +101,8 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote or a CII D16B
             CrossIndustryInvoice, or ``profile`` does not support the document's syntax.
         ArtifactsNotAvailableError: An artifact the run needs is not in the cache (names the fetch
-            command), ``saxonche`` is not installed, or the profile (or, auto-detected, the BT-24's level) needs the
+            command; XRechnung profiles also read ``xrechnung-validator-configuration``), ``saxonche`` is not
+            installed, or the profile (or, auto-detected, the BT-24's level) needs the
             Factur-X / ZUGFeRD Schematron, which is not pinned yet (issue #42).
     """
     root = _xml.parse(data)
@@ -127,22 +119,13 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         )
     if FACTURX_RULE_SET in profile.rule_sets:
         raise _facturx_not_pinned(f"profile {profile.id!r} is a Factur-X / ZUGFeRD level")
+    rule_sets = tuple(_RULE_SETS[name, syntax] for name in profile.rule_sets)
     schema_findings = xsd.validate(root)
     findings.extend(schema_findings)
-    if not ValidationReport(schema_findings).ok:
-        return ValidationReport(tuple(findings))
-    for name in profile.rule_sets:
-        findings.extend(_rule_findings(_RULE_SETS[name, syntax], root))
-    return ValidationReport(tuple(findings))
-
-
-def _rule_findings(rule_set: schematron.RuleSet, root: etree._Element) -> tuple[Finding, ...]:
-    """Run one rule set; findings keep their official flags.
-
-    ponytail: this is the hook for KoSIT ``customLevel`` severity overrides (issue #49, needs-human). If
-    the maintainer decides to apply them, they belong here, keyed by profile, never as a silent filter.
-    """
-    return schematron.run(rule_set, root)
+    if ValidationReport(schema_findings).ok:
+        for rule_set in rule_sets:
+            findings.extend(schematron.run(rule_set, root))
+    return ValidationReport(tuple(findings), kosit=kosit.assessment(root, profile, rule_sets, findings))
 
 
 def _facturx_not_pinned(clause: str) -> ArtifactsNotAvailableError:

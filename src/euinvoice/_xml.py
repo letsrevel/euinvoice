@@ -89,6 +89,9 @@ PDFA_SCHEMA: t.Final = "http://www.aiim.org/pdfa/ns/schema#"
 """PDF/A schema value type (prefix ``pdfaSchema``): one declared extension schema."""
 PDFA_PROPERTY: t.Final = "http://www.aiim.org/pdfa/ns/property#"
 """PDF/A property value type (prefix ``pdfaProperty``): one property of an extension schema."""
+KOSIT_SCENARIOS: t.Final = "http://www.xoev.de/de/validator/framework/1/scenarios"
+"""KoSIT validator scenarios: the default namespace of ``scenarios.xml`` in the pinned
+``xrechnung-validator-configuration`` (2026-08-31), read by :mod:`euinvoice.validation.kosit`."""
 VEFA: t.Final = "http://difi.no/xsd/vefa/validator/1.0"
 """vefa-validator test sets: the format of the Peppol rules' unit tests (``rules/unit-*/*.xml``, ``testSet``)."""
 

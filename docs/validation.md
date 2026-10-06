@@ -73,6 +73,46 @@ them:
 ['BR-DE-15', 'BR-DE-2', 'PEPPOL-EN16931-R001', 'PEPPOL-EN16931-R010', 'PEPPOL-EN16931-R020']
 ```
 
+### XRechnung: the KoSIT verdict
+
+The KoSIT validator, the reference validator for XRechnung, runs the same XSD and Schematron, then changes the
+severity of some rules per scenario (`customLevel` in its `scenarios.xml`): for example it downgrades the CEN unit
+code rule BR-CL-23 from `fatal` to `warning`, and upgrades the CEN warning UBL-CR-646 to `error`. So its verdict can
+differ from `report.ok` in both directions. `report.findings` and `report.ok` keep the official flags; for the
+XRechnung profiles (CIUS, Extension, CVD) `report.kosit` adds the KoSIT verdict, read at run time from the pinned
+KoSIT configuration ([`KositAssessment`](reference/api.md#euinvoice.report.KositAssessment)):
+
+| Attribute | Meaning |
+|---|---|
+| `scenario` | the KoSIT scenario that matched the document, e.g. `EN16931 XRechnung (UBL Invoice)` |
+| `overrides` | each finding a `customLevel` applies to, with the effective severity (the finding keeps the official one) |
+| `blocking` | the findings still `fatal` or `error` after the overrides, a blocking XSD finding included |
+| `accepted` | `True` when nothing is blocking: KoSIT would accept the document |
+
+Above, the document's BT-24 is the EN 16931 one, so KoSIT would pick its EN 16931 scenario, which does not run
+the XRechnung rules: `report.kosit` is `None`. With the XRechnung BT-24, and a unit code outside UN/ECE
+Recommendation 20, the second line's `C62` replaced by `QQQ`:
+
+<!-- doctest: needs-artifacts -->
+```python
+>>> xrechnung_id = profiles.XRECHNUNG.specification_identifier.encode()
+>>> claimed = ubl.replace(b">urn:cen.eu:en16931:2017<", b">" + xrechnung_id + b"<")
+>>> report = validate(claimed.replace(b'unitCode="C62"', b'unitCode="QQQ"'))
+>>> report.kosit.scenario
+'EN16931 XRechnung (UBL Invoice)'
+>>> [(o.finding.rule_id, o.finding.severity, o.severity) for o in report.kosit.overrides]
+[('BR-CL-23', <Severity.FATAL: 'fatal'>, <Severity.WARNING: 'warning'>)]
+>>> sorted(f.rule_id for f in report.kosit.blocking)
+['BR-DE-15', 'BR-DE-2', 'PEPPOL-EN16931-R001', 'PEPPOL-EN16931-R010', 'PEPPOL-EN16931-R020']
+>>> report.ok, report.kosit.accepted
+(False, False)
+```
+
+BR-CL-23 alone would not stop KoSIT, but the missing XRechnung terms do. `kosit` is `None` for every other
+profile, when no KoSIT scenario matches, and when the matching scenario runs other rule sets than the profile (an
+explicit `profiles.XRECHNUNG` on an EN 16931 document, as above). The CLI prints the verdict as one `kosit:` line,
+and as a `kosit` key with `--json`. Its exit code follows `report.ok`.
+
 If the document's BT-24 names no registered profile, `validate()` falls back to EN 16931 core and the report
 starts with an `information` finding `EUINVOICE-PROFILE-FALLBACK` that says only the core rules ran. The
 exception is a BT-24 that names a Factur-X / ZUGFeRD level without pinned rules (see [Factur-X](#factur-x)).

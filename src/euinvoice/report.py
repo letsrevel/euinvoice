@@ -3,8 +3,9 @@
 ``validate()`` never raises on rule failures. Every XSD error and every failed Schematron assert or
 successful report becomes a :class:`Finding` in a :class:`ValidationReport`; ``calc.check()``
 reports its arithmetic findings, and profile pre-flight checks (e.g. ``euinvoice.profiles.PEPPOL``)
-theirs, with the same type. This module is pure data and imports nothing from the package, so
-``model`` ← ``calc`` ← … ← ``profiles`` ← ``validate`` can all use it.
+theirs, with the same type. For the XRechnung profiles a report also carries the KoSIT validator's
+verdict (:class:`KositAssessment`, issue #49) next to the raw official flags. This module is pure data and
+imports nothing from the package, so ``model`` ← ``calc`` ← … ← ``profiles`` ← ``validate`` can all use it.
 """
 
 import dataclasses
@@ -51,14 +52,57 @@ class Finding:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class SeverityOverride:
+    """A finding whose severity a validator configuration replaces.
+
+    Attributes:
+        finding: The finding, unchanged: its ``severity`` is the official flag.
+        severity: The severity the configuration gives it instead (for KoSIT, the ``customLevel``).
+    """
+
+    finding: Finding
+    severity: Severity
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class KositAssessment:
+    """The verdict the KoSIT XRechnung validator would give, next to the raw official flags (issue #49).
+
+    The KoSIT validator configuration replaces the severity of some official rules per scenario
+    (``customLevel`` in its ``scenarios.xml``) and rejects a document when any message is still at level
+    ``error`` (``resources/default-report.xsl``, template ``rep:report`` in mode ``assessment``).
+    :func:`euinvoice.validate` builds this; :attr:`ValidationReport.findings` and :attr:`ValidationReport.ok`
+    are never changed by it.
+
+    Attributes:
+        scenario: The ``<name>`` of the KoSIT scenario that matched the document.
+        overrides: Every finding a ``customLevel`` of that scenario applies to, with the effective level.
+        blocking: Every finding that is ``fatal`` or ``error`` after the overrides, with its official severity.
+            A blocking XSD finding is among them, as KoSIT rejects a schema-invalid document.
+    """
+
+    scenario: str
+    overrides: tuple[SeverityOverride, ...] = ()
+    blocking: tuple[Finding, ...] = ()
+
+    @property
+    def accepted(self) -> bool:
+        """Whether KoSIT would accept the document: no finding is blocking after the overrides."""
+        return not self.blocking
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ValidationReport:
     """The result of validating one document.
 
     Attributes:
         findings: Every finding, in the order the validation steps produced them.
+        kosit: The KoSIT verdict, for the XRechnung profiles when a KoSIT scenario matches the document;
+            ``None`` otherwise.
     """
 
     findings: tuple[Finding, ...] = ()
+    kosit: KositAssessment | None = None
 
     @property
     def ok(self) -> bool:

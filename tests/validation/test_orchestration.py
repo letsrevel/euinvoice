@@ -11,9 +11,17 @@ from euinvoice import _xml, profiles
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.profiles import _base as profiles_base
 from euinvoice.profiles import facturx
-from euinvoice.report import Finding, Severity
+from euinvoice.report import Finding, KositAssessment, Severity, SeverityOverride
 from euinvoice.syntax import Syntax
-from euinvoice.validation import EUINVOICE_SOURCE, PROFILE_FALLBACK_RULE_ID, orchestration, schematron, validate, xsd
+from euinvoice.validation import (
+    EUINVOICE_SOURCE,
+    PROFILE_FALLBACK_RULE_ID,
+    kosit,
+    orchestration,
+    schematron,
+    validate,
+    xsd,
+)
 
 CORE = "urn:cen.eu:en16931:2017"
 CIUS = "urn:cen.eu:en16931:2017#compliant#urn:example.com:cius"
@@ -49,13 +57,22 @@ def finding(rule_id: str, severity: Severity, source: str) -> Finding:
 
 
 class Spy:
-    """Records which rule sets ran; each produces one information finding tagged with its source."""
+    """Records which rule sets ran; each produces one information finding tagged with its source.
 
-    def __init__(self, monkeypatch: pytest.MonkeyPatch, xsd_findings: tuple[Finding, ...] = ()) -> None:
+    The KoSIT configuration is ``scenarios`` (none by default, so ``report.kosit`` is ``None``).
+    """
+
+    def __init__(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        xsd_findings: tuple[Finding, ...] = (),
+        scenarios: tuple[kosit.Scenario, ...] = (),
+    ) -> None:
         self.ran: list[schematron.RuleSet] = []
         self.xsd_findings = xsd_findings
         monkeypatch.setattr(xsd, "validate", self._xsd)
         monkeypatch.setattr(schematron, "run", self._run)
+        monkeypatch.setattr(kosit, "scenarios", lambda: scenarios)
 
     def _xsd(self, element: etree._Element) -> tuple[Finding, ...]:
         return self.xsd_findings
@@ -120,6 +137,57 @@ def test_blocking_xsd_finding_short_circuits(monkeypatch: pytest.MonkeyPatch, se
     assert spy.ran == []
     assert report.findings == (failure,)
     assert not report.ok
+
+
+# --- KoSIT verdict (#49) ----------------------------------------------------------------------------
+
+XR_UBL = profiles.XRECHNUNG.specification_identifier
+# Matches an XRechnung UBL Invoice and runs CEN + XRechnung, like the pinned scenarios; upgrades the spy's CEN finding.
+UPGRADING = kosit.Scenario(
+    name="XRechnung UBL",
+    match=f"exists(/invoice:Invoice/cbc:CustomizationID[. = '{XR_UBL}'])",
+    namespaces=(("invoice", _xml.UBL_INVOICE), ("cbc", _xml.UBL_CBC)),
+    schematron=("EN16931-UBL-validation", "XRechnung-UBL-validation"),
+    levels={schematron.CEN_UBL.stylesheet: Severity.ERROR},
+)
+
+
+@pytest.mark.parametrize("profile", [None, profiles.XRECHNUNG], ids=["detected", "explicit"])
+def test_xrechnung_report_carries_the_kosit_verdict_beside_the_raw_flags(
+    monkeypatch: pytest.MonkeyPatch, profile: profiles.Profile | None
+) -> None:
+    Spy(monkeypatch, scenarios=(UPGRADING,))
+
+    report = validate(ubl(XR_UBL), profile)
+
+    cen = report.findings[0]
+    assert cen.severity is Severity.INFORMATION  # the findings keep their official flags
+    assert report.ok
+    assert report.kosit == KositAssessment("XRechnung UBL", (SeverityOverride(cen, Severity.ERROR),), (cen,))
+    assert not report.kosit.accepted
+
+
+def test_kosit_rejects_after_a_blocking_xsd_finding(monkeypatch: pytest.MonkeyPatch) -> None:
+    failure = finding(xsd.RULE_ID, Severity.FATAL, "xsd:ubl-2_1")
+    spy = Spy(monkeypatch, (failure,), scenarios=(UPGRADING,))
+
+    report = validate(ubl(XR_UBL))
+
+    assert spy.ran == []
+    assert report.kosit == KositAssessment("XRechnung UBL", (), (failure,))
+
+
+@pytest.mark.parametrize(
+    ("data", "profile"),
+    [(ubl(XR_UBL), PEPPOL), (ubl(XR_UBL), profiles.EN16931), (ubl(CORE), None), (ubl(CORE), profiles.XRECHNUNG)],
+    ids=["peppol", "en16931", "core-detected", "xrechnung-no-scenario"],
+)
+def test_no_kosit_verdict_outside_a_matching_xrechnung_run(
+    monkeypatch: pytest.MonkeyPatch, data: bytes, profile: profiles.Profile | None
+) -> None:
+    Spy(monkeypatch, scenarios=(UPGRADING,))
+
+    assert validate(data, profile).kosit is None
 
 
 # --- profile auto-detection -------------------------------------------------------------------------

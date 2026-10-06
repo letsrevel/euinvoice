@@ -33,7 +33,25 @@ def test_validate_matches_the_library_on_the_cen_examples(sample: Sample, capsys
     assert payload == {
         "ok": report.ok,
         "findings": [json.loads(json.dumps(dataclasses.asdict(f))) for f in report.findings],
+        "kosit": None,
     }
+
+
+def test_validate_prints_the_kosit_verdict_and_exits_on_ok(capsys: pytest.CaptureFixture[str]) -> None:
+    # XRechnung Extension instance 05.01a fails BR-CO-16 (fatal), which KoSIT's Extension UBL scenario downgrades
+    # to information (issue #49): not ok, exit 1, but KoSIT accepts it.
+    testsuite = artifacts.fetch(["xrechnung-testsuite"])["xrechnung-testsuite"]
+    path = testsuite / "instances/extension/05.01a-INVOICE_ubl.xml"
+    code, payload = _json_validate([str(path)], capsys)
+    assert code == 1
+    assert payload["ok"] is False
+    assert payload["kosit"]["scenario"] == "EN16931 XRechnung Extension (UBL Invoice)"
+    assert payload["kosit"]["accepted"] is True
+    override = {"rule_id": "BR-CO-16", "severity": "fatal", "effective_severity": "information"}
+    assert override in payload["kosit"]["overrides"]
+    assert cli.main(["validate", str(path)]) == 1
+    line = "kosit: accepted under scenario 'EN16931 XRechnung Extension (UBL Invoice)' (2 severity overrides)\n"
+    assert line in capsys.readouterr().out
 
 
 def test_validate_written_invoice_exits_0_and_a_broken_total_exits_1(

@@ -12,6 +12,13 @@ All notable changes to this project are documented here. The format follows
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged
   ([#108](https://github.com/letsrevel/euinvoice/issues/108)).
+- `ValidationReport.kosit`: for the XRECHNUNG, XRECHNUNG_EXTENSION and XRECHNUNG_CVD profiles, the verdict of the
+  KoSIT validator next to the raw official flags, as a `KositAssessment` (matched scenario, `SeverityOverride`s
+  pairing each finding with its `customLevel`, blocking findings, `accepted`). The scenario and the overrides are
+  read at run time from the pinned `xrechnung-validator-configuration` `scenarios.xml`; `findings` and `ok` are
+  unchanged. The CLI prints a `kosit:` line and adds a `kosit` key to `--json`; the exit code still follows `ok`.
+  This resolves the 0.1.0 known issue on KoSIT's severity overrides
+  ([#49](https://github.com/letsrevel/euinvoice/issues/49)).
 
 ## [0.1.0] - 2026-10-06
 
