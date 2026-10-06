@@ -60,9 +60,10 @@ def pdfa_parts(root: etree._Element) -> list[str]:
         root: The parsed XMP packet.
 
     Returns:
-        The values, whitespace-stripped, in document order (elements first).
+        The raw values in document order (elements first). They are not stripped: veraPDF rejects
+        ``<pdfaid:part> 3 </pdfaid:part>`` (rules 6.6.4-2 and 6.6.2.3.1-2), so only exactly ``3`` is PDF/A-3.
     """
-    return [value.strip() for value in _values(root, _xml.PDFAID, "part")]
+    return _values(root, _xml.PDFAID, "part")
 
 
 def has_facturx(root: etree._Element) -> bool:

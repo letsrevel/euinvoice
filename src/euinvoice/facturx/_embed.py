@@ -11,7 +11,9 @@ invoice XML). The XMP values are cited in :mod:`euinvoice.facturx.xmp`. Per invo
 
 * ``/F`` and ``/UF`` are the level's file name (``Profile.facturx_filename``, cited in
   :mod:`euinvoice.profiles.facturx`): 74 of 74. ``/Desc`` is present on 87 of 87; its text varies, and the file
-  name is the variant of the ZUGFeRD examples (``ZUGFeRDv2/correct/symtrax/Beispiele``, 38 files).
+  name is the variant of the ZUGFeRD examples (``ZUGFeRDv2/correct/symtrax/Beispiele``, 38 files), all
+  ``factur-x.xml``. The 4 XRECHNUNG PDFs say ``Factur-X/ZUGFeRD-Rechnung``, so a file-name ``/Desc`` has corpus
+  precedent only for ``factur-x.xml`` (#42).
 * ``/AFRelationship``: ``/Data`` for 46 of the 74 invoice files, at every level but XRECHNUNG, ``/Alternative`` for
   24 EN 16931 ones (``XML-Rechnung/FX``, Mustang) and ``/Source`` for all 4 XRECHNUNG ones. :func:`embed` writes
   the attested per-level default (``Source`` for XRECHNUNG, ``Data`` otherwise) unless told otherwise; which
@@ -83,10 +85,11 @@ def embed(
 
     Raises:
         UnsupportedDocumentError: ``profile`` is not a Factur-X level, ``invoice`` is an ``Invoice`` for a level
-            that is not generated, or the XML is not CII.
+            that is not generated, or the XML is not CII or its BT-24 is not the level's.
         ParseError: The XML is malformed or has a DOCTYPE (D10).
-        PdfError: ``pdf`` cannot be read, is encrypted, is not PDF/A-3, has malformed XMP, already carries
-            Factur-X XMP, or already has an attachment with the level's file name.
+        PdfError: ``pdf`` cannot be read or rewritten by pypdf (any pypdf failure on the untrusted input, with
+            the cause chained), is encrypted or signed, is not PDF/A-3, has a non-stream or malformed XMP
+            packet, already carries Factur-X XMP, or already has an attachment with the level's file name.
         ValueError: ``relationship`` is not one of :data:`Relationship`.
     """
     level, filename = _level(profile)
@@ -95,7 +98,26 @@ def embed(
     elif relationship not in _RELATIONSHIPS:
         raise ValueError(f"unknown AFRelationship {relationship!r}; known: {', '.join(map(repr, _RELATIONSHIPS))}")
     xml = _cii(invoice, profile)
-    reader = _reader(pdf)
+    # One boundary for every pypdf operation on the untrusted PDF: whatever pypdf raises on a malformed file
+    # becomes a PdfError (our own PdfError and the XMP's ParseError mapping pass through unchanged).
+    try:
+        return _embed(pdf, xml, level=level, filename=filename, relationship=relationship)
+    except _PYPDF_FAILURES as exc:
+        raise PdfError(f"cannot read the PDF: {type(exc).__name__}: {exc}") from exc
+
+
+_PYPDF_FAILURES: t.Final = (PyPdfError, ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError)
+"""What pypdf raises on malformed input besides its own ``PyPdfError`` hierarchy (found by byte-mutation fuzzing)."""
+
+
+def _embed(pdf: bytes, xml: bytes, *, level: str, filename: str, relationship: Relationship) -> bytes:
+    reader = pypdf.PdfReader(io.BytesIO(pdf))
+    if reader.is_encrypted:
+        raise PdfError("the PDF is encrypted, which PDF/A forbids")
+    _reject_signed(reader.root_object)
+    identifier = reader.trailer.get("/ID")
+    if identifier is not None and len(t.cast(ArrayObject, identifier.get_object())) != 2:
+        raise PdfError("the trailer /ID must hold two file identifiers (ISO 32000-1 §14.4, PDF/A 6.1.3)")
     packet = _packet(reader)
     if filename in reader.attachments:
         raise PdfError(f"the PDF already has an attachment named {filename!r}")
@@ -107,8 +129,13 @@ def embed(
 
     writer = pypdf.PdfWriter(clone_from=reader)
     _attach(writer, filename, xml, relationship)
-    # The packet's processing instructions (<?xpacket?>) are siblings of the root, so serialize the tree.
+    # A new, unfiltered metadata stream: pypdf can only rewrite a FlateDecode or unfiltered one in place. The
+    # packet's processing instructions (<?xpacket?>) are siblings of the root, so serialize the tree.
+    del writer.root_object["/Metadata"]
     writer.xmp_metadata = etree.tostring(packet.getroottree(), encoding="UTF-8")
+    stream = t.cast(pypdf.generic.StreamObject, writer.root_object["/Metadata"].get_object())
+    stream[NameObject("/Type")] = NameObject("/Metadata")
+    stream[NameObject("/Subtype")] = NameObject("/XML")
     writer.generate_file_identifiers()
     out = io.BytesIO()
     writer.write(out)
@@ -134,18 +161,33 @@ def _cii(invoice: Invoice | bytes, profile: Profile) -> bytes:
     found = detect.detect(invoice)
     if found.syntax is not Syntax.CII:
         raise UnsupportedDocumentError(f"Factur-X embeds UN/CEFACT CII, got {found.syntax} ({found.root})")
+    # Each level pairs with its own BT-24 only: in the pinned corpus every Factur-X PDF's XMP level carries its
+    # profile's BT-24 (MINIMUM -> ...:minimum, BASIC WL -> ...:basicwl, BASIC -> ...:basic, EN 16931 -> core,
+    # EXTENDED -> ...:extended, XRECHNUNG -> XRechnung; tests/conformance/test_facturx_corpus.py). The corpus
+    # exceptions there (OTHER_BT24: FNFE's colon-form BASIC id, EN 16931 with XRechnung 1.2, XRECHNUNG with
+    # XRechnung 2.1) are refused here; whether to accept any of them is open (#42, #69).
+    if found.specification_identifier != profile.specification_identifier:
+        raise UnsupportedDocumentError(
+            f"BT-24 {found.specification_identifier!r} of the XML is not the BT-24 of profile {profile.id!r} "
+            f"({profile.specification_identifier!r})"
+        )
     return invoice
 
 
-def _reader(pdf: bytes) -> pypdf.PdfReader:
-    try:
-        reader = pypdf.PdfReader(io.BytesIO(pdf))
-        encrypted = reader.is_encrypted
-    except PyPdfError as exc:
-        raise PdfError(f"cannot read the PDF: {exc}") from exc
-    if encrypted:
-        raise PdfError("the PDF is encrypted, which PDF/A forbids")
-    return reader
+def _reject_signed(catalog: pypdf.generic.DictionaryObject) -> None:
+    """Refuse a signed PDF: rewriting it would silently invalidate the signature.
+
+    Signed means a ``/Perms`` dictionary or an ``/AcroForm`` whose ``/SigFlags`` has bit 1 (SignaturesExist)
+    set (ISO 32000-1 §12.7.2 table 219, §12.8.4).
+    """
+    acroform = catalog.get("/AcroForm")
+    flags = (
+        0
+        if acroform is None
+        else int(t.cast(pypdf.generic.DictionaryObject, acroform.get_object()).get("/SigFlags", 0))
+    )
+    if "/Perms" in catalog or flags & 1:
+        raise PdfError("the PDF is signed; embed before signing")
 
 
 def _packet(reader: pypdf.PdfReader) -> etree._Element:
@@ -153,8 +195,11 @@ def _packet(reader: pypdf.PdfReader) -> etree._Element:
     metadata = reader.root_object.get("/Metadata")
     if metadata is None:
         raise PdfError("the PDF has no XMP metadata, so it is not PDF/A-3 (plan §5)")
+    stream = metadata.get_object()
+    if not isinstance(stream, pypdf.generic.StreamObject):
+        raise PdfError("the catalog /Metadata is not a stream")
     try:
-        packet = _xml.parse(t.cast(pypdf.generic.StreamObject, metadata.get_object()).get_data())
+        packet = _xml.parse(stream.get_data())
     except ParseError as exc:
         raise PdfError(f"the XMP metadata is not well-formed XML: {exc}") from exc
     if (parts := xmp.pdfa_parts(packet)) != ["3"]:

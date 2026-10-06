@@ -10,16 +10,19 @@ import importlib
 import io
 import sys
 import typing as t
+from collections.abc import Callable
 
 import pypdf
 import pytest
 from lxml import etree
+from pypdf.generic import ArrayObject, DictionaryObject, NameObject, NumberObject
 
 from _invoices import minimal_invoice
 from _pdfa import PDFA_ID, PRODUCER, pdf, xmp
 from _xrechnung_cases import xrechnung_invoice
 from euinvoice import _xml, detect, facturx, profiles
 from euinvoice.errors import ParseError, PdfError, UnsupportedDocumentError
+from euinvoice.model import ProcessControl
 from euinvoice.profiles import Profile
 from euinvoice.syntax import Syntax, cii, ubl
 
@@ -262,6 +265,59 @@ def test_ubl_xml_is_rejected() -> None:
         facturx.embed(pdf(), xml, profile=profiles.FACTURX_EN16931)
 
 
+_XRECHNUNG_2_1 = "urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_2.1"
+
+
+@pytest.mark.parametrize(
+    ("bt24", "profile"),
+    [
+        (profiles.FACTURX_MINIMUM.specification_identifier, profiles.FACTURX_EXTENDED),
+        (profiles.FACTURX_BASIC.specification_identifier, profiles.FACTURX_MINIMUM),
+        (_XRECHNUNG_2_1, profiles.FACTURX_XRECHNUNG),
+        (profiles.FACTURX_EN16931.specification_identifier, profiles.FACTURX_XRECHNUNG),
+    ],
+    ids=["minimum-as-extended", "basic-as-minimum", "xrechnung-2.1", "core-as-xrechnung"],
+)
+def test_xml_bt24_must_be_the_level_bt24(bt24: str, profile: Profile) -> None:
+    xml = cii.write(minimal_invoice(process_control=ProcessControl(specification_identifier=bt24)))
+
+    with pytest.raises(UnsupportedDocumentError, match="BT-24") as excinfo:
+        facturx.embed(pdf(), xml, profile=profile)
+    assert bt24 in str(excinfo.value)
+    assert profile.specification_identifier in str(excinfo.value)
+
+
+def test_signed_pdf_is_rejected() -> None:
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(pdf())))
+    writer.root_object[NameObject("/AcroForm")] = DictionaryObject({NameObject("/SigFlags"): NumberObject(3)})
+    signed = io.BytesIO()
+    writer.write(signed)
+
+    with pytest.raises(PdfError, match="the PDF is signed; embed before signing"):
+        facturx.embed(signed.getvalue(), _xml_for(profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)
+
+
+def test_pdf_with_permissions_dictionary_is_rejected() -> None:
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(pdf())))
+    writer.root_object[NameObject("/Perms")] = DictionaryObject()
+    signed = io.BytesIO()
+    writer.write(signed)
+
+    with pytest.raises(PdfError, match="signed"):
+        facturx.embed(signed.getvalue(), _xml_for(profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)
+
+
+def test_unsigned_acroform_is_accepted() -> None:
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(pdf())))
+    writer.root_object[NameObject("/AcroForm")] = DictionaryObject({NameObject("/Fields"): ArrayObject()})
+    form = io.BytesIO()
+    writer.write(form)
+
+    out = facturx.embed(form.getvalue(), _xml_for(profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)
+
+    assert "factur-x.xml" in pypdf.PdfReader(io.BytesIO(out)).attachments
+
+
 def test_malformed_xml_is_rejected() -> None:
     with pytest.raises(ParseError):
         facturx.embed(pdf(), b"<rsm:CrossIndustryInvoice", profile=profiles.FACTURX_EN16931)
@@ -270,18 +326,20 @@ def test_malformed_xml_is_rejected() -> None:
 @pytest.mark.parametrize(
     ("source", "message"),
     [
-        (b"not a pdf", "cannot read the PDF"),
-        (pdf(metadata=None), "no XMP metadata"),
-        (pdf(xmp(PDFA_ID.format(part=2), PRODUCER)), r"pdfaid:part \['2'\]"),
-        (pdf(xmp(PRODUCER)), r"pdfaid:part \[\]"),
-        (pdf(xmp(PDFA_ID.format(part=3), PDFA_ID.format(part=2))), r"pdfaid:part \['3', '2'\]"),
-        (pdf(encrypt=True), "encrypted"),
+        (lambda: b"not a pdf", "cannot read the PDF"),
+        (lambda: pdf(metadata=None), "no XMP metadata"),
+        (lambda: pdf(xmp(PDFA_ID.format(part=2), PRODUCER)), r"pdfaid:part \['2'\]"),
+        (lambda: pdf(xmp(PRODUCER)), r"pdfaid:part \[\]"),
+        (lambda: pdf(xmp(PDFA_ID.format(part=3), PDFA_ID.format(part=2))), r"pdfaid:part \['3', '2'\]"),
+        # veraPDF rejects whitespace around the part (6.6.4-2, 6.6.2.3.1-2), so it is not stripped.
+        (lambda: pdf(xmp(PDFA_ID.format(part=" 3 "), PRODUCER)), r"pdfaid:part \[' 3 '\]"),
+        (lambda: pdf(encrypt=True), "encrypted"),
     ],
-    ids=["not-pdf", "no-xmp", "pdfa-2", "no-pdfaid", "two-parts", "encrypted"],
+    ids=["not-pdf", "no-xmp", "pdfa-2", "no-pdfaid", "two-parts", "padded-part", "encrypted"],
 )
-def test_non_pdfa3_input_raises_pdf_error(source: bytes, message: str) -> None:
+def test_non_pdfa3_input_raises_pdf_error(source: Callable[[], bytes], message: str) -> None:
     with pytest.raises(PdfError, match=message):
-        facturx.embed(source, _xml_for(profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)
+        facturx.embed(source(), _xml_for(profiles.FACTURX_EN16931), profile=profiles.FACTURX_EN16931)
 
 
 def test_malformed_xmp_raises_pdf_error() -> None:
