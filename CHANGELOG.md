@@ -46,8 +46,7 @@ All notable changes to this project are documented here. The format follows
   - FPA12 gets the same checks, after an `information` finding `EUINVOICE-FATTURAPA-FPA12`.
   - Passing a profile for a FatturaPA document raises `UnsupportedDocumentError`.
   - The CLI `validate` command accepts FatturaPA.
-  - `parse()` refuses FatturaPA until its reader exists (#120), and `calc.check(syntax="fatturapa")` raises
-    `ValueError`.
+  - `calc.check(syntax="fatturapa")` raises `ValueError`.
 - FatturaPA FPR12 writer ([#119](https://github.com/letsrevel/euinvoice/issues/119)).
   - `euinvoice.syntax.fatturapa.write(invoice, transmission)` writes an `Invoice` with `Invoice.it` as one unsigned FPR12
     file with one body, for TipoDocumento TD01, TD04, TD24 and TD17. The mapping follows App. 4.1 and the App. 5
@@ -79,6 +78,38 @@ All notable changes to this project are documented here. The format follows
   - `file_name(country, identifier, file_number)` builds an SdI file name and `check_file()` reports SdI 00001 (file
     name, Allegato A §1.2.2) and 00003 (file size over `MAX_FILE_SIZE`, 5 000 000 bytes, the smaller reading of
     "5MB").
+- FatturaPA reader ([#120](https://github.com/letsrevel/euinvoice/issues/120)).
+  - `parse()` / `parse_detailed()` read a FatturaPA 1.2 document (FPR12, and FPA12 since the schema is shared) into
+    `Invoice` with `Invoice.it` / `InvoiceLine.it`, following App. 4.1 of the SdI "Regole tecniche fatture europee"
+    v2.6 in reverse and the App. 5 code tables (Natura → VAT category and VATEX, TipoDocumento → BT-3,
+    ModalitaPagamento → BT-81). The #121 refusal is gone.
+  - The reader adds no CEN violation of its own: a document whose declared figures agree reads, after
+    `without_extensions()`, as a UBL / CII invoice the CEN rules accept. One BG-23 per VAT category and rate (the
+    per-Natura and EsigibilitaIVA detail stays in `Invoice.it.vat_summaries`). Declared amounts are kept exactly as
+    declared, as the UBL and CII readers do; a document whose figures disagree (e.g. a payment net of withholding)
+    keeps them for `validate()` / `calc.check` to report. BT-24 is `urn:cen.eu:en16931:2017`.
+  - Also mapped: social-security funds (`DatiCassaPrevidenziale` → BG-21, App. 4.1 rows 2.1.1.7.x), the stamp duty
+    (`DatiBollo` → a zero BG-21 SAE / BOLLO in category Z, a BG-20 95 on TD04, BR-IT-DC-480), negative unit prices
+    (as a negative BT-129 with a positive BT-146), BT-8 432 from EsigibilitaIVA D, BT-10, BT-15, BT-20, BT-60 and
+    BT-61.
+  - Transmission data, the EXT rows outside the v1 extension (withholding, Art73, the
+    intermediary, …), attachments, line-level document references and every "Mappatura non considerabile" row are
+    listed in `ParseResult.unmapped`, never dropped.
+  - Values the model cannot hold without rounding or guessing are refused with `ParseError` naming the element:
+    `PrezzoTotale` with more than two decimals, the generic Natura N2/N3/N6, a Natura with a rate other than 0,
+    several `ScontoMaggiorazione` on one line, rate 0 without Natura, split payment and ordinary VAT at the same
+    rate (a line has no EsigibilitaIVA). At different rates they read as categories B and S, as declared, and
+    validation reports BR-B-02. The mapping-policy questions are in
+    [#132](https://github.com/letsrevel/euinvoice/issues/132) (`needs-human`).
+  - New `parse_all()`: one `ParseResult` per invoice. A FatturaPA lotto (several `FatturaElettronicaBody`) gives
+    one per body, and `parse()` / `parse_detailed()` refuse it with `UnsupportedDocumentError` naming
+    `parse_all()`; UBL, CII and Factur-X give a single result.
+  - A signed `.p7m` (CMS SignedData in DER, base64 or PEM; `euinvoice.detection.is_signed`) is refused by
+    `parse*()`, `detect()`, `validate()` and the CLI with `UnsupportedDocumentError` saying how to extract the XML;
+    reading it would need a CMS parser, a new dependency (D6).
+  - New `euinvoice.model.without_extensions(model)` (the model with every set extension hook cleared) and
+    `euinvoice.model.extension_paths(model)` (the paths of the set hooks), so a read FatturaPA invoice can be written
+    as UBL or CII on purpose. The UBL / CII refusal of a set extension now names `without_extensions()`.
 
 ### Changed
 

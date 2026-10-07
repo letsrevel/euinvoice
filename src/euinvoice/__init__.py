@@ -1,6 +1,6 @@
 """EN 16931 e-invoicing: build, serialize (UBL/CII), validate, parse and embed (Factur-X) European e-invoices.
 
-The public API (plan §4): :func:`to_xml`, :func:`parse`, :func:`parse_detailed`, :func:`validate` and
+The public API (plan §4): :func:`to_xml`, :func:`parse`, :func:`parse_detailed`, :func:`parse_all`, :func:`validate` and
 :func:`detect`, the :class:`Invoice` / :class:`InvoiceDraft` models and the ``calc``, ``profiles`` and
 ``facturx`` subpackages. ``facturx`` needs the ``[pdf]`` extra and is imported on first access
 (``euinvoice.facturx`` or ``from euinvoice import facturx``); it is not in ``__all__``, so ``from euinvoice import *``
@@ -16,7 +16,7 @@ import typing as t
 from importlib.metadata import version
 
 from euinvoice import calc, profiles
-from euinvoice._api import parse, parse_detailed, to_xml
+from euinvoice._api import parse, parse_all, parse_detailed, to_xml
 from euinvoice.detection import detect
 from euinvoice.model import Invoice, InvoiceDraft
 from euinvoice.report import ValidationReport
@@ -41,6 +41,7 @@ __all__ = [
     "calc",
     "detect",
     "parse",
+    "parse_all",
     "parse_detailed",
     "profiles",
     "to_xml",

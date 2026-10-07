@@ -26,6 +26,8 @@ profile. A bare core BT-24 is the core profile even when the XML came out of a F
 PDF container's XMP selects a Factur-X profile.
 """
 
+import base64
+import binascii
 import dataclasses
 import typing as t
 
@@ -35,7 +37,7 @@ from euinvoice import _xml, profiles
 from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.syntax import Syntax
 
-__all__ = ["Detection", "Root", "detect", "detect_root", "is_pdf"]
+__all__ = ["Detection", "Root", "detect", "detect_root", "is_pdf", "is_signed", "refuse_signed"]
 
 type Root = t.Literal["Invoice", "CreditNote", "CrossIndustryInvoice", "FatturaElettronica"]
 """The supported root elements. UBL has one per document kind; CII has one for both (BT-3 tells them apart), and so
@@ -63,6 +65,13 @@ _PDF_MAGIC: t.Final = b"%PDF-"
 # ponytail: PDF readers tolerate leading bytes (a BOM, a newline, junk) before the header and commonly look
 # in the first 1024 bytes; a header further in is not sniffed and the input fails as malformed XML instead.
 _PDF_WINDOW: t.Final = 1024
+
+# DER of the OID 1.2.840.113549.1.7.2, id-signedData (RFC 5652 §5.1): tag 06, length 09, then the encoded arcs.
+_SIGNED_DATA: t.Final = bytes.fromhex("06092a864886f70d010702")
+_SIGNED_WINDOW: t.Final = 64  # ContentInfo's contentType follows its outer SEQUENCE header within the first bytes
+_BASE64_WINDOW: t.Final = 88  # base64 text covering at least the first 64 bytes, a multiple of 4
+_PEM_HEADERS: t.Final = (b"-----BEGIN PKCS7-----", b"-----BEGIN CMS-----")  # RFC 7468 §8 and the label OpenSSL writes
+_SPACE: t.Final = b" \t\r\n"
 
 
 @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
@@ -104,8 +113,9 @@ def detect(data: bytes) -> Detection:
     Raises:
         TypeError: ``data`` is not ``bytes``.
         ParseError: The XML is malformed, has a DOCTYPE or exceeds the parser limits.
-        UnsupportedDocumentError: ``data`` is a PDF, or the root element is not a UBL 2.1 Invoice /
-            CreditNote, a CII D16B CrossIndustryInvoice or a FatturaPA 1.2 FatturaElettronica.
+        UnsupportedDocumentError: ``data`` is a PDF or a signed ``.p7m`` envelope (:func:`is_signed`), or the root
+            element is not a UBL 2.1 Invoice / CreditNote, a CII D16B CrossIndustryInvoice or a FatturaPA 1.2
+            FatturaElettronica.
 
     Example:
         >>> from euinvoice import _xml
@@ -120,6 +130,7 @@ def detect(data: bytes) -> Detection:
         raise UnsupportedDocumentError(
             "input is a PDF; extract the embedded Factur-X / ZUGFeRD XML with euinvoice.facturx.extract first"
         )
+    refuse_signed(data)
     return detect_root(_xml.parse(data))
 
 
@@ -135,6 +146,49 @@ def is_pdf(data: bytes) -> bool:
     # A PDF header counts only before any markup: "%PDF-" in XML text (e.g. a BT-22 note) is not a PDF.
     header = data.find(_PDF_MAGIC, 0, _PDF_WINDOW) if isinstance(data, bytes) else -1
     return header != -1 and b"<" not in data[:header]
+
+
+def is_signed(data: bytes) -> bool:
+    """Whether ``data`` looks like a CMS ``SignedData`` envelope (a signed FatturaPA ``.xml.p7m``, CAdES).
+
+    It is recognized by the ``id-signedData`` content type (RFC 5652 §5.1) in the first bytes of a DER ``SEQUENCE``,
+    of its base64 text, or under a PEM ``PKCS7`` / ``CMS`` header (RFC 7468).
+
+    Args:
+        data: The input; anything but ``bytes`` is not signed.
+
+    Returns:
+        ``True`` for such an envelope, ``False`` otherwise (e.g. for XML).
+    """
+    head = data.lstrip(_SPACE) if isinstance(data, bytes) else b""
+    if head.startswith(_PEM_HEADERS):
+        return True
+    if head[:1] == b"\x30":  # DER SEQUENCE: ContentInfo
+        return _SIGNED_DATA in head[:_SIGNED_WINDOW]
+    if head[:2] != b"MI":  # base64 of 0x30 0x8x, a long-form DER SEQUENCE
+        return False
+    text = b"".join(head[: _BASE64_WINDOW * 2].split())[:_BASE64_WINDOW]
+    try:
+        return _SIGNED_DATA in base64.b64decode(text, validate=True)[:_SIGNED_WINDOW]
+    except binascii.Error:
+        return False
+
+
+def refuse_signed(data: bytes) -> None:
+    """Raise for a signed envelope (:func:`is_signed`), which euinvoice does not open.
+
+    Reading the XML out of CMS needs an ASN.1 parser that neither the standard library nor the runtime dependencies
+    (D6) provide, and v1 is unsigned (#115 decision 1). The message names the way out.
+
+    Raises:
+        UnsupportedDocumentError: ``data`` is a signed envelope.
+    """
+    if is_signed(data):
+        raise UnsupportedDocumentError(
+            "input is a signed (CAdES, .p7m) document; euinvoice reads only the XML, so extract it first, e.g. "
+            "openssl cms -verify -noverify -inform DER -in file.xml.p7m -out file.xml (-inform PEM for PEM, decode "
+            "plain base64 first)"
+        )
 
 
 def detect_root(root: etree._Element) -> Detection:

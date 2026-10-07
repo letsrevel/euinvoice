@@ -13,7 +13,15 @@ from _calc_drafts import draft, line
 from euinvoice import calc
 from euinvoice.errors import ModelError
 from euinvoice.model import BT_INDEX, Invoice, InvoiceDraft, InvoiceLine, LineDraft
-from euinvoice.model._base import EuInvoiceModel, bt, bt_id, extension, extension_of, set_extensions
+from euinvoice.model._base import (
+    EuInvoiceModel,
+    bt,
+    bt_id,
+    extension,
+    extension_of,
+    extension_paths,
+    without_extensions,
+)
 from euinvoice.model.bt_index import _unwrap, build_index
 from euinvoice.model.it import (
     CondizioniPagamento,
@@ -286,13 +294,13 @@ class TestPlumbing:
         assert result.it == it
         assert [item.it for item in result.lines] == [nature, None]
 
-    def test_set_extensions_names_every_set_hook(self, invoice: Invoice) -> None:
-        assert set_extensions(invoice) == ()
+    def test_extension_paths_names_every_set_hook(self, invoice: Invoice) -> None:
+        assert extension_paths(invoice) == ()
         second = invoice.lines[0].model_copy(
             update={"it": ItalianLineExtension(supply_type=TipoCessionePrestazione.SC)}
         )
         changed = Invoice.model_validate({**dict(invoice), "it": _it(), "lines": (invoice.lines[0], second)})
-        assert set_extensions(changed) == ("it", "lines[1].it")
+        assert extension_paths(changed) == ("it", "lines[1].it")
 
     def test_invoice_rejects_a_wrong_extension_type(self, invoice: Invoice) -> None:
         with pytest.raises(pydantic.ValidationError):
@@ -302,3 +310,23 @@ class TestPlumbing:
         with pytest.raises(pydantic.ValidationError) as caught:
             _it(vat_summaries=[{"rate": "4"}, {"rate": "4"}])
         assert isinstance(caught.value.errors()[0]["ctx"]["error"], ModelError)
+
+
+class _Inner(EuInvoiceModel):
+    it: t.Annotated[ItalianLineExtension | None, extension("it")] = None
+
+
+class _Outer(EuInvoiceModel):
+    inner: _Inner
+    items: tuple[_Inner, ...] = ()
+
+
+def test_without_extensions_clears_hooks_in_nested_models_and_tuples() -> None:
+    hook = ItalianLineExtension(nature=Natura.N4)
+    outer = _Outer(inner=_Inner(it=hook), items=(_Inner(), _Inner(it=hook)))
+
+    plain = without_extensions(outer)
+
+    assert extension_paths(outer) == ("inner.it", "items[1].it")
+    assert plain == _Outer(inner=_Inner(), items=(_Inner(), _Inner()))
+    assert plain.items[0] is outer.items[0]

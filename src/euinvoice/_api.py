@@ -9,8 +9,10 @@ nothing below imports it.
 
 import typing as t
 
+from lxml import etree
+
 from euinvoice import _xml, calc, profiles
-from euinvoice.detection import detect_root, is_pdf
+from euinvoice.detection import detect_root, is_pdf, refuse_signed
 from euinvoice.errors import PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles._base import FACTURX_RULE_SET
@@ -20,7 +22,7 @@ from euinvoice.syntax.fatturapa._write import serialize
 from euinvoice.syntax.result import ParseResult
 from euinvoice.validation import sdi
 
-__all__ = ["parse", "parse_detailed", "to_xml"]
+__all__ = ["parse", "parse_all", "parse_detailed", "to_xml"]
 
 
 def to_xml(
@@ -102,14 +104,14 @@ def to_xml(
 
 
 def parse(data: bytes) -> Invoice:
-    """Read a UBL or CII invoice, or the invoice of a Factur-X / ZUGFeRD PDF, into the semantic model.
+    """Read a UBL, CII or FatturaPA invoice, or the invoice of a Factur-X / ZUGFeRD PDF, into the semantic model.
 
     This is :func:`parse_detailed` without its ``unmapped`` list: input that has no business term in the model
     is **discarded** here. Use :func:`parse_detailed` to see it.
 
     Args:
-        data: UBL 2.1 ``Invoice`` / ``CreditNote`` or CII D16B ``CrossIndustryInvoice`` XML, or a PDF with an
-            embedded Factur-X / ZUGFeRD invoice.
+        data: UBL 2.1 ``Invoice`` / ``CreditNote``, CII D16B ``CrossIndustryInvoice`` or FatturaPA 1.2
+            ``FatturaElettronica`` XML, or a PDF with an embedded Factur-X / ZUGFeRD invoice.
 
     Returns:
         The invoice.
@@ -125,16 +127,18 @@ def parse(data: bytes) -> Invoice:
 
 
 def parse_detailed(data: bytes) -> ParseResult:
-    """Read a UBL or CII invoice, or the invoice of a Factur-X / ZUGFeRD PDF, and list what was not mapped.
+    """Read a UBL, CII or FatturaPA invoice, or the invoice of a Factur-X / ZUGFeRD PDF, and list what was not mapped.
 
     The syntax comes from the root element (:func:`euinvoice.detection.detect_root`); the BT-24 profile plays no part
     in reading. A PDF (``%PDF-`` header, see :func:`euinvoice.detection.is_pdf`) is read with
     :func:`euinvoice.facturx.extract`, which needs the ``[pdf]`` extra, and its embedded XML is parsed like any
-    other.
+    other. A FatturaPA document is read per App. 4.1 of the SdI "Regole tecniche fatture europee" v2.6, with the data
+    that has no business term in ``Invoice.it`` (see :mod:`euinvoice.syntax.fatturapa`); it must hold a single
+    invoice: read a lotto with :func:`parse_all`.
 
     Args:
-        data: UBL 2.1 ``Invoice`` / ``CreditNote`` or CII D16B ``CrossIndustryInvoice`` XML, or a PDF with an
-            embedded Factur-X / ZUGFeRD invoice.
+        data: UBL 2.1 ``Invoice`` / ``CreditNote``, CII D16B ``CrossIndustryInvoice`` or FatturaPA 1.2
+            ``FatturaElettronica`` XML, or a PDF with an embedded Factur-X / ZUGFeRD invoice.
 
     Returns:
         The invoice plus the XPath of every element or attribute that has no business term in the model
@@ -145,27 +149,59 @@ def parse_detailed(data: bytes) -> ParseResult:
         ParseError: The XML is malformed, has a DOCTYPE or exceeds the parser limits (D10), or its content does not
             form a valid invoice (the message names the BT/BG id). Factur-X MINIMUM and BASIC WL documents raise it,
             as they lack terms EN 16931 requires (issue #69).
-        UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote or a CII D16B
-            CrossIndustryInvoice. A FatturaPA document raises it too: its reader is not implemented yet (#120);
-            :func:`euinvoice.validate` and :func:`euinvoice.detect` accept it.
+        UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote, a CII D16B
+            CrossIndustryInvoice or a FatturaPA 1.2 FatturaElettronica; a FatturaPA document holds several invoices
+            (a lotto, read it with :func:`parse_all`); or ``data`` is a signed FatturaPA (``.p7m``, CAdES), which is
+            not read: extract its XML first.
         PdfError: ``data`` is a PDF that does not name exactly one embedded invoice (see
             :func:`euinvoice.facturx.extract`).
         ImportError: ``data`` is a PDF and the ``[pdf]`` extra (pypdf) is not installed.
     """
+    root = _root(data)
+    syntax = detect_root(root).syntax
+    if syntax is Syntax.FATTURAPA:
+        return fatturapa.read(root)
+    return ubl.read(root) if syntax is Syntax.UBL else cii.read(root)
+
+
+def parse_all(data: bytes) -> tuple[ParseResult, ...]:
+    """Read every invoice of a document into ``ParseResult`` s, the detailed form of :func:`parse_detailed`.
+
+    Only a FatturaPA batch file (a lotto, #120) holds several invoices: one per ``FatturaElettronicaBody``, sharing
+    the header. Each result's ``unmapped`` lists the unmapped header content and that of its own body. UBL, CII and
+    Factur-X documents hold one invoice, so the result has one entry, equal to :func:`parse_detailed`'s.
+
+    Args:
+        data: As for :func:`parse_detailed`.
+
+    Returns:
+        One result per invoice, in document order.
+
+    Raises:
+        TypeError: ``data`` is not ``bytes``.
+        ParseError: See :func:`parse_detailed`.
+        UnsupportedDocumentError: See :func:`parse_detailed`; a lotto is read, not refused.
+        PdfError: See :func:`parse_detailed`.
+        ImportError: See :func:`parse_detailed`.
+    """
+    root = _root(data)
+    syntax = detect_root(root).syntax
+    if syntax is Syntax.FATTURAPA:
+        return fatturapa.read_all(root)
+    return (ubl.read(root) if syntax is Syntax.UBL else cii.read(root),)
+
+
+def _root(data: bytes) -> etree._Element:
+    """The parsed root of ``data``: the XML itself, or the XML embedded in a Factur-X / ZUGFeRD PDF."""
     if is_pdf(data):
         # Imported here so that ``import euinvoice`` and XML parsing never need pypdf (the ``[pdf]`` extra);
         # without it, importing ``euinvoice.facturx`` raises an ImportError naming the extra.
         from euinvoice import facturx
 
         data = facturx.extract(data).xml
-    root = _xml.parse(data)
-    syntax = detect_root(root).syntax
-    if syntax is Syntax.FATTURAPA:
-        raise UnsupportedDocumentError(
-            "reading FatturaPA is not implemented yet (https://github.com/letsrevel/euinvoice/issues/120); "
-            "euinvoice.validate() checks it"
-        )
-    return ubl.read(root) if syntax is Syntax.UBL else cii.read(root)
+    else:
+        refuse_signed(data)
+    return _xml.parse(data)
 
 
 def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: fatturapa.Transmission | None) -> bytes:
