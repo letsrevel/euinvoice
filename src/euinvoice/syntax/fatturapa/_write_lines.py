@@ -28,6 +28,7 @@ from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ItalianExtension, ItalianVatSummary, Natura, TipoCessionePrestazione
 from euinvoice.report import Finding
+from euinvoice.syntax.fatturapa._exemption import exemption_reason
 from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT, VATEX_OF_NATURA
 from euinvoice.syntax.fatturapa._write_format import (
     BASIC,
@@ -320,20 +321,10 @@ def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Fi
         block.chargeability = own or derived
 
 
-def concatenated_reason(blocks: list[Block]) -> str:
-    """BT-120 as App. 4.1 builds it from the blocks written.
-
-    Each ``Natura`` and ``RiferimentoNormativo`` (rows 2.2.2.2, 2.2.2.8: "vengono concatenati") joined by a space, the
-    blocks of one VAT BREAKDOWN by ``"; "``. The separators are the reader's (#120; #132): a BT-120 read from
-    FatturaPA is this text, so it is carried by the elements written and is accepted as such.
-    """
-    texts = [str(b.nature) if b.legal_reference is None else f"{b.nature} {b.legal_reference}" for b in blocks]
-    return "; ".join(dict.fromkeys(texts))
-
-
 def _reference(reason: str, mine: list[Block]) -> str | None:
     """Accept BT-120 or put it into the group's one block as RiferimentoNormativo; why it cannot be, or ``None``."""
-    if all(block.nature is not None for block in mine) and reason == concatenated_reason(mine):
+    natures = [(block.nature, block.legal_reference) for block in mine if block.nature is not None]
+    if len(natures) == len(mine) and reason == exemption_reason(natures):
         return None  # carried by Natura and RiferimentoNormativo (App. 4.1 rows 2.2.2.2, 2.2.2.8)
     if len(mine) != 1:
         return f"its VAT BREAKDOWN has {len(mine)} DatiRiepilogo, not one"
@@ -350,10 +341,11 @@ def _exemption_reasons(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterato
     """BT-120 and BT-121 of each VAT BREAKDOWN: written, carried by Natura, or reported (never dropped).
 
     * BT-120 is 2.2.2.8 RiferimentoNormativo (App. 4.1 rows 2.2.2.2 and 2.2.2.8: "In BT-120 vengono concatenati
-      2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). Equal to that concatenation of what is written
-      (:func:`concatenated_reason`, the form the reader produces) it is carried. Otherwise it is written into the
-      group's DatiRiepilogo when the group has exactly one and ``it.vat_summaries`` gives it no ``legal_reference``;
-      equal to that ``legal_reference`` it is already written. Otherwise it would be lost: an ``error``.
+      2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). Equal to that concatenation of what is written (the
+      reader's form, :func:`~euinvoice.syntax.fatturapa._exemption.exemption_reason`) it is carried. Otherwise it is
+      written into the group's DatiRiepilogo when the group has exactly one and ``it.vat_summaries`` gives it no
+      ``legal_reference``; equal to that ``legal_reference`` it is already written. Otherwise it would be lost: an
+      ``error``.
     * BT-121 is carried by Natura when it is the code App. 5.1 gives every Natura of the group (``VATEX-EU-132`` for
       N2.x, N4, N5; ``-G`` for N3.1, N3.3-N3.5; ``-IC`` for N3.2, N3.6; ``-AE`` for N6.x; ``-151`` for N7).
       Otherwise: an ``error``.

@@ -31,6 +31,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |
+| FatturaPA 1.2.3, Italy (unreleased, after 0.1.0) | FatturaPA XML, FPR12 / FPA12 | ✅ FPR12 only: TD01, TD04, TD24, TD17; one invoice per file; unsigned | ✅ FPR12 and FPA12, 1..n invoices (`parse_all`); Italian data in `Invoice.it` | ✅ XSD 1.2.3 + offline SdI checks; see below |
 | ZUGFeRD 2.0 MINIMUM, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ BASIC, EXTENDED (EXTENDED-only content listed as unmapped; corpus EXTENDED samples with codes outside the CEN lists, ABK BR-CL-19 and 9958 BR-CL-25, raise `ParseError` like their 2.1 twins, [#69](https://github.com/letsrevel/euinvoice/issues/69)); ❌ MINIMUM | ❌ |
 
 - **Parse** means read into the EN 16931 model. Readers never drop input silently: every element or attribute
@@ -61,8 +62,16 @@ is a small, typed, MIT-licensed Python library with three principles:
   and is validated as EN 16931 core.
   ZUGFeRD 1.0 PDFs are extract-only (`parse()` raises `UnsupportedDocumentError`).
 
-Planned later: ebInterface, more national CIUSes (RO, HR, FR, DK, …), FatturaPA, KSeF, Facturae, and
-clearance/transport integrations.
+- **FatturaPA** (Italy's SdI format) is not an EN 16931 syntax and has no BT-24, so it takes no profile. The data
+  with no business term lives in `Invoice.it` / `InvoiceLine.it`; the UBL and CII writers refuse it unless it is
+  dropped with `euinvoice.model.without_extensions()`. `to_xml(invoice, syntax="fatturapa",
+  fatturapa_transmission=...)` writes FPR12. `validate()` runs the XSD 1.2.3 and euinvoice's encoding of the
+  offline SdI checks (Allegato A 1.9.1, the SdI code as `rule_id`). It does not run the registry, SdI-state,
+  file-name, file-size or signature checks, so SdI can still reject a file it accepts. Signing and sending to SdI
+  are out of scope. See [docs/fatturapa.md](docs/fatturapa.md).
+
+Planned later: ebInterface, more national CIUSes (RO, HR, FR, DK, …), KSeF, Facturae, and clearance/transport
+integrations.
 
 ## Install
 
@@ -127,12 +136,14 @@ True
 
 ## Command line
 
-`python -m euinvoice` wraps the same functions. `FILE` is UBL, CII or a Factur-X / ZUGFeRD PDF (`-` reads
-stdin), and `--profile` takes a profile id such as `xrechnung` or `peppol`.
+`python -m euinvoice` wraps the same functions. `FILE` is UBL, CII, FatturaPA or a Factur-X / ZUGFeRD PDF (`-`
+reads stdin), and `--profile` takes a profile id such as `xrechnung` or `peppol`.
 
 ```bash
 python -m euinvoice validate invoice.xml [--profile ID] [--json]   # one line per finding, then the verdict
-python -m euinvoice convert invoice.xml --to ubl|cii [--profile ID] [-o OUT]
+python -m euinvoice convert invoice.xml --to ubl|cii [--profile ID] [--drop-extensions] [-o OUT]
+python -m euinvoice convert fattura.xml --to fatturapa --transmitter IT01234567890 --transmission-number 00001 \
+    [--recipient-code CODE] [--pec ADDRESS] [-o OUT]
 python -m euinvoice info invoice.pdf [--json]                      # syntax, BT-24, profile, container, totals
 python -m euinvoice artifacts fetch [--only NAME]
 ```
@@ -140,12 +151,17 @@ python -m euinvoice artifacts fetch [--only NAME]
 Exit codes: `0` success (warnings allowed); `1` the document was rejected (a `fatal` or `error` finding, a
 refused conversion, an unreadable invoice) or an artifact failed its integrity check; `2` no verdict (usage
 error, unknown profile, unreadable file, failed download, missing artifacts or extras, a Factur-X level whose
-rules are not pinned). `--help` on each subcommand lists them.
+rules are not pinned, a `convert` flag that does not apply to `--to`). `--help` on each subcommand lists them.
+
+`convert --to ubl|cii` refuses an invoice read from FatturaPA unless `--drop-extensions` is given, and then lists
+each dropped `Invoice.it` path on stderr. `info` and `convert` refuse a FatturaPA lotto (several invoices in one
+file); `validate` checks all of them.
 
 ## Documentation
 
 The [`docs/`](docs/index.md) folder holds the guide: [quickstart](docs/quickstart.md),
-[concepts](docs/concepts.md), [validation](docs/validation.md), [Factur-X](docs/facturx.md), a
+[concepts](docs/concepts.md), [validation](docs/validation.md), [Factur-X](docs/facturx.md),
+[FatturaPA](docs/fatturapa.md), a
 [mapping guide](docs/mapping/index.md) with synthetic freelancer and ticketing examples, and the
 [BT mapping](docs/reference/bt-mapping.md). It builds with `make docs` (mkdocs-material). The GitHub Pages site goes live
 once the maintainer enables Pages for the repository and sets the repository variable `DOCS_DEPLOY=true`.
@@ -160,6 +176,12 @@ Open questions waiting for a maintainer decision (`needs-human`):
   model.
 - [#67](https://github.com/letsrevel/euinvoice/issues/67): the XRechnung profiles set no default BT-23; the caller
   must provide it (the pre-flight reports PEPPOL-EN16931-R001 otherwise).
+- FatturaPA: [#133](https://github.com/letsrevel/euinvoice/issues/133) (the writer refuses what the SdI rules do
+  not settle, e.g. generic document level allowances and charges and VAT categories O, L, M),
+  [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses
+  `PrezzoTotale` with more than two decimals), [#136](https://github.com/letsrevel/euinvoice/issues/136) (eight
+  ModalitaPagamento codes do not round-trip) and [#130](https://github.com/letsrevel/euinvoice/issues/130) (SdI
+  checks Allegato A leaves partly open, e.g. 00424 is not checked).
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
 

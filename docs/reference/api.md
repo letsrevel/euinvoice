@@ -56,6 +56,14 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ## FatturaPA
 
+::: euinvoice.model.it.ItalianExtension
+
+::: euinvoice.model.it.ItalianLineExtension
+
+::: euinvoice.model.it.ItalianVatSummary
+
+::: euinvoice.model.it.ItalianPayment
+
 ::: euinvoice.syntax.fatturapa.write
 
 ::: euinvoice.syntax.fatturapa.preflight

@@ -47,6 +47,7 @@ def test_the_docs_examples_run_without_artifacts() -> None:
         "concepts.md": 8,
         "validation.md": 3,
         "facturx.md": 11,
+        "fatturapa.md": 31,
         "mapping/freelancer.md": 11,
         "mapping/ticketing.md": 15,
     }

@@ -1,10 +1,13 @@
-"""The top-level API: :func:`to_xml`, :func:`parse` and :func:`parse_detailed` (plan §4 "Public API", "Data flow").
+"""The top-level API: :func:`to_xml`, :func:`parse`, :func:`parse_detailed`, :func:`parse_all` (plan §4 "Public API").
 
-Writing: ``profile.prepare(invoice)`` → ``profile.preflight(prepared, syntax)`` and
-``calc.check(prepared, syntax=syntax)`` → the syntax writer. Reading:
+Data flow (plan §4). Writing UBL / CII: ``profile.prepare(invoice)`` → ``profile.preflight(prepared, syntax)`` and
+``calc.check(prepared, syntax=syntax)`` → the syntax writer. Writing FatturaPA (no profile, plan M11):
+:func:`euinvoice.syntax.fatturapa.preflight` → the FPR12 writer with the ``fatturapa_transmission`` header → the
+offline SdI checks of :mod:`euinvoice.validation.sdi` on the written document. Reading:
 (a Factur-X / ZUGFeRD PDF goes through :func:`euinvoice.facturx.extract` first) → :func:`euinvoice._xml.parse`
-(D10) → :func:`euinvoice.detection.detect_root` → the syntax reader. This module sits above every other package;
-nothing below imports it.
+(D10) → :func:`euinvoice.detection.detect_root` → the syntax reader. :func:`parse_all` returns one result per invoice
+(one per body of a FatturaPA lotto, which :func:`parse` and :func:`parse_detailed` refuse). This module sits above
+every other package; nothing below imports it.
 """
 
 import typing as t

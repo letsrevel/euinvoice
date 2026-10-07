@@ -68,6 +68,7 @@ nav:
   - Concepts: concepts.md
   - Validation: validation.md
   - Factur-X / ZUGFeRD: facturx.md
+  - FatturaPA (Italy): fatturapa.md
   - Mapping guide:
       - From your billing model to Invoice: mapping/index.md
       - "Example: freelancer": mapping/freelancer.md

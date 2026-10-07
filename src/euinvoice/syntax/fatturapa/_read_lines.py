@@ -18,6 +18,7 @@ from euinvoice.model.codes._generated import UNECE_REC20_REC21_UNIT
 from euinvoice.model.it import ItalianVatSummary, Natura
 from euinvoice.syntax._marks import XML_SPACE
 from euinvoice.syntax._read_errors import build
+from euinvoice.syntax.fatturapa._exemption import exemption_reason
 from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY, POLICY_ISSUE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
@@ -143,8 +144,9 @@ def breakdown(
       as declared. A document whose summaries do not add up to its lines keeps them: the CEN rules (BR-S-08, …) judge
       it through ``validate()`` / ``calc.check`` (D8); the reader neither rounds nor rewrites them (#132 item 22).
     * BT-120 is ``Natura`` and ``RiferimentoNormativo`` joined by a space (rows 2.2.2.2, 2.2.2.8: "vengono
-      concatenati"; the separator is #132's), the summaries of one BG-23 joined by ``"; "``; BT-121 is App. 5.1's
-      code when they share it. Neither is set for S and B (BR-S-10, BR-B-10) nor for Z (App. 5.1 row N1 has no
+      concatenati"), the summaries of one BG-23 joined by ``"; "``: the separators are #132's, shared with the
+      writer (:func:`~euinvoice.syntax.fatturapa._exemption.exemption_reason`). BT-121 is App. 5.1's code when they
+      share it. Neither is set for S and B (BR-S-10, BR-B-10) nor for Z (App. 5.1 row N1 has no
       BT-120; BR-Z-10).
     * ``extra`` adds an empty BG-23 for a category and rate that only a document level charge or allowance the
       reader adds itself uses (the stamp duty's Z, BR-Z-01), unless the summaries already have one.
@@ -173,13 +175,15 @@ def _exemption(category: str, members: list[Summary]) -> tuple[str | None, str |
     """BT-120 and BT-121 of the BG-23 made of ``members`` (see :func:`breakdown`)."""
     if category in _NO_EXEMPTION or not members:
         return None, None
-    texts: list[str] = []
+    # A member of a category outside _NO_EXEMPTION has a Natura: only App. 5.1's Natura rows give one (vat_category).
+    natures: list[tuple[Natura, str | None]] = []
     for member in members:
-        text = str(member.nature) if member.legal is None else f"{member.nature} {member.legal}"
-        if text not in texts:
-            texts.append(text)
+        if member.nature is None:  # pragma: no cover - the invariant above: fail loudly if it ever breaks
+            raise AssertionError(f"a category {category} VAT summary without Natura reached BT-120")
+        natures.append((member.nature, member.legal))
+    reason = exemption_reason(natures)
     codes = {member.reason_code for member in members}
-    return "; ".join(texts), codes.pop() if len(codes) == 1 else None
+    return reason, codes.pop() if len(codes) == 1 else None
 
 
 def vat_point_date_code(vat: Summaries) -> str | None:
