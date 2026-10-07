@@ -10,6 +10,8 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ::: euinvoice.parse_detailed
 
+::: euinvoice.parse_all
+
 ::: euinvoice.validate
 
 ::: euinvoice.detect

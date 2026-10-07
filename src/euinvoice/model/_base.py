@@ -29,6 +29,7 @@ __all__ = [
     "extension_of",
     "set_extensions",
     "to_decimal",
+    "without_extensions",
 ]
 
 _BT_ID = re.compile(r"B[TG]-(?:0|[1-9][0-9]*)")
@@ -158,6 +159,40 @@ def set_extensions(model: pydantic.BaseModel, prefix: str = "") -> tuple[str, ..
                 if isinstance(item, pydantic.BaseModel):
                     found.extend(set_extensions(item, f"{prefix}{name}[{index}]."))
     return tuple(found)
+
+
+def without_extensions[M: pydantic.BaseModel](model: M) -> tuple[M, tuple[str, ...]]:
+    """Return ``model`` with every set extension hook cleared, and the paths of the hooks it cleared.
+
+    A read FatturaPA invoice sets ``Invoice.it`` (and often ``InvoiceLine.it``), so the UBL and CII writers refuse it
+    (D3 as amended: an extension is never dropped silently). This drops them on request and reports what it dropped,
+    so the caller can decide, e.g. before ``to_xml``. The paths are those of :func:`set_extensions`.
+
+    Args:
+        model: An instance, e.g. an :class:`~euinvoice.model.Invoice`.
+
+    Returns:
+        The model without extensions (``model`` itself when none is set) and the cleared paths, e.g.
+        ``("it", "lines[1].it")``.
+    """
+    dropped = set_extensions(model)
+    return (model if not dropped else _strip(model)), dropped
+
+
+def _strip[V](value: V) -> V:
+    """``value`` with every extension hook below it set to ``None`` (models rebuilt only where something changed)."""
+    if isinstance(value, tuple):
+        return t.cast(V, tuple(_strip(item) for item in value))
+    if not isinstance(value, pydantic.BaseModel):
+        return value
+    update: dict[str, object] = {}
+    for name in type(value).model_fields:
+        old = getattr(value, name)
+        new = None if extension_of(type(value), name) is not None else _strip(old)
+        if new != old:
+            update[name] = new
+    # model_copy skips validation, which is safe here: only optional hooks become None (their default).
+    return t.cast(V, value.model_copy(update=update))
 
 
 def to_decimal(value: object) -> Decimal:

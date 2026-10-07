@@ -12,10 +12,11 @@ from lxml import etree
 
 import euinvoice
 from _calc_drafts import with_totals
+from _fatturapa_read import document
 from _invoices import CEN, minimal_invoice, peppol_invoice, rebuild
 from _pdfa import pdf
 from _xrechnung_cases import xrechnung_invoice
-from euinvoice import _xml, facturx, parse, parse_detailed, profiles, to_xml
+from euinvoice import _xml, facturx, parse, parse_all, parse_detailed, profiles, to_xml
 from euinvoice.errors import ParseError, PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice, ProcessControl
 from euinvoice.report import Finding, Severity
@@ -210,10 +211,18 @@ def test_parse_refuses_an_unsupported_root() -> None:
         parse(b"<Invoice/>")
 
 
-def test_parse_refuses_fatturapa_until_its_reader_exists() -> None:
-    fatturapa = f'<p:FatturaElettronica xmlns:p="{_xml.FATTURAPA}" versione="FPR12"/>'.encode()
-    with pytest.raises(UnsupportedDocumentError, match="reading FatturaPA is not implemented yet"):
-        parse(fatturapa)
+def test_parse_reads_fatturapa() -> None:
+    invoice = parse(document())
+
+    assert invoice.it is not None
+    assert (invoice.number, invoice.it.document_type) == ("FT-1", "TD01")
+
+
+@pytest.mark.parametrize("writer", [ubl.write, cii.write], ids=["ubl", "cii"])
+def test_parse_all_reads_one_invoice_of_ubl_and_cii(writer: t.Callable[[Invoice], bytes]) -> None:
+    data = writer(profiles.EN16931.prepare(_core_invoice()))
+
+    assert parse_all(data) == (parse_detailed(data),)
 
 
 def test_to_xml_refuses_fatturapa_as_no_profile_supports_it() -> None:

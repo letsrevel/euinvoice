@@ -6,7 +6,7 @@ to its path. ``docs/reference/bt-mapping.md`` lists every id with its cardinalit
 and the sources they were taken from.
 """
 
-from euinvoice.model._base import bt_id
+from euinvoice.model._base import bt_id, without_extensions
 from euinvoice.model.allowances import (
     DocumentLevelAllowance,
     DocumentLevelCharge,
@@ -91,4 +91,5 @@ __all__ = [
     "id_of",
     "path_of",
     "quantize_amount",
+    "without_extensions",
 ]

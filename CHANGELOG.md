@@ -46,8 +46,27 @@ All notable changes to this project are documented here. The format follows
   - FPA12 gets the same checks, after an `information` finding `EUINVOICE-FATTURAPA-FPA12`.
   - Passing a profile for a FatturaPA document raises `UnsupportedDocumentError`.
   - The CLI `validate` command accepts FatturaPA.
-  - `parse()` refuses FatturaPA until its reader exists (#120), `to_xml(syntax="fatturapa")` until its writer
-    exists (#119), and `calc.check(syntax="fatturapa")` raises `ValueError`.
+  - `parse()` refused FatturaPA until its reader existed (#120, added below), `to_xml(syntax="fatturapa")` refuses
+    it until its writer exists (#119), and `calc.check(syntax="fatturapa")` raises `ValueError`.
+- FatturaPA reader ([#120](https://github.com/letsrevel/euinvoice/issues/120)).
+  - `parse()` / `parse_detailed()` read a FatturaPA 1.2 document (FPR12, and FPA12 since the schema is shared) into
+    `Invoice` with `Invoice.it` / `InvoiceLine.it`, following App. 4.1 of the SdI "Regole tecniche fatture europee"
+    v2.6 in reverse and the App. 5 code tables (Natura → VAT category and VATEX, TipoDocumento → BT-3,
+    ModalitaPagamento → BT-81). The #121 refusal is gone; `detect()` and `validate()` are unchanged.
+  - Transmission data, the EXT rows outside the v1 extension (withholding, social-security funds, stamp duty,
+    Art73, the intermediary, …), attachments, line-level document references and every "Mappatura non
+    considerabile" row are listed in `ParseResult.unmapped`, never dropped.
+  - Values the model cannot hold without rounding or guessing are refused with `ParseError` naming the element:
+    `PrezzoTotale` with more than two decimals, the generic Natura N2/N3/N6, several `ScontoMaggiorazione` on one
+    line, a 0 % line without Natura, a rate with both a split-payment and an ordinary summary. The mapping-policy
+    questions are in [#132](https://github.com/letsrevel/euinvoice/issues/132) (`needs-human`).
+  - New `parse_all()`: one `ParseResult` per invoice. A FatturaPA lotto (several `FatturaElettronicaBody`) gives
+    one per body, and `parse()` / `parse_detailed()` refuse it with `UnsupportedDocumentError` naming
+    `parse_all()`; UBL, CII and Factur-X give a single result.
+  - A signed FatturaPA (`.p7m`, CMS SignedData in DER or base64) is refused with `UnsupportedDocumentError` saying
+    how to extract the XML; reading it would need a CMS parser, a new dependency (D6).
+  - New `euinvoice.model.without_extensions(model)`: the model with every set extension hook cleared, plus the
+    paths it cleared, so a read FatturaPA invoice can be written as UBL or CII on purpose instead of being refused.
 
 ### Changed
 
