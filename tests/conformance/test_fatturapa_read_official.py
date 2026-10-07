@@ -15,8 +15,6 @@ from lxml import etree
 from _fatturapa import CASES, EXTRA_FAILING, Doc
 from _fatturapa_read import (
     FULL,
-    REFUSED,
-    REPORTED,
     VARIANTS,
     adjusted_document,
     body,
@@ -25,6 +23,7 @@ from _fatturapa_read import (
     other_data_document,
     payment_document,
 )
+from _fatturapa_read_cases import REFUSED, REPORTED
 from euinvoice import _xml, parse, parse_all, validate
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
 from euinvoice.model import Invoice, without_extensions
@@ -116,16 +115,11 @@ def test_fpr03_is_a_lotto_of_two_invoices() -> None:
     first, second = parse_all(data)
 
     assert [line.net_amount for line in first.invoice.lines] == [D("5.00"), D("20.00")]
-    # Body 1 declares ImponibileImporto 27.00 / Imposta 5.95 for lines adding up to 25.00 (SdI 00422): the BG-23 and
-    # the totals follow the lines (BR-S-08, BR-CO-15/16), and the declared amounts are reported.
+    # Body 1 declares ImponibileImporto 27.00 / Imposta 5.95 for lines adding up to 25.00 (SdI 00422): the reader keeps
+    # the declared amounts, and validation reports it (INCONSISTENT, test_a_read_invoice_adds_no_cen_violation).
     (group,) = first.invoice.vat_breakdown
-    assert (group.taxable_amount, group.tax_amount, first.invoice.totals.amount_due) == (D(25), D("5.50"), D("30.50"))
-    body = f"{ROOT}/FatturaElettronicaBody[1]"
-    assert first.unmapped[-3:] == (
-        f"{body}/DatiBeniServizi/DatiRiepilogo/ImponibileImporto",
-        f"{body}/DatiBeniServizi/DatiRiepilogo/Imposta",
-        f"{body}/DatiPagamento/DettaglioPagamento/ImportoPagamento",
-    )
+    assert (group.taxable_amount, group.tax_amount, first.invoice.totals.amount_due) == (D(27), D("5.95"), D("32.95"))
+    assert not any("DatiRiepilogo" in path or "ImportoPagamento" in path for path in first.unmapped)
     (line,) = second.invoice.lines
     assert (second.invoice.number, line.invoiced_quantity, line.net_amount) == ("456", D(1), D("2000.00"))
     assert second.invoice.payment_instructions is not None
@@ -214,17 +208,20 @@ def _sdi_documents() -> list[tuple[str, Doc]]:
     return found + list(EXTRA_FAILING.items())
 
 
-# The #121 documents the reader refuses, with the reason (#132 items 6 and 12, SdI 00400; a Natura with a rate: the
-# integration documents of 00401 / 00430 and SdI-refused ones; 00429's summaries match no line, so no BG-23 is left).
+# The #121 documents the reader refuses, with the reason: #132 item 6 (generic Natura), item 12 (several
+# ScontoMaggiorazione), item 21 (a Natura with a rate other than 0: the TD16 integrations of 00401 / 00430 and
+# SdI-refused documents) and a rate 0 without Natura on a line or a fund (SdI 00400, 00413).
 _NATURA_RATE: t.Final = "with AliquotaIVA 22.00: EN 16931 requires rate 0"
+_NO_NATURA: t.Final = "Natura is required with AliquotaIVA 0"
 REFUSED_SDI: t.Final = {
     "00401 passing 0": _NATURA_RATE,
     "00430 passing 0": _NATURA_RATE,
     "00401 failing": _NATURA_RATE,
     "00430 failing": _NATURA_RATE,
-    "00429 failing": "at least one entry is required (BR-CO-18)",
+    "00414 failing": _NATURA_RATE,
     "00423 passing 4": "2 ScontoMaggiorazione on one line",
-    "00400 failing": "Natura is required for a line with AliquotaIVA 0",
+    "00400 failing": _NO_NATURA,
+    "00413 failing": _NO_NATURA,
     "00445 failing": "the generic code N2 has no VAT category",
     "00445 cassa Natura": "the generic code N2 has no VAT category",
 }
@@ -241,21 +238,45 @@ def test_the_sdi_check_documents_read_or_are_refused_clearly(name: str, doc: Doc
         assert [r.invoice.number for r in parse_all(doc.xml())] == [b.number for b in doc.bodies]
 
 
-def _readable() -> dict[str, bytes]:
-    """Every readable document of the reader tests that the SdI would accept, and the official examples."""
-    documents = {name: data for name, data in synthetic().items() if not name.startswith("refused: ")}
-    documents.update(
-        {name: doc.xml() for name, doc in _sdi_documents() if "passing" in name and name not in REFUSED_SDI}
-    )
-    documents.update({name: official(name) for name in READABLE})
-    return documents
+# Readable documents whose declared figures break a CEN rule: the reader keeps them as declared (#132 item 22), so
+# validation reports exactly these (BR-S-08: summaries vs lines; BR-CO-15/16: declared totals vs the sums).
+# ``00422 passing``, ``00423 passing 0``: within the SdI's ±1 € / ±1 cent tolerance, not within EN's exact sums.
+# CII's BR-CO-15 does not fire for ``inconsistent totals`` (the CII binding tests BT-112 against its own sums).
+INCONSISTENT: t.Final[t.Mapping[str, t.Mapping[str, frozenset[str]]]] = {
+    "inconsistent summary": {"ubl": frozenset({"BR-S-08"}), "cii": frozenset({"BR-S-08"})},
+    "inconsistent totals": {"ubl": frozenset({"BR-CO-15"}), "cii": frozenset()},
+    "professional with a fund and withholding": {"ubl": frozenset({"BR-CO-16"}), "cii": frozenset({"BR-CO-16"})},
+    "00422 passing 0": {"ubl": frozenset({"BR-S-08"}), "cii": frozenset({"BR-S-08"})},
+    "00422 passing 1": {"ubl": frozenset({"BR-S-08"}), "cii": frozenset({"BR-S-08"})},
+    "00423 passing 0": {"ubl": frozenset(), "cii": frozenset({"BR-S-08"})},
+    "IT01234567890_FPR03.xml": {"ubl": frozenset({"BR-CO-16", "BR-S-08"}), "cii": frozenset({"BR-CO-16", "BR-S-08"})},
+}
 
 
-@pytest.mark.parametrize("name", list(_readable()))
+def _readable_names() -> list[str]:
+    """Every readable document of the reader tests that the SdI would accept, and the official examples (names only:
+    nothing is read at collection, so a run without fetched artifacts collects cleanly)."""
+    names = [name for name in synthetic() if not name.startswith("refused: ")]
+    names += [name for name, _ in _sdi_documents() if "passing" in name and name not in REFUSED_SDI]
+    return names + READABLE
+
+
+def _document(name: str) -> bytes:
+    if name in READABLE:
+        return official(name)
+    found = synthetic().get(name)
+    return found if found is not None else dict(_sdi_documents())[name].xml()
+
+
+@pytest.mark.parametrize("name", _readable_names())
 @pytest.mark.parametrize("writer", [ubl.write, cii.write], ids=["ubl", "cii"])
-def test_a_read_invoice_is_valid_en_16931(name: str, writer: t.Callable[[Invoice], bytes]) -> None:
-    # The EN part of what the reader returns must pass the official CEN rules (and the XSD) in both syntaxes.
-    for result in parse_all(_readable()[name]):
+def test_a_read_invoice_adds_no_cen_violation(name: str, writer: t.Callable[[Invoice], bytes]) -> None:
+    # The reader adds no CEN violation of its own: a document whose declared figures agree reads as a valid EN 16931
+    # invoice in both syntaxes; one whose figures do not gets exactly the findings of INCONSISTENT (FPR03: body 1).
+    syntax = "ubl" if writer is ubl.write else "cii"
+    for index, result in enumerate(parse_all(_document(name))):
         report = validate(writer(without_extensions(result.invoice)), EN16931)
 
-        assert [f for f in report.findings if f.severity in (Severity.FATAL, Severity.ERROR)] == []
+        blocking = {f.rule_id for f in report.findings if f.severity in (Severity.FATAL, Severity.ERROR)}
+        expected = INCONSISTENT[name][syntax] if name in INCONSISTENT and index == 0 else frozenset()
+        assert blocking == expected, report.findings

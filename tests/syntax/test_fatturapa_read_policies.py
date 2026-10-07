@@ -13,22 +13,14 @@ import hypothesis
 import pytest
 from hypothesis import strategies as st
 
-from _fatturapa_read import (
-    FULL,
-    REFUSED,
-    REPORTED,
-    ROOT,
-    SUMMARY,
-    VARIANTS,
-    body,
-    document,
-)
-from euinvoice import _xml, detect, parse, parse_all, parse_detailed, validate
+from _fatturapa_read import FULL, VARIANTS, body, document
+from _fatturapa_read_cases import LINE, REFUSED, REPORTED, ROOT, SUMMARY
+from euinvoice import _xml, calc, detect, parse, parse_all, parse_detailed, validate
 from euinvoice.detection import is_signed
 from euinvoice.errors import ModelError, ParseError, UnsupportedDocumentError
 from euinvoice.model import extension_paths, without_extensions
 from euinvoice.model.it import EsigibilitaIVA
-from euinvoice.syntax import fatturapa, ubl
+from euinvoice.syntax import Syntax, fatturapa, ubl
 
 
 def unmapped(data: bytes) -> tuple[str, ...]:
@@ -74,18 +66,32 @@ def test_a_d_vs_i_split_is_one_breakdown_and_reports_the_second_chargeability() 
     assert result.unmapped[1:] == (f"{SUMMARY}[2]/EsigibilitaIVA",)
 
 
-def test_declared_amounts_that_break_the_cen_rules_are_derived_and_reported() -> None:
+def test_declared_amounts_are_kept_as_declared() -> None:
+    # #132 item 22: the reader neither rounds nor rewrites declared amounts; the CEN rules judge them (D8).
     summary = parse_detailed(VARIANTS["inconsistent summary"])  # ImponibileImporto 102.00 for lines of 100.00
     totals = parse_detailed(VARIANTS["inconsistent totals"])  # ImportoTotaleDocumento and ImportoPagamento 100.00
 
     (group,) = summary.invoice.vat_breakdown
-    assert (group.taxable_amount, group.tax_amount) == (Decimal("100.00"), Decimal("22.00"))
-    assert summary.unmapped[1:] == (f"{SUMMARY}/ImponibileImporto", f"{SUMMARY}/Imposta")
-    assert (totals.invoice.totals.total_with_vat, totals.invoice.totals.amount_due) == (Decimal(122), Decimal(122))
-    assert totals.unmapped[1:] == (
-        f"{ROOT}/FatturaElettronicaBody/DatiGenerali/DatiGeneraliDocumento/ImportoTotaleDocumento",
-        f"{ROOT}/FatturaElettronicaBody/DatiPagamento/DettaglioPagamento/ImportoPagamento",
+    assert (group.taxable_amount, group.tax_amount) == (Decimal("102.00"), Decimal("22.44"))
+    assert (totals.invoice.totals.total_with_vat, totals.invoice.totals.amount_due) == (Decimal(100), Decimal(100))
+    assert summary.unmapped[1:] == totals.unmapped[1:] == ()
+    assert {f.rule_id for f in calc.check(summary.invoice)} >= {"BR-S-08"}
+    assert {f.rule_id for f in calc.check(totals.invoice, syntax=Syntax.UBL)} >= {"BR-CO-15"}
+
+
+def test_a_payment_net_of_withholding_is_kept_and_breaks_br_co_16() -> None:
+    # DatiRitenuta has no EN home (BR-CO-16 has no withholding term, #115): the declared ImportoPagamento stays.
+    result = parse_detailed(VARIANTS["professional with a fund and withholding"])
+
+    assert (result.invoice.totals.total_with_vat, result.invoice.totals.amount_due) == (
+        Decimal("126.88"),
+        Decimal("106.88"),
     )
+    assert result.unmapped[1:] == (
+        f"{ROOT}/FatturaElettronicaBody/DatiGenerali/DatiGeneraliDocumento/DatiRitenuta",
+        f"{LINE}/Ritenuta",
+    )
+    assert "BR-CO-16" in {f.rule_id for f in calc.check(result.invoice)}
 
 
 def test_a_repeated_identical_summary_reports_nothing() -> None:

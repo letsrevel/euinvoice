@@ -6,6 +6,7 @@ against the pinned XSD. :data:`FULL` maps every row the reader maps at least onc
 """
 
 import typing as t
+from decimal import Decimal
 
 from euinvoice import _xml
 
@@ -83,6 +84,24 @@ def detail(method: str = "MP05", amount: str = "122.00", *, before: str = "", mi
         f"<DettaglioPagamento>{before}<ModalitaPagamento>{method}</ModalitaPagamento>{middle}"
         f"<ImportoPagamento>{amount}</ImportoPagamento>{after}</DettaglioPagamento>"
     )
+
+
+def cassa_block(rate: str = "22.00", *, natura: str = "", withholding: bool = False) -> str:
+    """A DatiCassaPrevidenziale (2.1.1.7) of 4 % (TC04) on 100.00, in XSD order."""
+    return (
+        "<DatiCassaPrevidenziale><TipoCassa>TC04</TipoCassa><AlCassa>4.00</AlCassa>"
+        "<ImportoContributoCassa>4.00</ImportoContributoCassa><ImponibileCassa>100.00</ImponibileCassa>"
+        f"<AliquotaIVA>{rate}</AliquotaIVA>"
+        + ("<Ritenuta>SI</Ritenuta>" if withholding else "")
+        + (f"<Natura>{natura}</Natura>" if natura else "")
+        + "</DatiCassaPrevidenziale>"
+    )
+
+
+_WITHHOLDING: t.Final = (
+    "<DatiRitenuta><TipoRitenuta>RT01</TipoRitenuta><ImportoRitenuta>20.00</ImportoRitenuta>"
+    "<AliquotaRitenuta>20.00</AliquotaRitenuta><CausalePagamento>A</CausalePagamento></DatiRitenuta>"
+)
 
 
 def body(
@@ -190,255 +209,6 @@ FULL: t.Final = document(
 )
 """A document that uses every row the reader maps (see ``tests/syntax/test_fatturapa_read.py``)."""
 
-ROOT: t.Final = "/p:FatturaElettronica"
-GENERAL: t.Final = f"{ROOT}/FatturaElettronicaBody/DatiGenerali"
-LINE: t.Final = f"{ROOT}/FatturaElettronicaBody/DatiBeniServizi/DettaglioLinee"
-SUMMARY: t.Final = f"{ROOT}/FatturaElettronicaBody/DatiBeniServizi/DatiRiepilogo"
-DETAIL: t.Final = f"{ROOT}/FatturaElettronicaBody/DatiPagamento/DettaglioPagamento"
-
-REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
-    (
-        "line-level purchase order",
-        document(
-            body(
-                general="<DatiOrdineAcquisto><RiferimentoNumeroLinea>1</RiferimentoNumeroLinea>"
-                "<IdDocumento>PO-1</IdDocumento></DatiOrdineAcquisto>"
-            )
-        ),
-        (f"{GENERAL}/DatiOrdineAcquisto",),
-    ),
-    (
-        "two contracts",
-        document(
-            body(
-                general="<DatiContratto><IdDocumento>C-1</IdDocumento></DatiContratto>"
-                "<DatiContratto><IdDocumento>C-2</IdDocumento></DatiContratto>"
-            )
-        ),
-        (f"{GENERAL}/DatiContratto[1]", f"{GENERAL}/DatiContratto[2]"),
-    ),
-    (
-        "DatiSAL",
-        document(body(general="<DatiSAL><RiferimentoFase>1</RiferimentoFase></DatiSAL>")),
-        (f"{GENERAL}/DatiSAL",),
-    ),
-    (
-        "carrier only",
-        document(body(general="<DatiTrasporto><MezzoTrasporto>Van</MezzoTrasporto></DatiTrasporto>")),
-        (f"{GENERAL}/DatiTrasporto",),
-    ),
-    (
-        "line references of a preceding invoice",
-        document(
-            body(
-                general="<DatiFattureCollegate><RiferimentoNumeroLinea>1</RiferimentoNumeroLinea>"
-                "<IdDocumento>FT-0</IdDocumento></DatiFattureCollegate>"
-            )
-        ),
-        (f"{GENERAL}/DatiFattureCollegate/RiferimentoNumeroLinea",),
-    ),
-    (
-        "withholding, stamp duty and Art73",
-        document(
-            body(
-                document_extra="<DatiRitenuta><TipoRitenuta>RT01</TipoRitenuta><ImportoRitenuta>20.00"
-                "</ImportoRitenuta><AliquotaRitenuta>20.00</AliquotaRitenuta>"
-                "<CausalePagamento>A</CausalePagamento></DatiRitenuta><DatiBollo>"
-                "<BolloVirtuale>SI</BolloVirtuale><ImportoBollo>2.00</ImportoBollo></DatiBollo>"
-                "<Art73>SI</Art73>",
-                lines=line(after=""),
-            )
-        ),
-        (
-            f"{GENERAL}/DatiGeneraliDocumento/DatiRitenuta",
-            f"{GENERAL}/DatiGeneraliDocumento/DatiBollo/ImportoBollo",  # BR-IT-DC-480: the EN charge is 0
-            f"{GENERAL}/DatiGeneraliDocumento/Art73",
-        ),
-    ),
-    (
-        "a unit that is no Rec 20 code",
-        document(body(lines=line(middle="<UnitaMisura>pz</UnitaMisura>"))),
-        (f"{LINE}/UnitaMisura",),
-    ),
-    (
-        "line withholding flag",
-        document(body(lines=line().replace("</AliquotaIVA>", "</AliquotaIVA><Ritenuta>SI</Ritenuta>"))),
-        (f"{LINE}/Ritenuta",),
-    ),
-    (
-        "a second CodiceArticolo",
-        document(
-            body(
-                lines=line(
-                    before="<CodiceArticolo><CodiceTipo>EAN</CodiceTipo><CodiceValore>1</CodiceValore>"
-                    "</CodiceArticolo><CodiceArticolo><CodiceTipo>SKU</CodiceTipo>"
-                    "<CodiceValore>2</CodiceValore></CodiceArticolo>"
-                )
-            )
-        ),
-        (f"{LINE}/CodiceArticolo[2]",),
-    ),
-    (
-        "AltriDatiGestionali without a value, and a second value",
-        document(
-            body(
-                lines=line(
-                    after="<AltriDatiGestionali><TipoDato>EMPTY</TipoDato></AltriDatiGestionali>"
-                    "<AltriDatiGestionali><TipoDato>TWO</TipoDato><RiferimentoTesto>a"
-                    "</RiferimentoTesto><RiferimentoNumero>1.00</RiferimentoNumero>"
-                    "</AltriDatiGestionali>"
-                )
-            )
-        ),
-        (f"{LINE}/AltriDatiGestionali[1]", f"{LINE}/AltriDatiGestionali[2]/RiferimentoNumero"),
-    ),
-    (
-        "a percentage next to an amount",
-        document(
-            body(
-                lines=line(
-                    total="90.00",
-                    adjustments="<ScontoMaggiorazione><Tipo>SC</Tipo><Percentuale>10.00"
-                    "</Percentuale><Importo>5.00</Importo></ScontoMaggiorazione>",
-                ),
-                summaries=summary("22.00", "90.00", "19.80"),
-            )
-        ),
-        (f"{LINE}/ScontoMaggiorazione/Percentuale",),
-    ),
-    (
-        "an empty adjustment",
-        document(body(lines=line(adjustments="<ScontoMaggiorazione><Tipo>SC</Tipo></ScontoMaggiorazione>"))),
-        (f"{LINE}/ScontoMaggiorazione",),
-    ),
-    (
-        "summary rounding and ancillary costs",
-        document(
-            body(
-                summaries=summary().replace(
-                    "<ImponibileImporto>",
-                    "<SpeseAccessorie>1.00</SpeseAccessorie><Arrotondamento>0.00</Arrotondamento><ImponibileImporto>",
-                )
-            )
-        ),
-        (f"{SUMMARY}/SpeseAccessorie", f"{SUMMARY}/Arrotondamento"),
-    ),
-    (
-        "a second legal reference for one Natura",
-        document(
-            body(
-                lines=line(rate="0.00", natura="N4") + line(2, rate="0.00", natura="N4"),
-                summaries=summary("0.00", "100.00", "0.00", natura="N4", legal="Art. 10")
-                + summary("0.00", "100.00", "0.00", natura="N4", legal="Art. 10 c.1"),
-            )
-        ),
-        (f"{SUMMARY}[2]/RiferimentoNormativo",),
-    ),
-    (
-        "instalments",
-        document(body(after=payment(detail(amount="61.00"), detail(amount="61.00"), conditions="TP01"))),
-        (f"{DETAIL}[1]/ImportoPagamento", f"{DETAIL}[2]"),
-    ),
-    (
-        "a second DatiPagamento and a BIC without IBAN",
-        document(
-            body(
-                after=payment(
-                    detail(middle="<GiorniTerminiPagamento>30</GiorniTerminiPagamento>", after="<BIC>BYLADEM1001</BIC>")
-                )
-                + payment(detail())
-            )
-        ),
-        (
-            f"{ROOT}/FatturaElettronicaBody/DatiPagamento[1]/DettaglioPagamento/ImportoPagamento",
-            f"{ROOT}/FatturaElettronicaBody/DatiPagamento[1]/DettaglioPagamento/BIC",
-            f"{ROOT}/FatturaElettronicaBody/DatiPagamento[2]",
-        ),
-    ),
-    (
-        "attachments",
-        document(
-            body(after="<Allegati><NomeAttachment>a.pdf</NomeAttachment><Attachment>JVBERi0=</Attachment></Allegati>")
-        ),
-        (f"{ROOT}/FatturaElettronicaBody/Allegati",),
-    ),
-    (
-        "an issue date with a time zone",
-        document(body().replace("<Data>2026-01-15</Data>", "<Data>2026-01-15+01:00</Data>")),
-        (f"{GENERAL}/DatiGeneraliDocumento/Data/text()",),
-    ),
-    (
-        "a summary no line has (a social-security fund)",
-        document(
-            body(
-                document_extra="<DatiCassaPrevidenziale><TipoCassa>TC22</TipoCassa><AlCassa>4.00</AlCassa>"
-                "<ImportoContributoCassa>4.00</ImportoContributoCassa><AliquotaIVA>10.00</AliquotaIVA>"
-                "</DatiCassaPrevidenziale>",
-                summaries=summary() + summary("10.00", "4.00", "0.40"),
-            )
-        ),
-        (f"{GENERAL}/DatiGeneraliDocumento/DatiCassaPrevidenziale", f"{SUMMARY}[2]"),
-    ),
-    (
-        "a Natura summary no line has, in a category lines have",
-        document(
-            body(
-                lines=line(rate="0.00", natura="N2.2"),
-                summaries=summary("0.00", "100.00", "0.00", natura="N2.2")
-                + summary("0.00", "0.00", "0.00", natura="N4", legal="Art. 10"),
-            )
-        ),
-        (f"{SUMMARY}[2]/Natura", f"{SUMMARY}[2]/RiferimentoNormativo"),
-    ),
-]
-"""(name, document, the unmapped paths besides DatiTrasmissione): content with no model home is reported."""
-
-REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
-    (
-        "a Natura with a rate",
-        document(body(lines=line(natura="N6.1"), summaries=summary(natura="N6.1"))),
-        "Natura N6.1 (VAT category AE, App. 5.1) with AliquotaIVA 22.00: EN 16931 requires rate 0 for category AE "
-        "(BR-AE-05)",
-    ),
-    (
-        "a line Natura with a rate",
-        document(body(lines=line(natura="N4"), summaries=summary())),
-        "Natura N4 (VAT category E, App. 5.1) with AliquotaIVA 22.00",
-    ),
-    (
-        "PrezzoTotale with 3 decimals",
-        document(body(lines=line(total="100.001"))),
-        "2.2.1.11 PrezzoTotale 100.001 has more than two decimals",
-    ),
-    (
-        "generic Natura N2",
-        document(body(lines=line(rate="0.00", natura="N2"), summaries=summary("0.00", "100.00", "0.00", natura="N2"))),
-        "generic code N2 has no VAT category",
-    ),
-    (
-        "rate 0 without Natura",
-        document(body(lines=line(rate="0.00"), summaries=summary("0.00", "100.00", "0.00", natura="N4"))),
-        "Natura is required for a line with AliquotaIVA 0",
-    ),
-    (
-        "split and ordinary at one rate",
-        document(body(summaries=summary(chargeability="S") + summary())),
-        "both a split-payment",
-    ),
-    (
-        "two adjustments on a line",
-        document(
-            body(
-                lines=line(
-                    adjustments="<ScontoMaggiorazione><Tipo>SC</Tipo><Importo>1.00</Importo></ScontoMaggiorazione>" * 2
-                )
-            )
-        ),
-        "2 ScontoMaggiorazione on one line",
-    ),
-]
-"""(name, XSD-valid document, message): values the model cannot hold without rounding or guessing (#132)."""
-
 
 _INTRA_EU: t.Final = frozenset({"N3.2", "N3.6", "N7"})  # category K (App. 5.1)
 _FR_BUYER: t.Final = "<IdFiscaleIVA><IdPaese>FR</IdPaese><IdCodice>00000000000</IdCodice></IdFiscaleIVA>"
@@ -463,9 +233,10 @@ def natura_document(code: str) -> bytes:
 
 
 def adjusted_document(adjustment: str, total: str) -> bytes:
-    """One line with a single ScontoMaggiorazione made of ``adjustment`` and PrezzoTotale ``total``."""
+    """One 22 % line with one ScontoMaggiorazione made of ``adjustment``, PrezzoTotale ``total``, and its summary."""
     sm = f"<ScontoMaggiorazione>{adjustment}</ScontoMaggiorazione>"
-    return document(body(lines=line(total=total, adjustments=sm)))
+    tax = format(Decimal(total) * Decimal("0.22"), ".2f")
+    return document(body(lines=line(total=total, adjustments=sm), summaries=summary("22.00", total, tax)))
 
 
 def other_data_document(reference: str) -> bytes:
@@ -571,6 +342,36 @@ VARIANTS.update(
             body(
                 general="<DatiRicezione><RiferimentoNumeroLinea>1</RiferimentoNumeroLinea><IdDocumento>R-1</IdDocumento>"
                 "</DatiRicezione>"
+            )
+        ),
+    }
+)
+
+VARIANTS.update(
+    {
+        # A professional's invoice: fee 100.00, 4 % fund contribution, 22 % VAT on 104.00 (App. 4.1 rows 2.1.1.7.x).
+        "professional with a fund": document(
+            body(
+                document_extra=cassa_block() + "<ImportoTotaleDocumento>126.88</ImportoTotaleDocumento>",
+                summaries=summary("22.00", "104.00", "22.88"),
+                after=payment(detail(amount="126.88", after="<IBAN>DE02120300000000202051</IBAN>")),
+            )
+        ),
+        "fund at another rate with Natura": document(
+            body(
+                document_extra=cassa_block("0.00", natura="N4"),
+                summaries=summary() + summary("0.00", "4.00", "0.00", natura="N4", legal="Art. 10"),
+            )
+        ),
+        # The same with 20 % withholding (not mapped): the declared amount due, net of it, is kept (BR-CO-16).
+        "professional with a fund and withholding": document(
+            body(
+                document_extra=_WITHHOLDING
+                + cassa_block(withholding=True)
+                + "<ImportoTotaleDocumento>126.88</ImportoTotaleDocumento>",
+                lines=line().replace("</AliquotaIVA>", "</AliquotaIVA><Ritenuta>SI</Ritenuta>"),
+                summaries=summary("22.00", "104.00", "22.88"),
+                after=payment(detail(amount="106.88", after="<IBAN>DE02120300000000202051</IBAN>")),
             )
         ),
     }

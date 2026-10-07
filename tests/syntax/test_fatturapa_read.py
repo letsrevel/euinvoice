@@ -433,3 +433,35 @@ def test_a_payee_that_is_the_seller_is_no_bg_10() -> None:
     assert result.unmapped[1:] == (
         "/p:FatturaElettronica/FatturaElettronicaBody/DatiPagamento/DettaglioPagamento/Beneficiario",
     )
+
+
+def test_a_social_security_fund_is_a_document_level_charge() -> None:
+    # App. 4.1 rows 2.1.1.7.1-7: BT-99 ImportoContributoCassa, BT-100 ImponibileCassa, BT-101 AlCassa, BT-103
+    # AliquotaIVA, BT-104 TipoCassa / Ritenuta / Natura; the declared summary 104.00 then meets BR-S-08 as declared.
+    invoice = parse(VARIANTS["professional with a fund"])
+
+    (charge,) = invoice.charges
+    assert (charge.amount, charge.base_amount, charge.percentage) == (D("4.00"), D("100.00"), D("4.00"))
+    assert (charge.vat_category_code, charge.vat_rate, charge.reason) == ("S", D("22.00"), "TC04")
+    assert (invoice.totals.sum_of_charges, invoice.totals.total_without_vat, invoice.totals.total_vat) == (
+        D(4),
+        D(104),
+        D("22.88"),
+    )
+    assert (invoice.totals.total_with_vat, invoice.totals.amount_due) == (D("126.88"), D("126.88"))
+    assert calc.check(invoice) == ()
+
+
+def test_a_fund_with_natura_takes_its_app_5_1_category() -> None:
+    invoice = parse(VARIANTS["fund at another rate with Natura"])
+
+    (charge,) = invoice.charges
+    assert (charge.vat_category_code, charge.vat_rate, charge.reason) == ("E", D(0), "TC04 N4")
+    assert [(g.category_code, g.taxable_amount) for g in invoice.vat_breakdown] == [("S", D(100)), ("E", D(4))]
+    assert calc.check(invoice) == ()
+
+
+def test_a_fund_subject_to_withholding_says_so_in_bt_104() -> None:
+    (charge,) = parse(VARIANTS["professional with a fund and withholding"]).charges
+
+    assert charge.reason == "TC04 SI"

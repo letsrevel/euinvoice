@@ -4,17 +4,18 @@ It reads a parsed ``FatturaElettronica`` (FPR12 or FPA12, XSD 1.2.3). The mappin
 tecniche fatture europee" v2.6 ("FatturaPA e modello semantico") in reverse, with the code tables of App. 5; each
 mapping cites its row (the ids of the Rappresentazione tabellare). Data with no business term goes to ``Invoice.it`` /
 ``InvoiceLine.it`` (D3 as amended, ADR 0001). Everything else (the transmission data of 1.1, which are writer options;
-the EXT rows outside the v1 extension, such as withholding, social-security funds, Art73 or the intermediary; and
+the EXT rows outside the v1 extension, such as withholding, Art73 or the intermediary; and
 every "Mappatura non considerabile" row) is left unmarked, so it is listed in ``ParseResult.unmapped``: nothing is
 dropped silently. Where FatturaPA holds a value the model cannot (more than two decimals in an amount, a generic
 Natura, several discounts on a line, …), the reader refuses with :class:`~euinvoice.errors.ParseError` instead of
 rounding or guessing; the open policy questions are in https://github.com/letsrevel/euinvoice/issues/132.
 
-The EN part of the result is a valid EN 16931 invoice wherever the document's own figures agree: the declared
-amounts are taken when they meet the CEN calculation rules, and otherwise derived from the lines, the declared element
-being reported (VAT breakdown in ``_read_lines.breakdown``, totals in :func:`_totals`). FatturaPA has no specification
-identifier, so BT-24 is the EN 16931 core one, the least claim (#132 item 7): a read FPR12 does not meet CIUS-IT
-(e.g. BR-IT-190, BR-IT-171).
+Declared amounts are read as declared (VAT breakdown in ``_read_lines.breakdown``, totals in :func:`_totals`), as the
+UBL and CII readers do: the reader adds no CEN violation of its own, so a document whose figures agree reads as a
+valid EN 16931 invoice, and one whose figures do not (e.g. a payment net of withholding, which is not mapped) keeps
+them, for ``validate()`` / ``calc.check`` to report (D8, #132 item 22). FatturaPA has no specification identifier, so
+BT-24 is the EN 16931 core one, the least claim (#132 item 7): a read FPR12 does not meet CIUS-IT (e.g. BR-IT-190,
+BR-IT-171).
 """
 
 import typing as t
@@ -28,9 +29,10 @@ from euinvoice.model import Invoice, InvoiceLine, VatBreakdown
 from euinvoice.model.it import TipoDocumento
 from euinvoice.syntax._marks import XML_SPACE
 from euinvoice.syntax._read_errors import build
+from euinvoice.syntax.fatturapa._read_cassa import funds
 from euinvoice.syntax.fatturapa._read_codes import TYPE_CODE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
-from euinvoice.syntax.fatturapa._read_lines import breakdown, extension, lines, summaries, vat_point_date_code
+from euinvoice.syntax.fatturapa._read_lines import breakdown, lines, summaries, vat_point_date_code
 from euinvoice.syntax.fatturapa._read_parties import buyer, seller
 from euinvoice.syntax.fatturapa._read_payment import Payment, payment
 from euinvoice.syntax.result import ParseResult
@@ -122,17 +124,18 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
     general = cursor.one(body, "DatiGenerali")
     document = cursor.one(general, "DatiGeneraliDocumento")
     kind = _document_type(cursor, document)
-    allowances, charges = _stamp_duty(cursor, document, kind is TipoDocumento.TD04)
+    allowances, stamp = _stamp_duty(cursor, document, kind is TipoDocumento.TD04)
     goods = cursor.one(body, "DatiBeniServizi")
     vat = summaries(cursor, goods)
+    charges = (*funds(cursor, document, vat), *stamp)
     invoice_lines = lines(cursor, goods, vat)
-    groups = breakdown(cursor, vat, invoice_lines, [("Z", _ZERO)] if allowances or charges else ())
+    groups = breakdown(vat, body, [("Z", _ZERO)] if allowances or stamp else ())
     paid = payment(cursor, body, the_seller.name)
     italian = {
         "tax_regime": cursor.code(cursor.one(seller_party, "DatiAnagrafici"), "RegimeFiscale"),  # 1.2.1.8
         "issuer": cursor.code(header, "SoggettoEmittente"),  # 1.6
         "document_type": kind,  # 2.1.1.1
-        "vat_summaries": extension(cursor, vat, invoice_lines),  # 2.2.2
+        "vat_summaries": vat.extension,  # 2.2.2
         "payment": paid.extension,  # 2.4
     }
     values = {
@@ -156,7 +159,7 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
         "charges": charges,
         "lines": invoice_lines,
         "vat_breakdown": groups,
-        "totals": _totals(cursor, document, body, invoice_lines, groups, paid, bool(allowances), bool(charges)),
+        "totals": _totals(cursor, document, invoice_lines, groups, paid, allowances, charges),
         "it": italian,
         **_references(cursor, general),
     }
@@ -265,39 +268,36 @@ def _delivery(cursor: Cursor, general: etree._Element | None) -> dict[str, objec
 def _totals(
     cursor: Cursor,
     document: etree._Element | None,
-    body: etree._Element,
     invoice_lines: tuple[InvoiceLine, ...],
     groups: tuple[VatBreakdown, ...],
     paid: Payment,
-    allowances: bool,
-    charges: bool,
+    allowances: tuple[dict[str, object], ...],
+    charges: tuple[dict[str, object], ...],
 ) -> dict[str, object]:
-    """BG-22, consistent with the CEN calculation rules.
+    """BG-22, with the declared totals as declared.
 
-    BT-106, BT-109 and BT-110 are derived (BR-CO-10, BR-CO-13, BR-CO-14; the only allowance or charge is the zero
-    stamp duty, so BT-107 / BT-108 are 0). BT-112 is ``ImportoTotaleDocumento`` (row 2.1.1.9) when it equals BT-109 +
-    BT-110 (BR-CO-15), BT-114 is ``Arrotondamento`` (row 2.1.1.10), and BT-115 is ``ImportoPagamento`` (row 2.4.2.6)
-    when it equals BT-112 + BT-114 (BR-CO-16, no paid amount). A declared total that breaks its rule (withholding,
-    social-security funds and document level discounts are not mapped) is reported, and the total derived instead.
+    BT-106 to BT-110 have no FatturaPA element and are derived (BR-CO-10 to BR-CO-14) from the lines, the charges
+    (social-security funds and the zero stamp duty) and the VAT breakdown. BT-112 is ``ImportoTotaleDocumento`` (row
+    2.1.1.9), BT-114 ``Arrotondamento`` (row 2.1.1.10) and BT-115 ``ImportoPagamento`` (row 2.4.2.6, a single
+    ``DettaglioPagamento``); without them, BT-112 follows BR-CO-15 and BT-115 BR-CO-16 (no paid amount). Declared
+    values are kept even when they break those rules (#132 item 22).
     """
     line_total = sum((line.net_amount for line in invoice_lines), _ZERO)
+    allowance_total = sum((t.cast(Decimal, a["amount"]) for a in allowances), _ZERO)
+    charge_total = sum((t.cast(Decimal, c["amount"]) for c in charges if c["amount"] is not None), _ZERO)
+    without_vat = line_total - allowance_total + charge_total
     vat_total = sum((group.tax_amount for group in groups), _ZERO)
-    with_vat = line_total + vat_total
-    declared = cursor.decimal(document, "ImportoTotaleDocumento", "2.1.1.9")
-    if declared is not None and declared != with_vat:
-        cursor.discard(cursor.children(document, "ImportoTotaleDocumento")[0])
+    with_vat = cursor.decimal(document, "ImportoTotaleDocumento", "2.1.1.9")
+    if with_vat is None:
+        with_vat = without_vat + vat_total
     rounding = cursor.decimal(document, "Arrotondamento", "2.1.1.10")
-    due = with_vat + (rounding or _ZERO)
-    if paid.amount_due is not None and paid.amount_due != due:
-        detail = body.find("DatiPagamento/DettaglioPagamento")
-        cursor.discard(None if detail is None else detail.find("ImportoPagamento"))
     return {
         "sum_of_line_net_amounts": line_total,
-        "sum_of_allowances": _ZERO if allowances else None,
-        "sum_of_charges": _ZERO if charges else None,
-        "total_without_vat": line_total,
+        "sum_of_allowances": allowance_total if allowances else None,
+        "sum_of_charges": charge_total if charges else None,
+        "total_without_vat": without_vat,
         "total_vat": vat_total,
         "total_with_vat": with_vat,
         "rounding_amount": rounding,
-        "amount_due": due,
+        "amount_due": with_vat + (rounding or _ZERO) if paid.amount_due is None else paid.amount_due,
     }

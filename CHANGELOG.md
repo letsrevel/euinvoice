@@ -53,20 +53,21 @@ All notable changes to this project are documented here. The format follows
     `Invoice` with `Invoice.it` / `InvoiceLine.it`, following App. 4.1 of the SdI "Regole tecniche fatture europee"
     v2.6 in reverse and the App. 5 code tables (Natura → VAT category and VATEX, TipoDocumento → BT-3,
     ModalitaPagamento → BT-81). The #121 refusal is gone.
-  - The EN part is a valid EN 16931 invoice: written as UBL or CII after `without_extensions()`, every readable
-    test document and official example passes the CEN rules. One BG-23 per VAT category and rate (the per-Natura and
-    EsigibilitaIVA detail stays in `Invoice.it.vat_summaries`); declared summary amounts and totals that break the
-    CEN calculation rules are derived from the lines and reported. BT-24 is `urn:cen.eu:en16931:2017`.
-  - Also mapped: the stamp duty (`DatiBollo` → a zero BG-21 SAE / BOLLO in category Z, a BG-20 95 on TD04,
-    BR-IT-DC-480), negative unit prices (as a negative BT-129 with a positive BT-146), BT-8 432 from EsigibilitaIVA
-    D, BT-10, BT-15, BT-20, BT-60 and BT-61.
-  - Transmission data, the EXT rows outside the v1 extension (withholding, social-security funds, Art73, the
+  - The reader adds no CEN violation of its own: a document whose declared figures agree reads, after
+    `without_extensions()`, as a UBL / CII invoice the CEN rules accept. One BG-23 per VAT category and rate (the
+    per-Natura and EsigibilitaIVA detail stays in `Invoice.it.vat_summaries`). Declared amounts are kept exactly as
+    declared, as the UBL and CII readers do; a document whose figures disagree (e.g. a payment net of withholding)
+    keeps them for `validate()` / `calc.check` to report. BT-24 is `urn:cen.eu:en16931:2017`.
+  - Also mapped: social-security funds (`DatiCassaPrevidenziale` → BG-21, App. 4.1 rows 2.1.1.7.x), the stamp duty
+    (`DatiBollo` → a zero BG-21 SAE / BOLLO in category Z, a BG-20 95 on TD04, BR-IT-DC-480), negative unit prices
+    (as a negative BT-129 with a positive BT-146), BT-8 432 from EsigibilitaIVA D, BT-10, BT-15, BT-20, BT-60 and
+    BT-61.
+  - Transmission data, the EXT rows outside the v1 extension (withholding, Art73, the
     intermediary, …), attachments, line-level document references and every "Mappatura non considerabile" row are
     listed in `ParseResult.unmapped`, never dropped.
   - Values the model cannot hold without rounding or guessing are refused with `ParseError` naming the element:
     `PrezzoTotale` with more than two decimals, the generic Natura N2/N3/N6, a Natura with a rate other than 0,
-    several `ScontoMaggiorazione` on one line, a 0 % line without Natura, a rate with both a split-payment and an
-    ordinary summary. The mapping-policy questions are in [#132](https://github.com/letsrevel/euinvoice/issues/132)
+    several `ScontoMaggiorazione` on one line, rate 0 without Natura, split payment next to ordinary VAT (BR-B-02). The mapping-policy questions are in [#132](https://github.com/letsrevel/euinvoice/issues/132)
     (`needs-human`).
   - New `parse_all()`: one `ParseResult` per invoice. A FatturaPA lotto (several `FatturaElettronicaBody`) gives
     one per body, and `parse()` / `parse_detailed()` refuse it with `UnsupportedDocumentError` naming
