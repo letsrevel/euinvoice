@@ -11,7 +11,7 @@ import typing as t
 
 import pytest
 
-from _fatturapa import CASES, Case
+from _fatturapa import CASES, EXTRA_FAILING, Case
 from euinvoice import __main__ as cli
 from euinvoice import detect, validate
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
@@ -106,3 +106,9 @@ def test_cli_validate_reports_fatturapa_findings(capsys: pytest.CaptureFixture[s
     assert (payload["ok"], [f["rule_id"] for f in payload["findings"]], payload["kosit"]) == (False, ["00422"], None)
     assert cli.main(["validate", "--profile", "en16931", by_name["IT01234567890_FPR01.xml"]]) == 1
     assert "does not support FATTURAPA" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name", list(EXTRA_FAILING))
+def test_extra_failing_documents_pass_the_xsd_and_get_their_code(name: str) -> None:
+    report = validate(EXTRA_FAILING[name].xml())
+    assert {f.rule_id for f in report.findings if f.severity is not Severity.INFORMATION} == {name.split()[0]}

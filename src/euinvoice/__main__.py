@@ -63,7 +63,6 @@ from euinvoice.detection import detect, is_pdf
 from euinvoice.errors import ArtifactsNotAvailableError, EuInvoiceError, PreflightError
 from euinvoice.model.bt_index import path_of
 from euinvoice.model.invoice import Invoice
-from euinvoice.profiles._base import SYNTAXES
 from euinvoice.report import Finding, KositAssessment, Severity, ValidationReport
 from euinvoice.syntax import Syntax
 from euinvoice.validation import artifacts, validate
@@ -273,7 +272,7 @@ def _parser() -> argparse.ArgumentParser:
 
     convert = commands.add_parser("convert", help="convert an invoice to UBL or CII", epilog=_EPILOG)
     convert.add_argument("file", metavar="FILE", help="the invoice (XML or Factur-X / ZUGFeRD PDF); - reads stdin")
-    targets = [str(s) for s in Syntax if s in SYNTAXES]  # writing FatturaPA is #119 / #122
+    targets = [str(s) for s in Syntax if s in profiles.SYNTAXES]  # writing FatturaPA is #119 / #122
     convert.add_argument("--to", required=True, choices=targets, help="target syntax")
     convert.add_argument("--profile", type=_profile_arg, metavar="ID", help=profile_help)
     convert.add_argument("-o", "--output", metavar="OUT", help="write here instead of stdout")

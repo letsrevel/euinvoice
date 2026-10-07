@@ -69,7 +69,8 @@ def test_an_fpa12_document_gets_the_same_checks_after_a_note(monkeypatch: pytest
     note, *rest = validate(fpa12.xml()).findings
 
     assert (note.rule_id, note.severity, note.source) == (FPA12_NOTE_RULE_ID, Severity.INFORMATION, EUINVOICE_SOURCE)
-    assert "00398 and 00399" in note.message
+    assert "IPA registry checks" in note.message
+    assert "00399" not in note.message  # 00399 is the IPA check on FPR12, not an FPA12 one
     assert [f.rule_id for f in rest] == ["00421"]
 
 
@@ -77,6 +78,7 @@ def test_an_fpa12_document_gets_the_same_checks_after_a_note(monkeypatch: pytest
 def test_no_profile_supports_fatturapa(monkeypatch: pytest.MonkeyPatch, profile: profiles.Profile) -> None:
     stub = XsdStub(monkeypatch)
 
-    with pytest.raises(UnsupportedDocumentError, match=f"profile '{profile.id}' does not support FATTURAPA"):
+    match = f"profile '{profile.id}' does not support FATTURAPA documents; FatturaPA is validated by syntax, so omit"
+    with pytest.raises(UnsupportedDocumentError, match=match):
         validate(Doc().xml(), profile)
     assert stub.calls == 0

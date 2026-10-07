@@ -6,7 +6,7 @@ Example:
     True
 """
 
-from euinvoice.profiles._base import Preflight, Profile, no_preflight
+from euinvoice.profiles._base import SYNTAXES, Preflight, Profile, no_preflight
 from euinvoice.profiles.en16931 import EN16931
 from euinvoice.profiles.facturx import (
     FACTURX_BASIC,
@@ -30,6 +30,7 @@ __all__ = [
     "FACTURX_MINIMUM",
     "FACTURX_XRECHNUNG",
     "PEPPOL",
+    "SYNTAXES",
     "XRECHNUNG",
     "XRECHNUNG_CVD",
     "XRECHNUNG_EXTENSION",

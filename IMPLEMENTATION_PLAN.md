@@ -112,7 +112,8 @@ and a new CIUS is a new profile. Neither may require model rewrites.
     00320–00327); `CodiceDestinatario` not existing or not active in SdI (00311, 00312); a duplicate of
     an invoice sent earlier (00404); invalidated declaration of intent (00477); a `PECDestinatario` that
     is one of SdI's own mailboxes (00330: the set of SdI mailboxes is SdI's data, Allegato A only shows
-    their form `sdixx@pec.fatturapa.it`);
+    their form `sdixx@pec.fatturapa.it`); the IPA registry checks 00398 (office code) and 00399 (an FPR12 sent to
+    a buyer registered in IPA), which are in the SdI "Elenco dei controlli" v2.0 and not in Allegato A;
   - **file name** (00001, 00002): `validate()` receives bytes, not a file name, and 00002 needs SdI
     state. The #119 file-name helper checks the 00001 syntax separately;
   - **signature** (00100–00105, 00107): v1 is unsigned (#115 decision 1), and certificate checks need

@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from _fatturapa import CASES, Body, Case, Doc, body, line, summary
+from _fatturapa import CASES, EXTRA_FAILING, Body, Case, Doc, body, line, summary
 from euinvoice import _xml
 from euinvoice.report import Severity
 from euinvoice.validation import sdi
@@ -130,3 +130,8 @@ def test_a_document_that_skipped_the_xsd_is_refused_not_misjudged() -> None:
 
     with pytest.raises(ValueError, match=r"has no FatturaElettronicaHeader/DatiTrasmissione; sdi\.check needs"):
         sdi.check(root)
+
+
+@pytest.mark.parametrize("name", list(EXTRA_FAILING))
+def test_other_branches_of_a_check_fail_too(name: str) -> None:
+    assert codes(EXTRA_FAILING[name]) == {name.split()[0]}

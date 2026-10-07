@@ -393,3 +393,27 @@ CASES: t.Final[dict[str, Case]] = {
     code: dataclasses.replace(c, codes=c.codes or frozenset({code})) for code, c in _RAW.items()
 }
 """Per SdI code: documents that pass its check (and every other), one that fails it, and the codes that one raises."""
+
+EXTRA_FAILING: t.Final[dict[str, Doc]] = {
+    "00473 TD29 with a non-IT cedente": Doc(bodies=body(tipo="TD29"), seller=SELLER_DE, buyer=BUYER_IT),
+    "00427 FPA12 with a 7-character CodiceDestinatario": Doc(version="FPA12", format="FPA12", recipient="ABC1234"),
+    "00423 amount adjustment": Doc(
+        bodies=body(
+            lines=line(total="91.00", adjustments=adjustment(amount="5.00")),
+            summaries=summary("22.00", "91.00", "20.02"),
+        )
+    ),
+    "00423 percentage adjustment": Doc(
+        bodies=body(
+            lines=line(total="89.00", adjustments=adjustment(percent="10.00")),
+            summaries=summary("22.00", "89.00", "19.58"),
+        )
+    ),
+    "00445 cassa Natura": Doc(
+        bodies=body(
+            cassa=cassa("0.00", natura="N2"), summaries=summary() + summary("0.00", "4.00", "0.00", natura="N2")
+        )
+    ),
+}
+"""Failing documents for branches inside a check's condition that the failing document of :data:`CASES` does not
+reach. Each raises exactly the code its name starts with."""

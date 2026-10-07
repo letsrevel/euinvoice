@@ -156,6 +156,10 @@ def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Sy
         (only,) = profile.syntaxes
         return only
     target = Syntax(syntax)
+    if target is Syntax.FATTURAPA:
+        raise UnsupportedDocumentError(
+            "writing FatturaPA is not implemented yet (https://github.com/letsrevel/euinvoice/issues/119)"
+        )
     if target not in profile.syntaxes:
         raise UnsupportedDocumentError(
             f"profile {profile.id!r} does not support {target.upper()}; it supports "

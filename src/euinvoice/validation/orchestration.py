@@ -133,10 +133,12 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         profile, note = _resolve(detection)
         findings.extend(note)
     elif syntax not in profile.syntaxes:
-        raise UnsupportedDocumentError(
-            f"profile {profile.id!r} does not support {syntax.upper()} documents; it supports "
-            f"{', '.join(sorted(profile.syntaxes))}"
+        hint = (
+            "; FatturaPA is validated by syntax, so omit the profile"
+            if syntax is Syntax.FATTURAPA
+            else f"; it supports {', '.join(sorted(profile.syntaxes))}"
         )
+        raise UnsupportedDocumentError(f"profile {profile.id!r} does not support {syntax.upper()} documents{hint}")
     if FACTURX_RULE_SET in profile.rule_sets:
         raise _facturx_not_pinned(f"profile {profile.id!r} is a Factur-X / ZUGFeRD level")
     rule_sets = tuple(_RULE_SETS[name, syntax] for name in profile.rule_sets)
@@ -153,8 +155,9 @@ def _fatturapa(root: etree._Element, detection: Detection) -> ValidationReport:
 
     FPA12 gets the same checks as FPR12: Allegato A 1.9.1, Appendix 1 lists the checks of the "fattura ordinaria",
     which both formats are (00427 names both), and v1 targets FPR12 (ADR 0001). The note covers what SdI checks
-    only for public-administration recipients: the IPA registry checks of the SdI "Elenco dei controlli" v2.0
-    (00398, 00399), which are registry checks and not part of Allegato A.
+    only for public-administration recipients: the IPA registry checks of the SdI "Elenco dei controlli" v2.0, such as
+    00398 (the IPA office code), which are registry checks and not part of Allegato A. (00399, the IPA check on an
+    FPR12 sent to a public administration, is a registry check too; see :mod:`euinvoice.validation.sdi`.)
     """
     findings: list[Finding] = []
     if detection.fatturapa_version == "FPA12":
@@ -166,8 +169,8 @@ def _fatturapa(root: etree._Element, detection: Detection) -> ValidationReport:
                 message=(
                     "FPA12 (public administration) document: validated against the FatturaPA 1.2.3 XSD and the "
                     "offline SdI checks of Allegato A 1.9.1, Appendix 1, which apply to FPA12 and FPR12 alike. Checks "
-                    "SdI runs only for public-administration recipients (the IPA registry checks 00398 and 00399 of "
-                    "the SdI 'Elenco dei controlli') were not run."
+                    "SdI runs only for public-administration recipients (the IPA registry checks of "
+                    "the SdI 'Elenco dei controlli', such as 00398 on the IPA office code) were not run."
                 ),
                 source=EUINVOICE_SOURCE,
             )

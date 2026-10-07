@@ -28,7 +28,9 @@ Not implemented, with the reason:
 
 * tax register or SdI state (#115 decision 2): 00300-00306 and 00320-00327 (identifiers and VAT groups checked
   in the Anagrafe Tributaria); 00311, 00312 (``CodiceDestinatario`` existing / active in SdI); 00330 (a
-  ``PECDestinatario`` that is one of SdI's own mailboxes: the set is SdI's data); 00403 (the invoice date after
+  ``PECDestinatario`` that is one of SdI's own mailboxes: the set is SdI's data); 00398 and 00399 (IPA registry
+  checks for public-administration recipients, from the SdI "Elenco dei controlli" v2.0, not in Allegato A: 00398
+  the IPA office code, 00399 an FPR12 sent to a buyer registered in IPA); 00403 (the invoice date after
   the date SdI receives the file: the receipt date is SdI's); 00404 (duplicate of an invoice sent earlier);
   00477 (invalidated declaration of intent).
 * the transmitted file, not the XML ``validate()`` receives: 00001, 00002 (file name; 00002 also needs SdI
@@ -235,8 +237,8 @@ def _header(root: etree._Element) -> t.Iterator[Finding]:
         yield _finding("00417", cessionario, "The cessionario/committente has neither.")
     seller = _vat_id(root.find(_CEDENTE))
     if seller is not None and buyer is not None and seller[0] != "IT" and buyer[0] != "IT":
-        header = transmission.getparent()
-        yield _finding("00476", root if header is None else header, f"IdPaese {seller[0]} and {buyer[0]}.")
+        header = _child(root, "FatturaElettronicaHeader")
+        yield _finding("00476", header, f"IdPaese {seller[0]} and {buyer[0]}.")
 
 
 def _same_party(root: etree._Element) -> bool | None:
@@ -247,14 +249,16 @@ def _same_party(root: etree._Element) -> bool | None:
     00326: a group ``IdFiscaleIVA`` comes with the member's ``CodiceFiscale``). Allegato A says "stesso soggetto"
     without naming the identifier it compares (#130).
     """
-    seller_party, buyer_party = root.find(_CEDENTE), root.find(_CESSIONARIO)
+    seller_party, buyer_party = _child(root, _CEDENTE), _child(root, _CESSIONARIO)
     seller, buyer = _vat_id(seller_party), _vat_id(buyer_party)
-    if seller is None or buyer is None or seller_party is None or buyer_party is None:
+    if seller is None or buyer is None:
         return None
     if seller != buyer:
         return False
-    codes = (_text(seller_party, "CodiceFiscale"), _text(buyer_party, "CodiceFiscale"))
-    return None if None not in codes and codes[0] != codes[1] else True
+    seller_code, buyer_code = _text(seller_party, "CodiceFiscale"), _text(buyer_party, "CodiceFiscale")
+    if seller_code is not None and buyer_code is not None and seller_code != buyer_code:
+        return None  # one VAT group, two members
+    return True
 
 
 def _parties(root: etree._Element, body: etree._Element) -> t.Iterator[Finding]:
@@ -293,7 +297,7 @@ def _lines(body: etree._Element) -> t.Iterator[Finding]:
         if rate == 0 and natura is None:
             yield _finding("00400", line, "AliquotaIVA 0 without Natura.")
         if rate != 0 and natura is not None and tipo != _TD_REVERSE_CHARGE_INTEGRATION:
-            yield _finding("00401", line, f"AliquotaIVA {rate} with Natura {natura} (TipoDocumento {tipo}).")
+            yield _finding("00401", line, f"AliquotaIVA {rate:f} with Natura {natura} (TipoDocumento {tipo}).")
         if rate == 0 and tipo == _TD_SPLAFONAMENTO:
             yield _finding("00474", line, f"TipoDocumento {tipo} with AliquotaIVA 0.")
         if _text(line, "Ritenuta") == "SI" and not withheld and not _withholding(body):
@@ -335,7 +339,7 @@ def _line_total(line: etree._Element) -> t.Iterator[Finding]:
         return
     expected = price * quantity
     if abs(total - expected) > _CENT:
-        yield _finding("00423", line, f"PrezzoTotale {total}, computed {expected} (tolerance ±0.01).")
+        yield _finding("00423", line, f"PrezzoTotale {total:f}, computed {expected:f} (tolerance ±0.01).")
 
 
 def _cassa(body: etree._Element) -> t.Iterator[Finding]:
@@ -346,7 +350,7 @@ def _cassa(body: etree._Element) -> t.Iterator[Finding]:
         if rate == 0 and natura is None:
             yield _finding("00413", cassa, "AliquotaIVA 0 without Natura.")
         if rate != 0 and natura is not None:
-            yield _finding("00414", cassa, f"AliquotaIVA {rate} with Natura {natura}.")
+            yield _finding("00414", cassa, f"AliquotaIVA {rate:f} with Natura {natura}.")
         if _text(cassa, "Ritenuta") == "SI" and not withheld and not _withholding(body):
             withheld = True
             yield _finding("00415", cassa, "Ritenuta SI, and the body has no DatiRitenuta.")
@@ -361,7 +365,7 @@ def _summaries(body: etree._Element) -> t.Iterator[Finding]:
         if rate == 0 and natura is None:
             yield _finding("00429", summary, "AliquotaIVA 0 without Natura.")
         if rate != 0 and natura is not None and tipo != _TD_REVERSE_CHARGE_INTEGRATION:
-            yield _finding("00430", summary, f"AliquotaIVA {rate} with Natura {natura} (TipoDocumento {tipo}).")
+            yield _finding("00430", summary, f"AliquotaIVA {rate:f} with Natura {natura} (TipoDocumento {tipo}).")
         if natura is not None and natura.startswith("N6") and _text(summary, "EsigibilitaIVA") == "S":
             yield _finding("00420", summary, f"Natura {natura} with EsigibilitaIVA S.")
         yield from _tax(summary, rate)
@@ -378,7 +382,7 @@ def _tax(summary: etree._Element, rate: Decimal) -> t.Iterator[Finding]:
     # applied to the amounts as written (in the document's Divisa).
     expected = (rate * taxable / _HUNDRED).quantize(_CENT, rounding=ROUND_HALF_UP)
     if abs(tax - expected) > _CENT:
-        yield _finding("00421", summary, f"Imposta {tax}, computed {expected} (tolerance ±0.01).")
+        yield _finding("00421", summary, f"Imposta {tax:f}, computed {expected:f} (tolerance ±0.01).")
 
 
 def _coverage(
@@ -396,11 +400,11 @@ def _coverage(
         rate, natura = _amount(source, "AliquotaIVA"), _text(source, "Natura")
         if rate not in rates:
             missing[rate] = None
-            yield _finding("00443", source, f"AliquotaIVA {rate} has no DatiRiepilogo.")
+            yield _finding("00443", source, f"AliquotaIVA {rate:f} has no DatiRiepilogo.")
         if natura is not None and natura not in naturas:
             yield _finding("00444", source, f"Natura {natura} has no DatiRiepilogo.")
     for rate in missing:
-        yield _finding("00419", _child(body, "DatiBeniServizi"), f"No DatiRiepilogo for AliquotaIVA {rate}.")
+        yield _finding("00419", _child(body, "DatiBeniServizi"), f"No DatiRiepilogo for AliquotaIVA {rate:f}.")
 
 
 def _taxable(summaries: list[etree._Element], sources: list[etree._Element]) -> t.Iterator[Finding]:
@@ -423,7 +427,7 @@ def _taxable(summaries: list[etree._Element], sources: list[etree._Element]) -> 
         expected[rate] += _decimal(summary, "Arrotondamento") or 0
     for rate, total in declared.items():
         if abs(total - expected[rate]) > _EURO:
-            detail = f"AliquotaIVA {rate}: ImponibileImporto {total}, computed {expected[rate]} (tolerance ±1)."
+            detail = f"AliquotaIVA {rate:f}: ImponibileImporto {total:f}, computed {expected[rate]:f} (tolerance ±1)."
             yield _finding("00422", first[rate], detail)
 
 
@@ -445,26 +449,42 @@ def _document(body: etree._Element) -> t.Iterator[Finding]:
                 yield _finding("00445", natura, f"Natura {natura.text}.")
 
 
+class _Key(t.NamedTuple):
+    """What 00409 compares of one body."""
+
+    body: etree._Element
+    number: str
+    date: tuple[int, int, int]
+    art73: bool
+    credit_note: bool
+
+
 def _duplicates(bodies: list[etree._Element]) -> t.Iterator[Finding]:
     """00409: two bodies of one file (lotto) with the same Numero and the same year of Data.
 
     All bodies share the header, so the cedente (and, for TD16-TD20, TD22, TD23, TD28, TD29, the cessionario whose
-    numbering Allegato A says counts instead) is the same for every pair. With Art73 SI on either body the full Data
+    numbering Allegato A says counts instead) is the same for every pair. A lotto mixing, say, a TD01 with a TD16
+    body compares documents whose uniqueness keys belong to different parties; such a pair is still reported, as the
+    Elenco dei controlli v2.0 pseudo-code does. With Art73 SI on either body the full Data
     is compared instead of its year. Allegato A admits "due documenti aventi stesso cedente/prestatore, stesso anno
     e stesso numero solo qualora uno dei due sia di tipo TD04", so a pair is reported only when neither is TD04;
     whether two TD04 with the same number are duplicates is not settled by the prose (#130).
     """
-    seen: list[tuple[etree._Element, str, tuple[int, int, int], bool, bool]] = []
+    seen: list[_Key] = []
     for body in bodies:
         general = _child(body, _DGD)
-        date = _date(_text(general, "Data") or "")
-        number = _text(general, "Numero") or ""
-        art73 = _text(general, "Art73") == "SI"
-        credit = _text(general, "TipoDocumento") == _TD_CREDIT_NOTE
-        for other, other_number, other_date, other_art73, other_credit in seen:
-            same_date = other_date == date if art73 or other_art73 else other_date[0] == date[0]
-            if number == other_number and same_date and not credit and not other_credit:
-                where = _xml.getpath(other)
-                yield _finding("00409", general, f"Numero {number!r} of {_text(general, 'Data')} repeats {where}.")
+        key = _Key(
+            body=body,
+            number=_text(general, "Numero") or "",
+            date=_date(_text(general, "Data") or ""),
+            art73=_text(general, "Art73") == "SI",
+            credit_note=_text(general, "TipoDocumento") == _TD_CREDIT_NOTE,
+        )
+        for other in seen:
+            full_date = key.art73 or other.art73
+            same_date = other.date == key.date if full_date else other.date[0] == key.date[0]
+            if key.number == other.number and same_date and not key.credit_note and not other.credit_note:
+                where = _xml.getpath(other.body)
+                yield _finding("00409", general, f"Numero {key.number!r} of {_text(general, 'Data')} repeats {where}.")
                 break
-        seen.append((body, number, date, art73, credit))
+        seen.append(key)

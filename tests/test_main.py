@@ -528,3 +528,10 @@ def test_a_plain_text_stdout_is_left_as_is(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(sys, "stdout", out)
     assert cli.main(["validate", _write(tmp_path, "a.xml", b"<x/>")]) == 0
     assert out.getvalue() == "ok: 0 fatal/error, 0 warning/information\n"
+
+
+def test_info_on_fatturapa_says_the_reader_is_not_there_yet(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    fatturapa = f'<p:FatturaElettronica xmlns:p="{_xml.FATTURAPA}" versione="FPR12"/>'.encode()
+
+    assert cli.main(["info", _write(tmp_path, "a.xml", fatturapa)]) == 1
+    assert capsys.readouterr().err.startswith("error: reading FatturaPA is not implemented yet")
