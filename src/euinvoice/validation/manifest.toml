@@ -1,16 +1,18 @@
 # Pinned official validation artifacts and upstream example corpora (IMPLEMENTATION_PLAN.md D7, §3).
 #
-# Nothing listed here is ever committed. `python -m euinvoice artifacts fetch` downloads each archive,
-# checks its sha256, and extracts the matching members into
+# Nothing listed here is ever committed. `python -m euinvoice artifacts fetch` downloads each source,
+# checks its sha256, and extracts the matching members of a zip archive (or stores a single file) into
 # `$EUINVOICE_ARTIFACTS_DIR/<source>/<version>/` (default `~/.cache/euinvoice`).
 #
 # Fields per source:
 #   version           directory name under the cache; bump it together with url + sha256
-#   url               https download of a zip archive
-#   sha256            of the archive bytes, computed from a real download
+#   url               https download of a zip archive, or of a single file (see `file`)
+#   sha256            of the downloaded bytes, computed from a real download
 #   license           licence of the upstream content (we only fetch, never redistribute)
 #   members           fnmatch globs over the archive member paths after `strip_components`;
 #                     `*` also matches `/`, so "rules/sch/*" includes subdirectories
+#   file              instead of `members`: the download is one file, stored under this name in the
+#                     version directory (no strip_components / precompile)
 #   strip_components  leading path components to drop (GitHub archives wrap everything in one dir)
 #   precompile        `.sch` files (relative to the extracted dir) that ship without compiled XSLT;
 #                     they are compiled with SchXslt (source `schxslt`) into a sibling `.xslt`
@@ -125,3 +127,26 @@ strip_components = 1
 note = """SchXslt 1.10.1 (2024-10-18), the newest 1.x release, XSLT-only distribution. The project moved \
 from GitHub to Codeberg (github.com/schxslt/schxslt is gone; the Codeberg repo is archived in favour \
 of SchXslt2). 2.0/pipeline-for-svrl.xsl compiles queryBinding="xslt2" Schematron to XSLT (README)."""
+
+[sources.fatturapa-xsd]
+version = "1.2.3"
+# Agenzia delle Entrate's copy, linked from its "Specifiche tecniche versione 1.9.1" page
+# (agenziaentrate.gov.it/portale/specifiche-tecniche-versione-1.9.1-%C2%A0-utilizzabili-dal-15-maggio-2026-).
+# A plain document URL with no session token; served as Schema_VFPR12_v1.2.3.xsd, no redirect.
+url = "https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3"
+sha256 = "152944f6eef9f5d69ef6e955ee173b32142b00a8c1c5222fc97dfab5910e8a8c"
+license = "none stated in the file; fatturapa.gov.it reserves all rights (fetch only, never redistribute; maintainer decision on #115)"
+file = "Schema_VFPR12_v1.2.3.xsd"
+note = """FatturaPA XML Schema 1.2.3 (namespace http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2, \
+root FatturaElettronica), in force since 2025-04-01 and part of Allegato A, Specifiche tecniche 1.9.1. One schema \
+serves FPA12 and FPR12. Byte-identical to fatturapa.gov.it/export/documenti/fatturapa/v1.4/Schema_VFPR12_v1.2.3.xsd \
+and Schema_VFPA12_V1.2.3.xsd (verified 2026-10-07). It imports xmldsig from \
+http://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd; validation/xsd.py redirects that to \
+the ubl-2_1 copy xsd/common/UBL-xmldsig-core-schema-2.1.xsd, which differs from the W3C file only by a leading \
+comment and the DOCTYPE's PUBLIC/SYSTEM identifiers (diffed 2026-10-07), so no W3C file is pinned."""
+# ponytail: the fatturapa.gov.it example invoices (export/documenti/fatturapa/v1.2/IT01234567890_FPA01..03.xml,
+# _FPR01..03.xml) are NOT pinned as their own source: they are six separate files and a source holds one
+# download. All six ship in zugferd-corpus under fatturaPA/official/valid/ in other revisions (only FPA02 is
+# byte-identical to the current download), and tests/conformance/test_xsd_fatturapa.py uses those. FPR02 is
+# known-invalid against 1.2.3, in both revisions: ContattiTrasmittente follows PECDestinatario, which the
+# DatiTrasmissione sequence does not allow. Add a multi-file source if the current revisions are needed.

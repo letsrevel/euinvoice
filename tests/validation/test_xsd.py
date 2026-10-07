@@ -166,9 +166,9 @@ def spy_on_schema_loads(monkeypatch: pytest.MonkeyPatch) -> list[pathlib.Path]:
     calls: list[pathlib.Path] = []
     real = _xml.load_trusted_schema
 
-    def spy(path: pathlib.Path, *, root: pathlib.Path | None = None) -> t.Any:
+    def spy(path: pathlib.Path, **kw: t.Any) -> t.Any:
         calls.append(path)
-        return real(path, root=root)
+        return real(path, **kw)
 
     monkeypatch.setattr(_xml, "load_trusted_schema", spy)
     return calls
@@ -303,3 +303,56 @@ def test_libxml2_warnings_stay_warnings_and_everything_else_is_fatal(level_name:
     finding = xsd._finding(FakeLogEntry(7, "/*/cbc:ID", "boom", level_name), "xsd:ubl-2_1")
 
     assert finding.severity is severity
+
+
+# Synthetic stand-ins for FatturaPA 1.2.3 and the UBL 2.1 xmldsig copy: like the real schema, the FatturaPA one
+# imports xmldsig by its absolute W3C http URL.
+DSIG = "http://www.w3.org/2000/09/xmldsig#"
+FATTURAPA_NS = "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2"
+DSIG_XSD = f"""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="{DSIG}"
+  elementFormDefault="qualified"><xs:element name="Signature" type="xs:string"/></xs:schema>"""
+FATTURAPA_XSD = f"""<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ds="{DSIG}"
+  targetNamespace="{FATTURAPA_NS}">
+  <xs:import namespace="{DSIG}" schemaLocation="{xsd.XMLDSIG_W3C_LOCATION}"/>
+  <xs:element name="FatturaElettronica"><xs:complexType><xs:sequence>
+    <xs:element ref="ds:Signature" minOccurs="0"/>
+  </xs:sequence></xs:complexType></xs:element>
+</xs:schema>"""
+
+
+def warm(root: pathlib.Path, name: artifacts.SourceName, files: t.Mapping[str, str]) -> None:
+    """Write a fake cache entry for ``name`` with the current recipe's marker."""
+    sources = artifacts.load_manifest()
+    target = root / name / sources[name].version
+    for rel, text in files.items():
+        (target / rel).parent.mkdir(parents=True, exist_ok=True)
+        (target / rel).write_text(text)
+    (target / artifacts.MARKER).write_text(artifacts._fingerprint(sources[name], sources))
+
+
+@pytest.fixture
+def fatturapa_cache(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
+    warm(tmp_path, "fatturapa-xsd", {"Schema_VFPR12_v1.2.3.xsd": FATTURAPA_XSD})
+    monkeypatch.setenv(artifacts.ENV_VAR, str(tmp_path))
+    return tmp_path
+
+
+def test_fatturapa_schema_loads_xmldsig_from_the_pinned_ubl_copy(fatturapa_cache: pathlib.Path) -> None:
+    warm(fatturapa_cache, "ubl-2_1", {"xsd/common/UBL-xmldsig-core-schema-2.1.xsd": DSIG_XSD})
+
+    compiled = xsd._load(xsd._FATTURAPA)
+
+    signed = f'<p:FatturaElettronica xmlns:p="{FATTURAPA_NS}"><ds:Signature xmlns:ds="{DSIG}"/></p:FatturaElettronica>'
+    assert compiled.schema.validate(_xml.parse(signed.encode()))
+
+
+def test_fatturapa_schema_needs_the_ubl_source_for_xmldsig(fatturapa_cache: pathlib.Path) -> None:
+    with pytest.raises(ArtifactsNotAvailableError, match="'ubl-2_1'"):
+        xsd._load(xsd._FATTURAPA)
+
+
+@pytest.mark.usefixtures("fatturapa_cache")
+def test_fatturapa_is_not_selected_by_validate_yet() -> None:
+    # Wiring FatturaPA into validate() is #121.
+    with pytest.raises(UnsupportedDocumentError):
+        xsd.validate(_xml.parse(f'<p:FatturaElettronica xmlns:p="{FATTURAPA_NS}"/>'.encode()))

@@ -4,7 +4,7 @@
 Run `EUINVOICE_REGEN_DOCS=1 uv run pytest -q tests/test_docs.py` to regenerate. -->
 
 The official validation artifacts and example corpora are third-party works under their own licences. euinvoice
-never bundles or redistributes them: `python -m euinvoice artifacts fetch` downloads each archive from its
+never bundles or redistributes them: `python -m euinvoice artifacts fetch` downloads each archive or file from its
 upstream URL into your cache and checks its sha256 (`src/euinvoice/validation/manifest.toml`). Using them is
 subject to the licence of each source.
 
@@ -23,6 +23,7 @@ manifest for the upstream repository.
 | `ubl-2_1` | 2.1 | OASIS IPR Policy (Copyright (c) OASIS Open 2013) | <https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip> |
 | `zugferd-corpus` | d891458e9822 | Apache-2.0 | <https://github.com/ZUGFeRD/corpus/archive/d891458e9822e34271a5438497bf924e89955979.zip> |
 | `schxslt` | 1.10.1 | MIT | <https://codeberg.org/SchXslt/schxslt/releases/download/v1.10.1/schxslt-1.10.1-xslt-only.zip> |
+| `fatturapa-xsd` | 1.2.3 | none stated in the file; fatturapa.gov.it reserves all rights (fetch only, never redistribute; maintainer decision on #115) | <https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3> |
 
 euinvoice itself is MIT-licensed. Its runtime dependencies are `pydantic` and `lxml`, plus `saxonche`
 (SaxonC-HE, MPL-2.0) with the `[validate]` extra and `pypdf` with the `[pdf]` extra.

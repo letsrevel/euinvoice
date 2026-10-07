@@ -23,6 +23,10 @@ XR_SCH = f"{GH}/itplr-kosit/xrechnung-schematron/releases?per_page=100"
 SCHXSLT = f"{CB}/SchXslt/schxslt/releases?limit=50"
 
 SCH_BYTES = b"<schema>pinned peppol rules</schema>"
+FATTURAPA_AE = "https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3"
+FATTURAPA_SDI = "https://www.fatturapa.gov.it/export/documenti/fatturapa/v1.4/Schema_VFPR12_v1.2.3.xsd"
+XSD_BYTES = b"<xs:schema>pinned fatturapa</xs:schema>"
+REAL_FATTURAPA_CHECKS = cu.CHECKS["fatturapa-xsd"]  # before the autouse fixture swaps the hashes
 
 
 def rel(tag: str, published: str, *, prerelease: bool = False, draft: bool = False) -> dict[str, t.Any]:
@@ -44,19 +48,22 @@ CURRENT: dict[str, t.Any] = {
     f"{GH}/ZUGFeRD/corpus": {"default_branch": "master"},
     f"{GH}/ZUGFeRD/corpus/commits/master": {"sha": "d891458e9822e34271a5438497bf924e89955979"},
     SCHXSLT: [rel("v1.10.1", "2024-10-18T16:51:57+02:00"), rel("v1.10", "2024-07-24T20:01:57+02:00")],
+    FATTURAPA_AE: XSD_BYTES,
+    FATTURAPA_SDI: XSD_BYTES,
 }
 
 
 @pytest.fixture(autouse=True)
 def _pinned_peppol_hash(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point the Peppol sha256 check at the synthetic SCH_BYTES instead of the real published file."""
-    checks = tuple(
-        cu.Check("published-sha256", url=c.url, sha256=hashlib.sha256(SCH_BYTES).hexdigest())
-        if c.strategy == "published-sha256"
-        else c
-        for c in cu.CHECKS["peppol-bis"]
-    )
-    monkeypatch.setitem(cu.CHECKS, "peppol-bis", checks)
+    """Point the published-sha256 checks at synthetic bytes instead of the real published files."""
+    for name, payload in (("peppol-bis", SCH_BYTES), ("fatturapa-xsd", XSD_BYTES)):
+        checks = tuple(
+            cu.Check("published-sha256", url=c.url, sha256=hashlib.sha256(payload).hexdigest())
+            if c.strategy == "published-sha256"
+            else c
+            for c in cu.CHECKS[name]
+        )
+        monkeypatch.setitem(cu.CHECKS, name, checks)
 
 
 def fake(responses: dict[str, t.Any]) -> cu.Get:
@@ -83,6 +90,20 @@ def test_peppol_hash_is_pinned_next_to_the_manifest_version() -> None:
     assert load_manifest()["peppol-bis"].version == "3.0.21"
     (check,) = (c for c in cu.CHECKS["peppol-bis"] if c.strategy == "published-sha256")
     assert check.url == PEPPOL_SCH
+
+
+def test_fatturapa_checks_expect_the_pinned_sha256_at_the_pinned_url_and_its_mirror() -> None:
+    pin = load_manifest()["fatturapa-xsd"]
+    assert [(c.strategy, c.url, c.sha256) for c in REAL_FATTURAPA_CHECKS] == [
+        ("published-sha256", pin.url, pin.sha256),
+        ("published-sha256", FATTURAPA_SDI, pin.sha256),
+    ]
+
+
+def test_changed_fatturapa_mirror_is_drift(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out = run({**CURRENT, FATTURAPA_SDI: XSD_BYTES + b" "}, capsys)
+    assert code == 1
+    assert f"{FATTURAPA_SDI} changed" in out
 
 
 def test_up_to_date_exits_0(capsys: pytest.CaptureFixture[str]) -> None:

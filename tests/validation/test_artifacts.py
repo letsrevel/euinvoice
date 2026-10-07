@@ -483,7 +483,7 @@ def test_redirect_to_https_is_followed() -> None:
 def test_packaged_manifest_is_well_formed() -> None:
     sources = artifacts.load_manifest()
     for src in sources.values():
-        assert src.members, src.name
+        assert src.members or src.file, src.name
         assert src.license, src.name
         assert src.note, src.name
     assert artifacts.SCHXSLT_SOURCE in sources

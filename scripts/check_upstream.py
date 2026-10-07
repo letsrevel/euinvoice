@@ -108,6 +108,22 @@ CHECKS: dict[str, tuple[Check, ...]] = {
     "schxslt": _releases("SchXslt/schxslt", "v", api=CODEBERG_API),
     # OASIS UBL 2.1 OS is a frozen standard; there is nothing newer to pin under that name.
     "ubl-2_1": (Check("static"),),
+    # The pin is Agenzia Entrate's copy; the SdI portal publishes the same schema under a versioned path. Both
+    # must keep serving the pinned bytes (fatturapa.gov.it answers 200 without a redirect, verified 2026-10-07).
+    # ponytail: a new FatturaPA version gets a new file name, which neither check sees; the AE "Specifiche
+    # tecniche" page would have to be scraped for that. Bump together with manifest.toml.
+    "fatturapa-xsd": (
+        Check(
+            "published-sha256",
+            url="https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3",
+            sha256="152944f6eef9f5d69ef6e955ee173b32142b00a8c1c5222fc97dfab5910e8a8c",
+        ),
+        Check(
+            "published-sha256",
+            url="https://www.fatturapa.gov.it/export/documenti/fatturapa/v1.4/Schema_VFPR12_v1.2.3.xsd",
+            sha256="152944f6eef9f5d69ef6e955ee173b32142b00a8c1c5222fc97dfab5910e8a8c",
+        ),
+    ),
 }
 
 _VERSION = re.compile(r"v?(\d+(?:\.\d+)*)")
