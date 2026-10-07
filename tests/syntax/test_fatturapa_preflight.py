@@ -2,7 +2,6 @@
 
 import datetime
 import typing as t
-from decimal import Decimal
 
 import pytest
 
@@ -22,7 +21,6 @@ from euinvoice.syntax.fatturapa._write_rules import (
     EXTENSION,
     ISSUER,
     NATURA,
-    NOT_WRITTEN,
     PAYMENT,
     PREFLIGHT_SOURCE,
     REQUIRED,
@@ -34,11 +32,12 @@ def _found(**changes: t.Any) -> list[tuple[str, str | None, Severity]]:
 
 
 @pytest.mark.parametrize("name", list(samples()))
-def test_samples_have_no_blocking_finding(name: str) -> None:
-    findings = preflight(samples()[name].invoice)
+def test_samples_have_no_finding(name: str) -> None:
+    assert preflight(samples()[name].invoice) == ()
 
-    assert all(f.severity is Severity.WARNING for f in findings)
-    assert all(f.source == PREFLIGHT_SOURCE for f in findings)
+
+def test_findings_come_from_the_preflight() -> None:
+    assert {f.source for f in preflight(it_invoice(it=italian(document_type=TipoDocumento.TD17)))} == {PREFLIGHT_SOURCE}
 
 
 def test_missing_extension_is_the_only_finding() -> None:
@@ -135,23 +134,3 @@ def test_modalita_pagamento_needs_a_source(instructions: PaymentInstructions | N
 
     assert [(f.rule_id, f.location) for f in findings] == [(PAYMENT, "it.payment.method")]
     assert found in findings[0].message
-
-
-def test_terms_folded_into_other_elements_are_warnings() -> None:
-    found = _found(payment_terms="30 days", lines=(it_line(category="E", rate="0", nature=Natura.N4),))
-
-    assert found == [
-        (NOT_WRITTEN, "payment_terms", Severity.WARNING),
-        (NOT_WRITTEN, "vat_breakdown[0].exemption_reason", Severity.WARNING),
-    ]
-
-
-def test_exemption_reason_code_is_a_warning() -> None:
-    invoice = it_invoice(it_line(category="E", rate="0", nature=Natura.N4))
-    group = invoice.vat_breakdown[0].model_copy(
-        update={"exemption_reason": None, "exemption_reason_code": "VATEX-EU-132"}
-    )
-    findings = preflight(invoice.model_copy(update={"vat_breakdown": (group,)}))
-
-    assert [(f.rule_id, f.location) for f in findings] == [(NOT_WRITTEN, "vat_breakdown[0].exemption_reason_code")]
-    assert Decimal(0) == invoice.vat_breakdown[0].tax_amount

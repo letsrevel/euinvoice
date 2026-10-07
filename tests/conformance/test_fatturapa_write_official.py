@@ -18,6 +18,7 @@ from euinvoice.model import Buyer, Invoice, LineDraft, Seller, SellerPostalAddre
 from euinvoice.model.it import Natura, RegimeFiscale, SoggettoEmittente, TipoDocumento
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import write
+from euinvoice.syntax.fatturapa._write_codes import VATEX_OF_NATURA
 
 pytestmark = pytest.mark.conformance
 
@@ -93,8 +94,13 @@ def _invoices(draw: st.DrawFn) -> Invoice:
         }
         buyer_ = buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)
     draft = it_draft(*draw(_lines()), buyer=buyer_, **changes)
-    used = {str(line.vat_information.category_code) for line in draft.lines} - {"S", "B"}
-    reasons = {code: calc.ExemptionReason(text="Synthetic exemption reason") for code in used - {"Z"}}
+    # BT-121 where App. 5.1 gives every Natura of the category one VATEX code (Natura carries it); none otherwise.
+    codes: dict[str, set[str]] = {}
+    for line in draft.lines:
+        nature = None if line.it is None else line.it.nature
+        if nature is not None and nature in VATEX_OF_NATURA:
+            codes.setdefault(str(line.vat_information.category_code), set()).add(VATEX_OF_NATURA[nature])
+    reasons = {cat: calc.ExemptionReason(code=next(iter(c))) for cat, c in codes.items() if len(c) == 1}
     return calc.complete(draft, exemption_reasons=reasons)
 
 

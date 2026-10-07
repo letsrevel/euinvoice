@@ -59,7 +59,6 @@ BUYER_CF: t.Final = "AAAAAA00A00A000A"
 TRANSMISSION: t.Final = Transmission(
     transmitter_country="IT", transmitter_code="00000000001", transmission_number="00001"
 )
-EXEMPT: t.Final = {code: calc.ExemptionReason(text="Synthetic exemption reason") for code in ("E", "G", "K", "AE")}
 
 
 def it_line(
@@ -144,20 +143,16 @@ def it_draft(*lines: LineDraft, **changes: t.Any) -> InvoiceDraft:
     return InvoiceDraft(**data)
 
 
-def it_invoice(*lines: LineDraft, rounding: str | None = None, **changes: t.Any) -> Invoice:
-    """:func:`it_draft` completed by :func:`euinvoice.calc.complete` (exemption reasons for E/G/K/AE; BT-114)."""
-    draft = it_draft(*lines, **changes)
-    used = {
-        str(c)
-        for c in (
-            *(line.vat_information.category_code for line in draft.lines),
-            *(a.vat_category_code for a in draft.allowances),
-            *(c.vat_category_code for c in draft.charges),
-        )
-    }
+def it_invoice(
+    *lines: LineDraft,
+    rounding: str | None = None,
+    exemption_reasons: t.Mapping[str, calc.ExemptionReason] | None = None,
+    **changes: t.Any,
+) -> Invoice:
+    """:func:`it_draft` completed by :func:`euinvoice.calc.complete` (BT-114, BT-120/BT-121 by category)."""
     return calc.complete(
-        draft,
-        exemption_reasons={k: v for k, v in EXEMPT.items() if k in used},
+        it_draft(*lines, **changes),
+        exemption_reasons=exemption_reasons or {},
         rounding_amount=None if rounding is None else Decimal(rounding),
     )
 
@@ -310,6 +305,12 @@ def every_written_term() -> Invoice:
     return it_invoice(
         discounted,
         it_line("2", "1", "5", supply_type=TipoCessionePrestazione.AC),
+        it_line("3", "1", "20", "E", "0", nature=Natura.N4),
+        it_line("4", "1", "30", "K", "0", nature=Natura.N3_2),
+        exemption_reasons={
+            "E": calc.ExemptionReason(text="Esente art. 10 DPR 633/72"),
+            "K": calc.ExemptionReason(code="VATEX-EU-IC"),
+        },
         rounding="0.01",
         notes=(InvoiceNote(note="Evento del 15 gennaio, ingresso unico."),),
         purchase_order_reference="PO-1",

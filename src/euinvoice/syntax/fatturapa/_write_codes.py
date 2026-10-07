@@ -10,7 +10,13 @@ import typing as t
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ModalitaPagamento, Natura, TipoDocumento
 
-__all__ = ["CATEGORY_OF_NATURA", "CHARGEABILITY_OF_VAT_POINT", "DOCUMENT_TYPES", "PAYMENT_METHOD_OF_MEANS"]
+__all__ = [
+    "CATEGORY_OF_NATURA",
+    "CHARGEABILITY_OF_VAT_POINT",
+    "DOCUMENT_TYPES",
+    "PAYMENT_METHOD_OF_MEANS",
+    "VATEX_OF_NATURA",
+]
 
 DOCUMENT_TYPES: t.Final[t.Mapping[TipoDocumento, str]] = types.MappingProxyType(
     {
@@ -49,6 +55,35 @@ CATEGORY_OF_NATURA: t.Final[t.Mapping[Natura, VatCategory]] = types.MappingProxy
 )
 """App. 5.1, first table (domestic invoices): the VAT category BT-118 of each Natura. The generic N2, N3 and N6 are
 not in it (SdI 00445 refuses them since 2021)."""
+
+_132: t.Final = "VATEX-EU-132"
+_AE: t.Final = "VATEX-EU-AE"
+VATEX_OF_NATURA: t.Final[t.Mapping[Natura, str]] = types.MappingProxyType(
+    {
+        Natura.N2_1: _132,
+        Natura.N2_2: _132,
+        Natura.N3_1: "VATEX-EU-G",
+        Natura.N3_2: "VATEX-EU-IC",
+        Natura.N3_3: "VATEX-EU-G",
+        Natura.N3_4: "VATEX-EU-G",
+        Natura.N3_5: "VATEX-EU-G",
+        Natura.N3_6: "VATEX-EU-IC",
+        Natura.N4: _132,
+        Natura.N5: _132,
+        Natura.N6_1: _AE,
+        Natura.N6_2: _AE,
+        Natura.N6_3: _AE,
+        Natura.N6_4: _AE,
+        Natura.N6_5: _AE,
+        Natura.N6_6: _AE,
+        Natura.N6_7: _AE,
+        Natura.N6_8: _AE,
+        Natura.N6_9: _AE,
+        Natura.N7: "VATEX-EU-151",
+    }
+)
+"""App. 5.1, first table: the VAT exemption reason code BT-121 of each Natura (``vatex-eu-…``, upper-cased as the model
+stores it). N1 (category Z) has none."""
 
 CHARGEABILITY_OF_VAT_POINT: t.Final[t.Mapping[str, EsigibilitaIVA]] = types.MappingProxyType(
     {"3": EsigibilitaIVA.I, "35": EsigibilitaIVA.I, "432": EsigibilitaIVA.D}

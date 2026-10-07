@@ -18,6 +18,7 @@ equal BT-117. :func:`summarize` reports what keeps the blocks from being built a
 """
 
 import dataclasses
+import re
 import typing as t
 from decimal import Decimal
 
@@ -28,7 +29,7 @@ from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ItalianExtension, ItalianVatSummary, Natura, TipoCessionePrestazione
 from euinvoice.report import Finding
-from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT
+from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT, VATEX_OF_NATURA
 from euinvoice.syntax.fatturapa._write_format import (
     BASIC,
     amount2,
@@ -169,6 +170,7 @@ class Block:
     tax: Decimal = Decimal("0.00")
     summary: ItalianVatSummary | None = None
     chargeability: EsigibilitaIVA | None = None
+    legal_reference: str | None = None
 
     @property
     def split(self) -> bool:
@@ -270,6 +272,7 @@ def _match_summaries(it: ItalianExtension, blocks: dict[_Key, Block]) -> t.Itera
             )
             continue
         blocks[key].summary = summary
+        blocks[key].legal_reference = summary.legal_reference
 
 
 def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
@@ -297,6 +300,54 @@ def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Fi
         block.chargeability = own or derived
 
 
+_REFERENCE: t.Final = re.compile(r"[\x00-\xff]{1,100}")  # String100LatinType (xs:normalizedString)
+
+
+def _reference(reason: str, mine: list[Block]) -> str | None:
+    """Put BT-120 into the group's one block as RiferimentoNormativo; why it cannot be, or ``None``."""
+    if len(mine) != 1:
+        return f"its VAT BREAKDOWN has {len(mine)} DatiRiepilogo, not one"
+    given = mine[0].legal_reference
+    if given is not None:
+        return None if given == reason else f"it.vat_summaries sets RiferimentoNormativo {given!r} for that summary"
+    if not _REFERENCE.fullmatch(reason) or any(c in reason for c in "\t\n\r"):
+        return "String100LatinType takes 1 to 100 Latin-1 characters without tab or line break"
+    mine[0].legal_reference = reason
+    return None
+
+
+def _exemption_reasons(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """BT-120 and BT-121 of each VAT BREAKDOWN: written, carried by Natura, or reported (never dropped).
+
+    * BT-120 is 2.2.2.8 RiferimentoNormativo (App. 4.1 rows 2.2.2.2 and 2.2.2.8: "In BT-120 vengono concatenati
+      2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). It is written into the group's DatiRiepilogo when the group
+      has exactly one and ``it.vat_summaries`` gives it no ``legal_reference``; equal to that ``legal_reference`` it
+      is already written. Otherwise it would be lost: an ``error``.
+    * BT-121 is carried by Natura when it is the code App. 5.1 gives every Natura of the group (``VATEX-EU-132`` for
+      N2.x, N4, N5; ``-G`` for N3.1, N3.3-N3.5; ``-IC`` for N3.2, N3.6; ``-AE`` for N6.x; ``-151`` for N7).
+      Otherwise: an ``error``.
+    """
+    for index, group in enumerate(invoice.vat_breakdown):
+        mine = [block for block in blocks.values() if _of_group(group, block)]
+        reason, code = group.exemption_reason, group.exemption_reason_code
+        if reason is not None and (why := _reference(reason, mine)) is not None:
+            yield finding(
+                SUMMARY,
+                f"vat_breakdown[{index}].exemption_reason",
+                f"BT-120 cannot be written in FatturaPA: it goes to 2.2.2.8 RiferimentoNormativo (App. 4.1 rows "
+                f"2.2.2.2, 2.2.2.8), but {why}",
+            )
+        if code is not None:
+            carried = {VATEX_OF_NATURA.get(block.nature) for block in mine if block.nature} or {None}
+            if carried != {code.upper()}:
+                yield finding(
+                    SUMMARY,
+                    f"vat_breakdown[{index}].exemption_reason_code",
+                    f"BT-121 {code} cannot be written in FatturaPA: only Natura carries it, and App. 5.1 gives the "
+                    f"group's Natura {sorted(str(b.nature) for b in mine)} the codes {sorted(map(str, carried))}",
+                )
+
+
 def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list[Finding]]:
     """The DatiRiepilogo blocks of an invoice and the pre-flight findings that keep them from being written.
 
@@ -308,7 +359,12 @@ def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list
         The blocks in the order their first line appears, and ``SUMMARY`` findings located by model path.
     """
     blocks = _blocks(invoice)
-    findings = [*_amounts(invoice, it, blocks), *_match_summaries(it, blocks), *_chargeability(invoice, blocks)]
+    findings = [
+        *_amounts(invoice, it, blocks),
+        *_match_summaries(it, blocks),
+        *_chargeability(invoice, blocks),
+        *_exemption_reasons(invoice, blocks),
+    ]
     return list(blocks.values()), findings
 
 
@@ -335,5 +391,5 @@ def write_goods(body: etree._Element, invoice: Invoice, blocks: list[Block]) -> 
         child(summary, "Imposta", amount2(block.tax, "BT-117", f"2.2.2.6 Imposta of the {where}"))
         if block.chargeability is not None:
             child(summary, "EsigibilitaIVA", block.chargeability)
-        if block.summary is not None and block.summary.legal_reference is not None:
-            child(summary, "RiferimentoNormativo", block.summary.legal_reference)
+        if block.legal_reference is not None:
+            child(summary, "RiferimentoNormativo", block.legal_reference)

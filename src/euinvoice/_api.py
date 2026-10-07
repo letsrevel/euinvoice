@@ -37,9 +37,9 @@ def to_xml(
     amended), not the CEN ones: :func:`euinvoice.syntax.fatturapa.preflight` runs first (what the invoice lacks, what
     FPR12 cannot carry, totals against the summaries), then the document is written and the offline SdI checks of
     Allegato A 1.9.1 (:mod:`euinvoice.validation.sdi`, the ones :func:`euinvoice.validate` runs after the XSD) run on
-    it. An ``error`` from either refuses the write with :class:`PreflightError`. The pre-flight's warnings (BT-20,
-    BT-120 and BT-121, which are not written; #133) are not returned: call ``preflight`` to see them. The XSD step
-    needs the fetched artifacts and does not run here; run :func:`euinvoice.validate` on the result for it.
+    it. An ``error`` from either refuses the write with :class:`PreflightError`; every set business term is either
+    written or reported. The XSD step needs the fetched artifacts and does not run here; run
+    :func:`euinvoice.validate` on the result for it.
 
     The invoice is first set up for the profile with :meth:`~euinvoice.profiles.Profile.prepare` (BT-24 becomes
     the profile's, BT-23 gets its default; see there), so the written document reads back as
@@ -182,6 +182,8 @@ def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: f
     data = serialize(invoice, options)
     # The SdI checks are FatturaPA's oracle (D8 as amended), so they block the write as calc.check and the profile
     # pre-flight do for UBL/CII: e.g. 00421 (Imposta) and 00423 (PrezzoTotale) on amounts the writer copies.
+    # sdi.check assumes XSD-valid input, which the writer produces by construction: a ValueError here is a writer bug,
+    # not caller misuse.
     rejected = sdi.check(_xml.parse(data))
     if rejected:
         raise PreflightError(Syntax.FATTURAPA, Syntax.FATTURAPA, (*findings, *rejected))

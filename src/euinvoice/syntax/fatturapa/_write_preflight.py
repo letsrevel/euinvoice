@@ -5,11 +5,12 @@
 * data FatturaPA requires that the invoice does not give (``Invoice.it``, required elements, Natura, payment data);
 * content FPR12 cannot carry (:func:`._write_refuse.structure`: business terms with no element, VAT categories
   O/L/M, document level allowances and charges other than a zero stamp duty, …);
-* DatiRiepilogo that cannot be built from the lines and the VAT BREAKDOWN (:func:`._write_lines.summarize`);
-* document totals that disagree with the summaries written (App. 4.1 rows 2.1.1.9, 2.1.1.10, 2.4.2.6), including
+* DatiRiepilogo that cannot be built from the lines and the VAT BREAKDOWN, and a BT-120 / BT-121 they cannot carry
+  (:func:`._write_lines.summarize`);
+* document totals that disagree with the summaries written (BR-CO-10/13/14/15/16 through App. 4.1), including
   the derived totals that are not written (BT-106..BT-110), so none of them is dropped while wrong.
 
-An empty result (or warnings only) means :func:`~euinvoice.syntax.fatturapa.write` succeeds unless a value does not
+An empty result means :func:`~euinvoice.syntax.fatturapa.write` succeeds unless a value does not
 fit its XSD type (length, characters, decimals, CAP, …), which it refuses with :class:`~euinvoice.errors.ModelError`
 while serializing. The SdI checks of Allegato A 1.9.1 are not repeated here (except 00400, whose missing Natura the
 writer could only guess): ``to_xml`` runs them on the written document (D8).
@@ -21,7 +22,7 @@ from decimal import Decimal
 from euinvoice.model import Invoice
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, SoggettoEmittente, TipoDocumento
-from euinvoice.report import Finding, Severity
+from euinvoice.report import Finding
 from euinvoice.syntax.fatturapa._write_codes import CATEGORY_OF_NATURA, DOCUMENT_TYPES, PAYMENT_METHOD_OF_MEANS
 from euinvoice.syntax.fatturapa._write_lines import Block, summarize
 from euinvoice.syntax.fatturapa._write_refuse import structure
@@ -30,7 +31,6 @@ from euinvoice.syntax.fatturapa._write_rules import (
     EXTENSION,
     ISSUER,
     NATURA,
-    NOT_WRITTEN,
     PAYMENT,
     REQUIRED,
     TOTALS,
@@ -47,9 +47,8 @@ def preflight(invoice: Invoice) -> tuple[Finding, ...]:
     """Report what keeps an invoice from being written as FPR12, before :func:`~euinvoice.syntax.fatturapa.write`.
 
     ``error`` findings block the write (``write`` raises :class:`~euinvoice.errors.ModelError`, ``to_xml``
-    :class:`~euinvoice.errors.PreflightError`). ``warning`` findings name the business terms that are not written
-    because FatturaPA carries their content in other elements filled from ``Invoice.it`` (BT-20, BT-120, BT-121;
-    ``to_xml`` does not return them, so call this function to see them).
+    :class:`~euinvoice.errors.PreflightError`). Every set business term is either written or reported here: none
+    is dropped.
 
     Args:
         invoice: The invoice.
@@ -78,7 +77,7 @@ def preflight(invoice: Invoice) -> tuple[Finding, ...]:
     ]
     if not findings:  # the totals are compared with the summaries only once those can be built
         findings += _totals(invoice, blocks)
-    return (*findings, *_not_written(invoice))
+    return tuple(findings)
 
 
 def _document(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
@@ -197,8 +196,11 @@ def _payment(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
 def _totals(invoice: Invoice, blocks: list[Block]) -> t.Iterator[Finding]:
     """The totals against the summaries written: ImportoTotaleDocumento, ImportoPagamento and the derived sums.
 
-    With BT-113 refused and BG-20/21 limited to a zero stamp duty, App. 4.1 rows 2.1.1.9 (BT-112), 2.1.1.10 (BT-114)
-    and 2.4.2.6 (BT-115) give ImportoTotaleDocumento = Σ ImponibileImporto + Σ Imposta and ImportoPagamento =
+    App. 4.1 maps 2.1.1.9 ↔ BT-112, 2.1.1.10 ↔ BT-114, 2.4.2.6 ↔ BT-115 and 2.2.2.5 / 2.2.2.6 ↔ BT-116 / BT-117; the
+    equalities are the EN rules on those terms: BR-CO-10 (BT-106 = Σ BT-131), BR-CO-13 (BT-109 = BT-106 - BT-107 +
+    BT-108), BR-CO-14 (BT-110 = Σ BT-117), BR-CO-15 (BT-112 = BT-109 + BT-110) and BR-CO-16 (BT-115 = BT-112 -
+    BT-113 + BT-114). With BT-113 refused, BG-20/21 limited to a zero stamp duty and ImponibileImporto = Σ BT-131
+    per block, they read ImportoTotaleDocumento = Σ ImponibileImporto + Σ Imposta and ImportoPagamento =
     ImportoTotaleDocumento + Arrotondamento. The sums that are not written (BT-106..BT-110) must agree too, or they
     would be dropped while wrong. No SdI check covers these totals.
     """
@@ -231,32 +233,4 @@ def _totals(invoice: Invoice, blocks: list[Block]) -> t.Iterator[Finding]:
         if value != computed:
             yield finding(
                 TOTALS, f"totals.{name}", f"{term} is {value}, but the FatturaPA document gives {what} = {computed}"
-            )
-
-
-def _not_written(invoice: Invoice) -> t.Iterator[Finding]:
-    if invoice.payment_terms is not None:
-        yield finding(
-            NOT_WRITTEN,
-            "payment_terms",
-            "BT-20 is not written: App. 4.1 builds it from 2.4.1 CondizioniPagamento and 2.4.2.4 "
-            "GiorniTerminiPagamento, which come from it.payment (#133)",
-            Severity.WARNING,
-        )
-    for index, group in enumerate(invoice.vat_breakdown):
-        if group.exemption_reason is not None:
-            yield finding(
-                NOT_WRITTEN,
-                f"vat_breakdown[{index}].exemption_reason",
-                "BT-120 is not written: App. 4.1 builds it from 2.2.2.2 Natura and 2.2.2.8 RiferimentoNormativo, "
-                "which come from lines[].it.nature and it.vat_summaries (#133)",
-                Severity.WARNING,
-            )
-        if group.exemption_reason_code is not None:
-            yield finding(
-                NOT_WRITTEN,
-                f"vat_breakdown[{index}].exemption_reason_code",
-                "BT-121 is not written: App. 5.1 relates it to 2.2.2.2 Natura, which comes from lines[].it.nature "
-                "(#133)",
-                Severity.WARNING,
             )

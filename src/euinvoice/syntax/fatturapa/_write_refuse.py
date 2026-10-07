@@ -55,8 +55,8 @@ WRITTEN: t.Final = frozenset(
     {
         # Document (App. 4.1 rows 2.1.1.2-2.1.1.11, 2.1.2-2.1.6, 2.2.2.7, 2.4.2.5); BT-3 selects nothing, it is
         # checked against TipoDocumento (App. 5.4); BT-24 identifies an EN 16931 syntax and has no FatturaPA
-        # counterpart; BT-20 is reported by preflight (NOT_WRITTEN).
-        *("BT-1", "BT-2", "BT-3", "BT-5", "BT-8", "BT-9", "BT-12", "BT-13", "BT-15", "BT-19", "BT-20"),
+        # counterpart. BT-20 is not here: its free text has no element (2.4.1 and 2.4.2.4 are codes; #133 item 11).
+        *("BT-1", "BT-2", "BT-3", "BT-5", "BT-8", "BT-9", "BT-12", "BT-13", "BT-15", "BT-19"),
         *("BG-1", "BT-22", "BG-2", "BT-24", "BG-3", "BT-25", "BT-26"),
         # Seller and buyer (rows 1.2, 1.4)
         *("BG-4", "BT-27", "BT-30", "BT-31", "BG-5", "BT-35", "BT-36", "BT-37", "BT-38", "BT-39", "BT-40"),
@@ -70,7 +70,8 @@ WRITTEN: t.Final = frozenset(
         # Totals: BT-112 (2.1.1.9), BT-114 (2.1.1.10), BT-115 (2.4.2.6); the other sums are checked against the
         # summaries written (preflight TOTALS).
         *("BG-22", "BT-106", "BT-107", "BT-108", "BT-109", "BT-110", "BT-112", "BT-114", "BT-115"),
-        # VAT breakdown (2.2.2); BT-120 and BT-121 are reported by preflight (NOT_WRITTEN).
+        # VAT breakdown (2.2.2); BT-120 is RiferimentoNormativo and BT-121 must be the VATEX code of the group's
+        # Natura (App. 5.1), both checked by summarize().
         *("BG-23", "BT-116", "BT-117", "BT-118", "BT-119", "BT-120", "BT-121"),
         # Lines (2.2.1); BT-151 is checked against Natura (App. 5.1) and becomes EsigibilitaIVA S for B.
         *("BG-25", "BT-126", "BT-129", "BT-130", "BT-131", "BT-133", "BG-26", "BT-134", "BT-135"),
@@ -82,6 +83,8 @@ checked one by one."""
 
 _REASONS: t.Final[t.Mapping[str, str]] = {
     "BT-6": "FatturaPA has one currency, Divisa (2.1.1.2); App. 4.1 maps no element to BT-6",
+    "BT-20": "App. 4.1 builds it from 2.4.1 CondizioniPagamento and 2.4.2.4 GiorniTerminiPagamento, which are codes "
+    "and a number with no place for its free text (#133 item 11); the CondizioniPagamento code comes from it.payment",
     "BT-23": "App. 4.1 maps no FatturaPA element to the business process (#133)",
     "BT-34": "App. 4.1 maps no FatturaPA element to the seller's electronic address (#133)",
     "BT-49": "the SdI routing (CodiceDestinatario, PECDestinatario) comes from Transmission, not from the model "

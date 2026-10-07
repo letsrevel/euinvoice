@@ -97,7 +97,11 @@ def test_to_xml_raises_preflight_error_for_fatturapa() -> None:
     assert pickle.loads(pickle.dumps(error)).findings == error.findings  # ruff: ignore[suspicious-pickle-usage] - our own exception
 
 
-def test_to_xml_ignores_fatturapa_warnings() -> None:
+def test_to_xml_refuses_payment_terms_text() -> None:
     invoice = it_invoice(payment_terms="Pagamento a 30 giorni")
 
-    assert to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION) == write(invoice, TRANSMISSION)
+    with pytest.raises(PreflightError) as raised:
+        to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
+    assert [(f.rule_id, f.location) for f in raised.value.findings] == [
+        ("EUINVOICE-FATTURAPA-UNWRITTEN", "payment_terms")
+    ]

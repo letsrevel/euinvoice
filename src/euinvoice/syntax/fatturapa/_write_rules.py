@@ -12,7 +12,6 @@ __all__ = [
     "EXTENSION",
     "ISSUER",
     "NATURA",
-    "NOT_WRITTEN",
     "PAYMENT",
     "PREFLIGHT_SOURCE",
     "REQUIRED",
@@ -46,10 +45,7 @@ ALLOWANCE_CHARGE: t.Final = "EUINVOICE-FATTURAPA-ALLOWANCE-CHARGE"
 SUMMARY: t.Final = "EUINVOICE-FATTURAPA-SUMMARY"
 """The DatiRiepilogo (2.2.2) cannot be built from the lines, VAT BREAKDOWN, BT-8 and ``it.vat_summaries``."""
 TOTALS: t.Final = "EUINVOICE-FATTURAPA-TOTALS"
-"""A document total disagrees with the summaries written (App. 4.1 rows 2.1.1.9, 2.1.1.10, 2.4.2.6)."""
-NOT_WRITTEN: t.Final = "EUINVOICE-FATTURAPA-NOT-WRITTEN"
-"""A ``warning``: a business term App. 4.1 builds from FatturaPA elements the writer fills from ``.it``, so its own
-text is not written (BT-20, BT-120, BT-121; #133)."""
+"""A document total disagrees with the summaries written (BR-CO-10/13/14/15/16 through the App. 4.1 mappings)."""
 
 UNSUPPORTED_CATEGORIES: t.Final = frozenset({VatCategory.NOT_SUBJECT_TO_VAT, VatCategory.IGIC, VatCategory.IPSI})
 """O, L and M: App. 5.1 gives them no Natura (#133)."""

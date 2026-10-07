@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from _fatturapa_write import (
+    GOODS,
     TEST_IBAN,
     TRANSMISSION,
     buyer,
@@ -17,6 +18,7 @@ from _fatturapa_write import (
     italian,
     samples,
     seller,
+    written,
 )
 from euinvoice import calc
 from euinvoice.errors import ModelError
@@ -419,3 +421,77 @@ def test_totals_are_compared_only_once_the_summaries_are_built() -> None:
     invoice = _with_totals(_with_group(it_invoice(), 0, taxable_amount=Decimal(1)), total_with_vat=Decimal(1))
 
     assert {f.rule_id for f in preflight(invoice)} == {SUMMARY}
+
+
+def test_payment_terms_text_is_reported() -> None:
+    _reported(it_invoice(payment_terms="30 giorni"), UNWRITTEN, "payment_terms", r"^BT-20 cannot be written .*#133")
+
+
+def _exempt(*natures: Natura, reason: calc.ExemptionReason, **changes: t.Any) -> Invoice:
+    lines = [it_line(str(i), "1", "10", "E", "0", nature=n) for i, n in enumerate(natures, 1)]
+    return it_invoice(*lines, exemption_reasons={"E": reason}, **changes)
+
+
+def _riferimento(invoice: Invoice) -> list[str | None]:
+    return [s.findtext("RiferimentoNormativo") for s in written(invoice).findall(f"{GOODS}/DatiRiepilogo")]
+
+
+def test_exemption_reason_is_written_as_riferimento_normativo() -> None:
+    invoice = _exempt(Natura.N4, reason=calc.ExemptionReason(text="Art. 10 DPR 633/72"))
+
+    assert preflight(invoice) == ()
+    assert _riferimento(invoice) == ["Art. 10 DPR 633/72"]
+
+
+def test_exemption_reason_equal_to_the_legal_reference_is_written_once() -> None:
+    summary = ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="Art. 10")
+    invoice = _exempt(Natura.N4, reason=calc.ExemptionReason(text="Art. 10"), it=italian(vat_summaries=(summary,)))
+
+    assert preflight(invoice) == ()
+    assert _riferimento(invoice) == ["Art. 10"]
+
+
+@pytest.mark.parametrize(
+    ("natures", "summaries", "text", "match"),
+    [
+        ((Natura.N4,), (ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="A"),), "B", "sets"),
+        ((Natura.N4, Natura.N2_1), (), "A", "has 2 DatiRiepilogo, not one"),
+        ((Natura.N4,), (), "x" * 101, "String100LatinType"),
+        ((Natura.N4,), (), "€", "String100LatinType"),
+    ],
+    ids=["other legal reference", "several summaries", "too long", "not Latin-1"],
+)
+def test_exemption_reason_that_cannot_be_written(
+    natures: tuple[Natura, ...], summaries: tuple[ItalianVatSummary, ...], text: str, match: str
+) -> None:
+    invoice = _exempt(*natures, reason=calc.ExemptionReason(text=text), it=italian(vat_summaries=summaries))
+    _reported(invoice, SUMMARY, "vat_breakdown[0].exemption_reason", rf"^BT-120 cannot be written.*{match}")
+
+
+@pytest.mark.parametrize(
+    ("natures", "category", "code"),
+    [
+        ((Natura.N4, Natura.N2_1, Natura.N5), "E", "VATEX-EU-132"),
+        ((Natura.N3_1, Natura.N3_4), "G", "VATEX-EU-G"),
+        ((Natura.N3_2,), "K", "VATEX-EU-IC"),
+        ((Natura.N7,), "K", "VATEX-EU-151"),
+        ((Natura.N6_1, Natura.N6_9), "AE", "VATEX-EU-AE"),
+    ],
+)
+def test_exemption_reason_code_carried_by_natura(natures: tuple[Natura, ...], category: str, code: str) -> None:
+    lines = [it_line(str(i), "1", "10", category, "0", nature=n) for i, n in enumerate(natures, 1)]
+    invoice = it_invoice(*lines, exemption_reasons={category: calc.ExemptionReason(code=code)})
+
+    assert preflight(invoice) == ()
+    write(invoice, TRANSMISSION)
+
+
+@pytest.mark.parametrize(
+    ("natures", "category", "code"),
+    [((Natura.N4,), "E", "VATEX-EU-79-C"), ((Natura.N3_2, Natura.N7), "K", "VATEX-EU-IC")],
+    ids=["other code", "two codes in one group"],
+)
+def test_exemption_reason_code_not_carried_by_natura(natures: tuple[Natura, ...], category: str, code: str) -> None:
+    lines = [it_line(str(i), "1", "10", category, "0", nature=n) for i, n in enumerate(natures, 1)]
+    invoice = it_invoice(*lines, exemption_reasons={category: calc.ExemptionReason(code=code)})
+    _reported(invoice, SUMMARY, "vat_breakdown[0].exemption_reason_code", rf"^BT-121 {code} cannot be written")

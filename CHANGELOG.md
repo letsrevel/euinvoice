@@ -61,10 +61,12 @@ All notable changes to this project are documented here. The format follows
     written: what FatturaPA needs and the invoice lacks (`Invoice.it`, TipoDocumento vs BT-3, required elements,
     Natura vs VAT category per App. 5.1, CondizioniPagamento / ModalitaPagamento); every business term FPR12
     cannot carry (generic document level allowances and charges, VAT categories O, L and M, line allowances and
-    charges, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be built; and
-    totals that disagree with the summaries written (ImportoTotaleDocumento, ImportoPagamento and the derived
-    BT-106..BT-110). It warns about BT-20, BT-120 and BT-121, which FatturaPA carries in other elements and which
-    are not written. `write` raises `ModelError` for its errors and for values that do not fit their XSD type.
+    charges, BT-20, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be
+    built; and totals that disagree with the summaries written (BR-CO-10/13/14/15/16 through App. 4.1:
+    ImportoTotaleDocumento, ImportoPagamento and the derived BT-106..BT-110). Every set term is written or reported:
+    BT-120 becomes RiferimentoNormativo when its VAT breakdown has one summary, and BT-121 must be the App. 5.1
+    VATEX code of the group's Natura, which carries it. `write` raises `ModelError` for the errors and for values
+    that do not fit their XSD type.
     The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
     (`needs-human`).
   - DatiRiepilogo blocks are keyed by rate, Natura and split payment (category B → EsigibilitaIVA S) and filled
