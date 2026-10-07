@@ -5,8 +5,8 @@ import typing as t
 from decimal import Decimal
 
 import pytest
-from _fatturapa_write import buyer, it_invoice, it_line, italian, samples, seller
 
+from _fatturapa_write import buyer, it_invoice, it_line, italian, samples, seller
 from euinvoice.model import (
     BuyerPostalAddress,
     Payee,
