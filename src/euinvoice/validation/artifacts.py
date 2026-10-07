@@ -132,9 +132,10 @@ def _layout_problems(source: Source) -> list[str]:
     """A source is a zip archive (``members``) or a single file (``file``) stored as one path segment."""
     if bool(source.members) == bool(source.file):
         return ["set exactly one of members or file"]
-    problems = []
-    if source.file and (not _SAFE_SEGMENT.fullmatch(source.file) or source.file in {".", ".."}):
-        problems.append(f"file {source.file!r} must match [A-Za-z0-9._-]+ and not be '.' or '..'")
+    problems: list[str] = []
+    # A leading dot is refused: it covers '.', '..' and the cache marker MARKER, which would overwrite the file (#128).
+    if source.file and (not _SAFE_SEGMENT.fullmatch(source.file) or source.file.startswith(".")):
+        problems.append(f"file {source.file!r} must match [A-Za-z0-9._-]+ and not start with '.'")
     if source.file and (source.strip_components or source.precompile):
         problems.append("a single-file source takes neither strip_components nor precompile")
     return problems

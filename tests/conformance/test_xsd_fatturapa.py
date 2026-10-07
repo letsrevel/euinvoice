@@ -17,9 +17,10 @@ from euinvoice.validation import artifacts, xsd
 
 pytestmark = pytest.mark.conformance
 
-# Upstream examples that the 1.2.3 XSD rejects, with the first libxml2 message. FPR02 (fatturapa.gov.it, both the
-# revision in the ZUGFeRD corpus and the current download) has ContattiTrasmittente after PECDestinatario, but
-# DatiTrasmissioneType is a sequence that puts ContattiTrasmittente first (Schema_VFPR12_v1.2.3.xsd).
+# Upstream examples that the 1.2.3 XSD rejects, with the first libxml2 message. FPR02 (fatturapa.gov.it; the ZUGFeRD
+# corpus copy is content-identical to the current download except for CRLF line endings) has ContattiTrasmittente
+# after PECDestinatario, but DatiTrasmissioneType is a sequence that puts ContattiTrasmittente first
+# (Schema_VFPR12_v1.2.3.xsd).
 KNOWN_INVALID: t.Final = {
     "IT01234567890_FPR02.xml": "Element 'ContattiTrasmittente': This element is not expected.",
 }

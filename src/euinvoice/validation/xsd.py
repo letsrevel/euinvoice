@@ -163,9 +163,7 @@ def _load(spec: _SchemaSpec) -> _Compiled:
     return _compiled(directory / spec.path, directory / spec.root, redirects)
 
 
-def _compiled(
-    path: pathlib.Path, root: pathlib.Path, redirects: t.Mapping[str, pathlib.Path] | None = None
-) -> _Compiled:
+def _compiled(path: pathlib.Path, root: pathlib.Path, redirects: t.Mapping[str, pathlib.Path]) -> _Compiled:
     """Return the compiled schema for ``path``, compiling it on first use.
 
     Keyed by path alone: the path contains the pinned version, and ``artifacts.source_dir`` rejects an

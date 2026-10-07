@@ -146,7 +146,8 @@ the ubl-2_1 copy xsd/common/UBL-xmldsig-core-schema-2.1.xsd, which differs from 
 comment and the DOCTYPE's PUBLIC/SYSTEM identifiers (diffed 2026-10-07), so no W3C file is pinned."""
 # ponytail: the fatturapa.gov.it example invoices (export/documenti/fatturapa/v1.2/IT01234567890_FPA01..03.xml,
 # _FPR01..03.xml) are NOT pinned as their own source: they are six separate files and a source holds one
-# download. All six ship in zugferd-corpus under fatturaPA/official/valid/ in other revisions (only FPA02 is
-# byte-identical to the current download), and tests/conformance/test_xsd_fatturapa.py uses those. FPR02 is
-# known-invalid against 1.2.3, in both revisions: ContattiTrasmittente follows PECDestinatario, which the
-# DatiTrasmissione sequence does not allow. Add a multi-file source if the current revisions are needed.
+# download. All six ship in zugferd-corpus under fatturaPA/official/valid/, content-identical to the current
+# downloads except for CRLF line endings (FPA02 is byte-identical; verified by the spec-auditor 2026-10-07, #128),
+# and tests/conformance/test_xsd_fatturapa.py uses those. FPR02 is known-invalid against 1.2.3:
+# ContattiTrasmittente follows PECDestinatario, which the DatiTrasmissione sequence does not allow. Add a
+# multi-file source if the files ever diverge.
