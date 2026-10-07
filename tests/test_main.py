@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from lxml import etree
 
+from _fatturapa_read import document
 from _invoices import CEN, minimal_invoice, rebuild
 from _pdfa import pdf
 from euinvoice import __main__ as cli
@@ -530,8 +531,13 @@ def test_a_plain_text_stdout_is_left_as_is(tmp_path: Path, monkeypatch: pytest.M
     assert out.getvalue() == "ok: 0 fatal/error, 0 warning/information\n"
 
 
-def test_info_on_fatturapa_says_the_reader_is_not_there_yet(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    fatturapa = f'<p:FatturaElettronica xmlns:p="{_xml.FATTURAPA}" versione="FPR12"/>'.encode()
+def test_info_reads_a_fatturapa_invoice(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["info", "--json", _write(tmp_path, "a.xml", document())]) == 0
 
-    assert cli.main(["info", _write(tmp_path, "a.xml", fatturapa)]) == 1
-    assert capsys.readouterr().err.startswith("error: reading FatturaPA is not implemented yet")
+    payload = json.loads(capsys.readouterr().out)
+    assert (payload["syntax"], payload["root"], payload["invoice"]["BT-1"]) == (
+        "fatturapa",
+        "FatturaElettronica",
+        "FT-1",
+    )
+    assert payload["unmapped"] == ["/p:FatturaElettronica/FatturaElettronicaHeader/DatiTrasmissione"]

@@ -5,6 +5,7 @@ nothing in the input is dropped silently (IMPLEMENTATION_PLAN.md §4). Syntax-ag
 converts values stays in its own module.
 """
 
+import re
 import typing as t
 
 from lxml import etree
@@ -12,10 +13,20 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.model.datatypes import normalize_space
 
-__all__ = ["XML_SPACE", "Marks", "attribute_name", "normalize_space"]
+__all__ = ["XML_SPACE", "XSD_DATE", "XSD_DATE_TIME", "Marks", "attribute_name", "normalize_space"]
 
 XML_SPACE: t.Final = " \t\r\n"
 """XML whitespace (#x20, #x9, #xD, #xA): what XPath ``normalize-space`` and ``whiteSpace=collapse`` strip."""
+
+_ZONE: t.Final = r"(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))"
+
+XSD_DATE: t.Final = re.compile(rf"([0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}){_ZONE}?")
+"""``xs:date`` (XML Schema 1.1 Part 2, §3.3.9) with a four-digit year: the date, then an optional time zone."""
+
+XSD_DATE_TIME: t.Final = re.compile(
+    rf"([0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}})T[0-9]{{2}}:[0-9]{{2}}:[0-9]{{2}}(?:\.[0-9]+)?{_ZONE}?"
+)
+"""``xs:dateTime`` (XML Schema 1.1 Part 2, §3.3.7) with a four-digit year: the date, the time, an optional time zone."""
 
 _XML_NAMESPACE: t.Final = "http://www.w3.org/XML/1998/namespace"
 
