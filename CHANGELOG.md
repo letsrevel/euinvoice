@@ -28,7 +28,7 @@ All notable changes to this project are documented here. The format follows
   ([#117](https://github.com/letsrevel/euinvoice/issues/117)).
 - `euinvoice.model.it`: the optional, frozen Italian extension for FatturaPA data with no EN 16931 business term
   (D3 as amended, ADR 0001). `Invoice.it` / `InvoiceDraft.it` take an `ItalianExtension` (RegimeFiscale,
-  SoggettoEmittente, TipoDocumento, VAT summary data keyed by rate and Natura with EsigibilitaIVA and
+  SoggettoEmittente, TipoDocumento, VAT summary data keyed by rate, Natura and split payment, with EsigibilitaIVA and
   RiferimentoNormativo, and CondizioniPagamento / ModalitaPagamento); `InvoiceLine.it` / `LineDraft.it` take an
   `ItalianLineExtension` (TipoCessionePrestazione, Natura). Every field cites its FatturaPA element id in
   `json_schema_extra={"fatturapa": …}`; the code enums equal the pinned XSD 1.2.3 lists. `BT_INDEX` skips the

@@ -32,7 +32,7 @@ from euinvoice.model.it import (
 )
 
 # Every extension field and the FatturaPA element it carries, as numbered in the "Rappresentazione tabellare del
-# tracciato FatturaPA" 1.9.1 (Agenzia delle Entrate, AE_RappTab_1.9.1.xlsx, sheet 1, column D/C/B).
+# tracciato FatturaPA" (the copy linked from the AE Specifiche tecniche 1.9.1 page, sheet 1, column D/C/B).
 EXPECTED_IDS: t.Final = {
     (ItalianExtension, "tax_regime"): "1.2.1.8",
     (ItalianExtension, "issuer"): "1.6",
@@ -131,7 +131,7 @@ class TestItalianExtension:
         assert all(item.it is None for item in invoice.lines)
 
     def test_regime_and_document_type_are_required(self) -> None:
-        # 1.2.1.8 <RegimeFiscale> and 2.1.1.1 <TipoDocumento> are <1.1> (Rappresentazione tabellare 1.9.1).
+        # 1.2.1.8 <RegimeFiscale> and 2.1.1.1 <TipoDocumento> are <1.1> (Rappresentazione tabellare).
         with pytest.raises(pydantic.ValidationError, match="tax_regime"):
             ItalianExtension.model_validate({"document_type": "TD01"})
         with pytest.raises(pydantic.ValidationError, match="document_type"):
@@ -192,6 +192,8 @@ class TestVatSummaries:
         "pair",
         [
             ({"rate": "22"}, {"rate": "22.00", "vat_chargeability": "D"}),
+            ({"rate": "22", "vat_chargeability": "I"}, {"rate": "22", "vat_chargeability": "D"}),
+            ({"rate": "22", "vat_chargeability": "S"}, {"rate": "22.0", "vat_chargeability": "S"}),
             ({"rate": "0", "nature": "N4"}, {"rate": "0.0", "nature": "N4", "legal_reference": "Art. 10"}),
         ],
     )
@@ -199,7 +201,16 @@ class TestVatSummaries:
         with pytest.raises(pydantic.ValidationError, match=r"2\.2\.2.*twice"):
             _it(vat_summaries=list(pair))
 
-    @pytest.mark.parametrize("rate", ["-1", "100.01", "22.555", "1000"])
+    @pytest.mark.parametrize("ordinary", [None, "I", "D"])
+    def test_split_payment_and_ordinary_at_one_rate_are_two_summaries(self, ordinary: str | None) -> None:
+        # Allegato A 1.9.1, DatiRiepilogo: one block "per ogni aliquota IVA e modalita' di versamento dell'imposta
+        # ("scissione dei pagamenti" od ordinaria)"; EsigibilitaIVA S is split payment (App. 4.1 row 2.2.2.7).
+        it = _it(
+            vat_summaries=[{"rate": "22", "vat_chargeability": "S"}, {"rate": "22", "vat_chargeability": ordinary}]
+        )
+        assert [s.vat_chargeability for s in it.vat_summaries] == [EsigibilitaIVA.S, ordinary]
+
+    @pytest.mark.parametrize("rate", ["-1", "100.01", "22.555", "1000", "-0", "-0.00"])
     def test_rate_must_fit_rate_type(self, rate: str) -> None:
         # RateType (Schema_VFPR12_v1.2.3.xsd): xs:decimal, pattern [0-9]{1,3}\.[0-9]{2}, maxInclusive 100.00.
         with pytest.raises(pydantic.ValidationError, match="RateType"):
@@ -227,14 +238,20 @@ class TestVatSummaries:
     @given(
         st.lists(
             st.tuples(
-                st.decimals(min_value=0, max_value=100, places=2, allow_nan=False, allow_infinity=False),
+                st.sampled_from([Decimal("0"), Decimal("0.00"), Decimal("4"), Decimal("22"), Decimal("22.00")])
+                | st.decimals(min_value=0, max_value=100, places=2, allow_nan=False, allow_infinity=False),
                 st.none() | st.sampled_from(Natura),
+                st.none() | st.sampled_from(EsigibilitaIVA),
             ),
             max_size=6,
         )
     )
-    def test_accepted_exactly_when_the_keys_are_distinct(self, keys: list[tuple[Decimal, Natura | None]]) -> None:
-        summaries = [{"rate": rate, "nature": nature} for rate, nature in keys]
+    def test_accepted_exactly_when_the_keys_are_distinct(
+        self, entries: list[tuple[Decimal, Natura | None, EsigibilitaIVA | None]]
+    ) -> None:
+        # The key is (rate by value, Natura, split payment or not); D vs I is not part of it.
+        summaries = [{"rate": rate, "nature": nature, "vat_chargeability": esig} for rate, nature, esig in entries]
+        keys = [(rate, nature, esig is EsigibilitaIVA.S) for rate, nature, esig in entries]
         distinct = len(set(keys)) == len(keys)
         try:
             it = _it(vat_summaries=summaries)
@@ -242,7 +259,7 @@ class TestVatSummaries:
             assert not distinct
         else:
             assert distinct
-            assert [(s.rate, s.nature) for s in it.vat_summaries] == keys
+            assert [(s.rate, s.nature, s.vat_chargeability) for s in it.vat_summaries] == entries
 
 
 class TestLineExtension:
