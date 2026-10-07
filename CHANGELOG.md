@@ -46,8 +46,42 @@ All notable changes to this project are documented here. The format follows
   - FPA12 gets the same checks, after an `information` finding `EUINVOICE-FATTURAPA-FPA12`.
   - Passing a profile for a FatturaPA document raises `UnsupportedDocumentError`.
   - The CLI `validate` command accepts FatturaPA.
-  - `parse()` refused FatturaPA until its reader existed (#120, added below), `to_xml(syntax="fatturapa")` refuses
-    it until its writer exists (#119), and `calc.check(syntax="fatturapa")` raises `ValueError`.
+  - `calc.check(syntax="fatturapa")` raises `ValueError`.
+- FatturaPA FPR12 writer ([#119](https://github.com/letsrevel/euinvoice/issues/119)).
+  - `euinvoice.syntax.fatturapa.write(invoice, transmission)` writes an `Invoice` with `Invoice.it` as one unsigned FPR12
+    file with one body, for TipoDocumento TD01, TD04, TD24 and TD17. The mapping follows App. 4.1 and the App. 5
+    code tables of the SdI "Regole tecniche fatture europee" v2.6; the element order and the lexical forms (exactly
+    two decimals for amounts, two to eight for prices and quantities, Basic Latin / Latin-1 text, lengths) follow
+    the XSD 1.2.3. Values that do not fit are refused, never rounded or cut.
+  - `Transmission` holds the transmission header: IdTrasmittente, `transmission_number` (ProgressivoInvio),
+    CodiceDestinatario (default `RECIPIENT_UNKNOWN` `0000000`, or `RECIPIENT_FOREIGN` `XXXXXXX`) and
+    PECDestinatario.
+  - `preflight(invoice)` reports, as `error` findings by model path, everything that keeps the invoice from being
+    written: what FatturaPA needs and the invoice lacks (`Invoice.it`, TipoDocumento vs BT-3, required elements,
+    Natura vs VAT category per App. 5.1, CondizioniPagamento / ModalitaPagamento); every business term FPR12
+    cannot carry (generic document level allowances and charges, VAT categories O, L and M, line allowances and
+    charges, BT-20, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be
+    built; and totals that disagree with the summaries written (BR-CO-10/13/14/15/16 through App. 4.1:
+    ImportoTotaleDocumento, ImportoPagamento and the derived BT-106..BT-110). Every set term is written or reported:
+    BT-120 becomes RiferimentoNormativo when its VAT breakdown has one summary, or is accepted when it is the App. 4.1
+    concatenation of the Natura and RiferimentoNormativo written (the reader's form); BT-121 must be the App. 5.1
+    VATEX code of the group's Natura; BT-20 is accepted only as the CondizioniPagamento code it carries. So an
+    invoice read from FatturaPA is written back unchanged: model → FPR12 → model is lossless up to the documented
+    App. 4.1 / 5 normalizations, and FPR12 → model → FPR12 is a fixed point wherever the writer supports the
+    content (round-trip tests with the #120 reader). `write` raises `ModelError` for the errors and for values
+    that do not fit their XSD type.
+    The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
+    (`needs-human`).
+  - DatiRiepilogo blocks are keyed by rate, Natura and split payment (category B → EsigibilitaIVA S) and filled
+    from `Invoice.it.vat_summaries`. Split payment and ordinary VAT at one rate are refused: FatturaPA lines carry
+    no EsigibilitaIVA, so a reader could not tell which line is which. ModalitaPagamento comes from `it.payment.method` or BT-81 through App. 5.6.
+    The stamp duty (BG-21 SAE, credit notes BG-20 95) is DatiBollo.
+  - `to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=...)` runs the pre-flight, writes, then runs
+    the offline SdI checks of `euinvoice.validation.sdi` on the result; an `error` from either raises
+    `PreflightError` with `profile_id` `"fatturapa"`. FatturaPA takes no profile, and the CEN checks do not run.
+  - `file_name(country, identifier, file_number)` builds an SdI file name and `check_file()` reports SdI 00001 (file
+    name, Allegato A §1.2.2) and 00003 (file size over `MAX_FILE_SIZE`, 5 000 000 bytes, the smaller reading of
+    "5MB").
 - FatturaPA reader ([#120](https://github.com/letsrevel/euinvoice/issues/120)).
   - `parse()` / `parse_detailed()` read a FatturaPA 1.2 document (FPR12, and FPA12 since the schema is shared) into
     `Invoice` with `Invoice.it` / `InvoiceLine.it`, following App. 4.1 of the SdI "Regole tecniche fatture europee"

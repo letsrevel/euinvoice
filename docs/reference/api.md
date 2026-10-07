@@ -54,6 +54,26 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ::: euinvoice.facturx.Extracted
 
+## FatturaPA
+
+::: euinvoice.syntax.fatturapa.write
+
+::: euinvoice.syntax.fatturapa.preflight
+
+::: euinvoice.syntax.fatturapa.Transmission
+
+::: euinvoice.syntax.fatturapa.RECIPIENT_UNKNOWN
+
+::: euinvoice.syntax.fatturapa.RECIPIENT_FOREIGN
+
+::: euinvoice.syntax.fatturapa.file_name
+
+::: euinvoice.syntax.fatturapa.check_file
+
+::: euinvoice.syntax.fatturapa.MAX_FILE_SIZE
+
+::: euinvoice.syntax.fatturapa.EXTENSIONS
+
 ## Model
 
 ::: euinvoice.model
