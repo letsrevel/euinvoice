@@ -16,7 +16,8 @@ from euinvoice.model import (
 from euinvoice.model.it import CondizioniPagamento, ItalianPayment, Natura, SoggettoEmittente, TipoDocumento
 from euinvoice.report import Severity
 from euinvoice.syntax.fatturapa import preflight
-from euinvoice.syntax.fatturapa._write_preflight import (
+from euinvoice.syntax.fatturapa._write_rules import (
+    CATEGORY,
     DOCUMENT_TYPE,
     EXTENSION,
     ISSUER,
@@ -69,7 +70,7 @@ def test_required_elements_without_their_business_term() -> None:
         lines=(it_line(rate=None),),
     )
 
-    assert {(rule, location) for rule, location, _ in found} == {
+    assert {(rule, location) for rule, location, _ in found if rule == REQUIRED} == {
         (REQUIRED, "seller.vat_identifier"),
         (REQUIRED, "seller.postal_address.address_line_1"),
         (REQUIRED, "seller.postal_address.city"),
@@ -102,8 +103,11 @@ def test_natura_against_rate_and_category(line: t.Any, message: str) -> None:
     assert message in findings[0].message
 
 
-def test_o_lines_are_left_to_write() -> None:
-    assert _found(lines=(it_line(category="O", rate=None),)) == []
+def test_o_lines_are_reported_as_a_category_only() -> None:
+    assert _found(lines=(it_line(category="O", rate=None),)) == [
+        (CATEGORY, "lines[0].vat_information.category_code", Severity.ERROR),
+        (CATEGORY, "vat_breakdown[0].category_code", Severity.ERROR),
+    ]
 
 
 @pytest.mark.parametrize(

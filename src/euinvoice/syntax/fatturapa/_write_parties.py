@@ -16,14 +16,11 @@ from lxml import etree
 from euinvoice.model import Buyer, BuyerPostalAddress, Identifier, Invoice, Seller, SellerPostalAddress
 from euinvoice.model.it import ItalianExtension
 from euinvoice.syntax.fatturapa._write_format import BASIC, cannot_express, child, matching, text
+from euinvoice.syntax.fatturapa._write_refuse import codice_fiscale
 
 __all__ = ["write_buyer", "write_seller"]
 
 ITALY: t.Final = "IT"
-CODICE_FISCALE_SCHEME: t.Final = "0210"
-"""ICD scheme of the Italian codice fiscale (App. 4.1 rows 1.2.1.2 and 1.4.1.2: "schemeIdentifier ... 0210")."""
-CODICE_FISCALE_PREFIX: t.Final = "CF:"
-"""The prefix App. 4.1 rows 1.2.1.2 and 1.4.1.2 put before a codice fiscale in BT-30 / BT-47."""
 
 _COUNTRY: t.Final = "[A-Z]{2}"  # NazioneType
 _CODICE_FISCALE: t.Final = "[A-Z0-9]{11,16}"  # CodiceFiscaleType
@@ -47,19 +44,11 @@ def _vat(parent: etree._Element, value: str, term: str) -> None:
 def _codice_fiscale(parent: etree._Element, identifier: Identifier | None, term: str) -> None:
     """CodiceFiscale from a legal registration identifier with scheme 0210 or the ``CF:`` prefix.
 
-    Rows 1.2.1.2 and 1.4.1.2; any other identifier has no FatturaPA element.
+    Rows 1.2.1.2 and 1.4.1.2; the pre-flight refuses any other identifier.
     """
     if identifier is None:
         return
-    value = identifier.value
-    if identifier.scheme_id is None and value.startswith(CODICE_FISCALE_PREFIX):
-        value = value.removeprefix(CODICE_FISCALE_PREFIX)
-    elif identifier.scheme_id != CODICE_FISCALE_SCHEME:
-        raise cannot_express(
-            term,
-            f"only a codice fiscale is written (CodiceFiscale): scheme {CODICE_FISCALE_SCHEME} or the prefix "
-            f"{CODICE_FISCALE_PREFIX!r}; got scheme {identifier.scheme_id!r}",
-        )
+    value = codice_fiscale(identifier)
     child(parent, "CodiceFiscale", matching(value, _CODICE_FISCALE, term, "CodiceFiscale (CodiceFiscaleType)"))
 
 
@@ -110,9 +99,14 @@ def _address(
     child(sede, "Comune", text(address.city or "", f"{city} ({prefix}.city)", "Comune (String60LatinType)", maximum=60))
     if address.country_subdivision is not None:
         term = f"{subdivision} ({prefix}.country_subdivision)"
-        # Allegato A 1.9.1, Sede/Provincia: "da valorizzare nei soli casi di sede in Italia".
+        # Provincia is an Italian province code: for the cedente Allegato A 1.9.1 (Sede/Provincia: "da valorizzare nei
+        # soli casi di sede in Italia") and CIUS-IT BR-IT-DC-150 (BT-39); for the cessionario BR-IT-220 (BT-54: "deve
+        # essere utilizzato uno dei valori della lista delle province italiane"), App. 2 of the Regole tecniche v2.6.
         if address.country_code != ITALY:
-            raise cannot_express(term, "Provincia is given only for an address in Italy (Allegato A 1.9.1)")
+            source = "Allegato A 1.9.1, BR-IT-DC-150" if subdivision == "BT-39" else "BR-IT-220"
+            raise cannot_express(
+                term, f"Provincia is an Italian province, given only for an address in Italy ({source})"
+            )
         child(sede, "Provincia", matching(address.country_subdivision, _PROVINCIA, term, "Provincia (ProvinciaType)"))
     child(
         sede,

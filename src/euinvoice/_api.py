@@ -16,7 +16,9 @@ from euinvoice.model import Invoice
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import ValidationReport
 from euinvoice.syntax import Syntax, cii, fatturapa, ubl
+from euinvoice.syntax.fatturapa._write import serialize
 from euinvoice.syntax.result import ParseResult
+from euinvoice.validation import sdi
 
 __all__ = ["parse", "parse_detailed", "to_xml"]
 
@@ -26,14 +28,18 @@ def to_xml(
     *,
     profile: profiles.Profile | None = None,
     syntax: Syntax | t.Literal["ubl", "cii", "fatturapa"] | None = None,
-    fatturapa_options: fatturapa.WriterOptions | None = None,
+    fatturapa_transmission: fatturapa.Transmission | None = None,
 ) -> bytes:
     """Write an invoice as UBL 2.1 or CII D16B XML under a profile, after its pre-flight and calculation checks.
 
     ``syntax=Syntax.FATTURAPA`` writes an FPR12 FatturaPA 1.2.3 file instead (#119), with no profile (FatturaPA has
-    no BT-24) and the transmission header from ``fatturapa_options``: :func:`euinvoice.syntax.fatturapa.preflight`
-    runs, then :func:`euinvoice.syntax.fatturapa.write`. The CEN calculation checks do not run, as they are not
-    FatturaPA's rules (D8 as amended); run :func:`euinvoice.validate` on the result for the XSD and SdI checks.
+    no BT-24) and the transmission header from ``fatturapa_transmission``. Its checks are FatturaPA's (D8 as
+    amended), not the CEN ones: :func:`euinvoice.syntax.fatturapa.preflight` runs first (what the invoice lacks, what
+    FPR12 cannot carry, totals against the summaries), then the document is written and the offline SdI checks of
+    Allegato A 1.9.1 (:mod:`euinvoice.validation.sdi`, the ones :func:`euinvoice.validate` runs after the XSD) run on
+    it. An ``error`` from either refuses the write with :class:`PreflightError`. The pre-flight's warnings (BT-20,
+    BT-120 and BT-121, which are not written; #133) are not returned: call ``preflight`` to see them. The XSD step
+    needs the fetched artifacts and does not run here; run :func:`euinvoice.validate` on the result for it.
 
     The invoice is first set up for the profile with :meth:`~euinvoice.profiles.Profile.prepare` (BT-24 becomes
     the profile's, BT-23 gets its default; see there), so the written document reads back as
@@ -54,7 +60,7 @@ def to_xml(
         syntax: ``Syntax.UBL`` / ``"ubl"``, ``Syntax.CII`` / ``"cii"`` or ``Syntax.FATTURAPA`` / ``"fatturapa"``.
             ``None`` is allowed only when the profile supports a single syntax, which is then used (e.g.
             ``FACTURX_EN16931`` / ``FACTURX_XRECHNUNG``: CII).
-        fatturapa_options: The FatturaPA transmission header (:class:`euinvoice.syntax.fatturapa.WriterOptions`),
+        fatturapa_transmission: The FatturaPA transmission header (:class:`euinvoice.syntax.fatturapa.Transmission`),
             required with ``Syntax.FATTURAPA`` and refused with any other syntax.
 
     Returns:
@@ -62,23 +68,24 @@ def to_xml(
 
     Raises:
         PreflightError: The pre-flight or calculation checks report a ``fatal`` or ``error`` finding; ``findings``
-            holds every finding of both. For FatturaPA, the FatturaPA pre-flight reports one (``profile_id`` and
-            ``syntax`` are then ``"fatturapa"``).
+            holds every finding of both. For FatturaPA, the FatturaPA pre-flight reports an ``error`` or an SdI check
+            fails on the written document (``findings`` then holds the pre-flight's and the SdI checks' findings;
+            ``profile_id`` and ``syntax`` are ``"fatturapa"``).
         UnsupportedDocumentError: ``profile`` is ``None`` and no profile is registered for the invoice's BT-24;
             a profile is given with ``Syntax.FATTURAPA``;
             the profile does not support ``syntax``; or it is a Factur-X level that is not generated (MINIMUM,
             BASIC WL, BASIC, EXTENDED, plan §1), whose official Schematron is not pinned (issue #42), so nothing
             could tell whether its rules accept the document.
         ValueError: ``syntax`` is not a syntax, or is ``None`` for a profile that supports more than one;
-            ``fatturapa_options`` is missing with ``Syntax.FATTURAPA`` or given with another syntax.
+            ``fatturapa_transmission`` is missing with ``Syntax.FATTURAPA`` or given with another syntax.
         ModelError: The invoice holds something the target syntax cannot express, e.g. a set national extension
             (``Invoice.it``, D3 as amended) in UBL or CII; see :func:`euinvoice.syntax.ubl.write`,
             :func:`euinvoice.syntax.cii.write` and :func:`euinvoice.syntax.fatturapa.write`.
     """
     if syntax is not None and Syntax(syntax) is Syntax.FATTURAPA:
-        return _to_fatturapa(invoice, profile, fatturapa_options)
-    if fatturapa_options is not None:
-        raise ValueError("fatturapa_options apply only to syntax=Syntax.FATTURAPA")
+        return _to_fatturapa(invoice, profile, fatturapa_transmission)
+    if fatturapa_transmission is not None:
+        raise ValueError("fatturapa_transmission applies only to syntax=Syntax.FATTURAPA")
     if profile is None:
         profile = profiles.get(invoice.process_control.specification_identifier)
     if FACTURX_RULE_SET in profile.rule_sets:
@@ -161,18 +168,24 @@ def parse_detailed(data: bytes) -> ParseResult:
     return ubl.read(root) if syntax is Syntax.UBL else cii.read(root)
 
 
-def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: fatturapa.WriterOptions | None) -> bytes:
+def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: fatturapa.Transmission | None) -> bytes:
     """The FatturaPA branch of :func:`to_xml`."""
     if profile is not None:
         raise UnsupportedDocumentError(
             f"FatturaPA is written without a profile (it has no BT-24, D8 as amended); got profile {profile.id!r}"
         )
     if options is None:
-        raise ValueError("writing FatturaPA needs fatturapa_options=euinvoice.syntax.fatturapa.WriterOptions(...)")
+        raise ValueError("writing FatturaPA needs fatturapa_transmission=euinvoice.syntax.fatturapa.Transmission(...)")
     findings = fatturapa.preflight(invoice)
     if not ValidationReport(findings).ok:
         raise PreflightError(Syntax.FATTURAPA, Syntax.FATTURAPA, findings)
-    return fatturapa.write(invoice, options)
+    data = serialize(invoice, options)
+    # The SdI checks are FatturaPA's oracle (D8 as amended), so they block the write as calc.check and the profile
+    # pre-flight do for UBL/CII: e.g. 00421 (Imposta) and 00423 (PrezzoTotale) on amounts the writer copies.
+    rejected = sdi.check(_xml.parse(data))
+    if rejected:
+        raise PreflightError(Syntax.FATTURAPA, Syntax.FATTURAPA, (*findings, *rejected))
+    return data
 
 
 def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Syntax:

@@ -1,4 +1,4 @@
-"""Writer options: the FPR12 transmission header (1.1 ``<DatiTrasmissione>``), which is not invoice data (#118, #119).
+"""The FPR12 transmission header (1.1 ``<DatiTrasmissione>``), which is not invoice data (#118, #119).
 
 Plan M11.3 keeps IdTrasmittente, ProgressivoInvio, CodiceDestinatario and PECDestinatario out of the model: they
 describe one transmission to the Sistema di Interscambio (SdI), not the invoice. App. 4.1 of the SdI "Regole
@@ -18,7 +18,7 @@ from euinvoice.model._base import EuInvoiceModel
 from euinvoice.model.datatypes import Text
 from euinvoice.model.it.extension import fatturapa
 
-__all__ = ["RECIPIENT_FOREIGN", "RECIPIENT_UNKNOWN", "WriterOptions"]
+__all__ = ["RECIPIENT_FOREIGN", "RECIPIENT_UNKNOWN", "Transmission"]
 
 RECIPIENT_UNKNOWN: t.Final = "0000000"
 """``CodiceDestinatario`` when the recipient's channel is unknown or is the PEC address in ``PECDestinatario``
@@ -29,7 +29,7 @@ RECIPIENT_FOREIGN: t.Final = "XXXXXXX"
 
 _COUNTRY = re.compile(r"[A-Z]{2}")  # NazioneType
 _CODE = re.compile(r".{1,28}", re.DOTALL)  # CodiceType: xs:string, minLength 1, maxLength 28
-_PROGRESSIVE = re.compile(r"[\x00-\x7f]{1,10}")  # String10Type: xs:normalizedString, (\p{IsBasicLatin}{1,10})
+_NUMBER = re.compile(r"[\x00-\x7f]{1,10}")  # String10Type: xs:normalizedString, (\p{IsBasicLatin}{1,10})
 _RECIPIENT = re.compile(r"[A-Z0-9]{7}")  # CodiceDestinatarioType [A-Z0-9]{6,7}; 6 is FPA12 only (SdI 00427)
 # EmailType (xs:token, maxLength 256) allows a dot-atom or a quoted local part and a dot-atom or a domain literal.
 # Only its dot-atom@dot-atom alternative is accepted here, a subset of the XSD pattern: an address this accepts is
@@ -48,10 +48,10 @@ def _match(pattern: re.Pattern[str], what: str) -> t.Callable[[str], str]:
     return check
 
 
-class WriterOptions(EuInvoiceModel):
+class Transmission(EuInvoiceModel):
     """The transmission header of an FPR12 file: who sends it and to which SdI channel.
 
-    ``FormatoTrasmissione`` (1.1.3) is always ``FPR12`` and is not an option.
+    ``FormatoTrasmissione`` (1.1.3) is always ``FPR12`` and is not a field.
     """
 
     transmitter_country: t.Annotated[
@@ -66,18 +66,19 @@ class WriterOptions(EuInvoiceModel):
         fatturapa("1.1.1.2"),
     ]
     """``IdTrasmittente/IdCodice``: the transmitter's tax identifier (for Italy the codice fiscale)."""
-    progressive: t.Annotated[
+    transmission_number: t.Annotated[
         Text,
         pydantic.AfterValidator(
             _match(
-                _PROGRESSIVE,
+                _NUMBER,
                 "ProgressivoInvio must be 1 to 10 Basic Latin characters, no tab or line break (String10Type)",
             )
         ),
         fatturapa("1.1.2"),
     ]
-    """``ProgressivoInvio``: the transmitter's own identifier of the file (Allegato A: "progressivo che il soggetto
-    trasmittente attribuisce al file")."""
+    """``ProgressivoInvio``: the transmitter's own identifier of this transmission (Allegato A: "progressivo che il
+    soggetto trasmittente attribuisce al file"). Not the 1-5 character ``file_number`` of the SdI file name
+    (:func:`~euinvoice.syntax.fatturapa.file_name`), which follows other rules."""
     recipient_code: t.Annotated[
         Text,
         pydantic.AfterValidator(

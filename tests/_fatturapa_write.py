@@ -50,13 +50,15 @@ from euinvoice.model.it import (
     TipoCessionePrestazione,
     TipoDocumento,
 )
-from euinvoice.syntax.fatturapa import WriterOptions, write
+from euinvoice.syntax.fatturapa import Transmission, write
 
 TEST_IBAN: t.Final = "DE02120300000000202051"
 SELLER_VAT: t.Final = "IT00000000001"
 BUYER_VAT: t.Final = "IT00000000002"
 BUYER_CF: t.Final = "AAAAAA00A00A000A"
-OPTIONS: t.Final = WriterOptions(transmitter_country="IT", transmitter_code="00000000001", progressive="00001")
+TRANSMISSION: t.Final = Transmission(
+    transmitter_country="IT", transmitter_code="00000000001", transmission_number="00001"
+)
 EXEMPT: t.Final = {code: calc.ExemptionReason(text="Synthetic exemption reason") for code in ("E", "G", "K", "AE")}
 
 
@@ -142,8 +144,8 @@ def it_draft(*lines: LineDraft, **changes: t.Any) -> InvoiceDraft:
     return InvoiceDraft(**data)
 
 
-def it_invoice(*lines: LineDraft, **changes: t.Any) -> Invoice:
-    """:func:`it_draft` completed by :func:`euinvoice.calc.complete` (exemption reasons for E/Z/G/K/AE)."""
+def it_invoice(*lines: LineDraft, rounding: str | None = None, **changes: t.Any) -> Invoice:
+    """:func:`it_draft` completed by :func:`euinvoice.calc.complete` (exemption reasons for E/G/K/AE; BT-114)."""
     draft = it_draft(*lines, **changes)
     used = {
         str(c)
@@ -153,10 +155,14 @@ def it_invoice(*lines: LineDraft, **changes: t.Any) -> Invoice:
             *(c.vat_category_code for c in draft.charges),
         )
     }
-    return calc.complete(draft, exemption_reasons={k: v for k, v in EXEMPT.items() if k in used})
+    return calc.complete(
+        draft,
+        exemption_reasons={k: v for k, v in EXEMPT.items() if k in used},
+        rounding_amount=None if rounding is None else Decimal(rounding),
+    )
 
 
-def written(invoice: Invoice, options: WriterOptions = OPTIONS) -> etree._Element:
+def written(invoice: Invoice, options: Transmission = TRANSMISSION) -> etree._Element:
     """The root of ``write(invoice, options)``."""
     return _xml.parse(write(invoice, options))
 
@@ -289,12 +295,78 @@ def _rich_line() -> Invoice:
     )
 
 
+def every_written_term() -> Invoice:
+    """A TD01 that sets every business term the writer writes for an invoice (BT-92/BT-98: the TD04 sample)."""
+    discounted = it_line(
+        "1",
+        "4",
+        "9.5",
+        price_details=PriceDetails(
+            item_net_price=Decimal("9.5"), item_gross_price=Decimal("10"), item_price_discount=Decimal("0.5")
+        ),
+        buyer_accounting_reference="CDC-1",
+        period=InvoiceLinePeriod(start_date=datetime.date(2026, 1, 1), end_date=datetime.date(2026, 1, 31)),
+    )
+    return it_invoice(
+        discounted,
+        it_line("2", "1", "5", supply_type=TipoCessionePrestazione.AC),
+        rounding="0.01",
+        notes=(InvoiceNote(note="Evento del 15 gennaio, ingresso unico."),),
+        purchase_order_reference="PO-1",
+        contract_reference="CT-1",
+        receiving_advice_reference="RA-1",
+        buyer_accounting_reference="RIF-AMM",
+        vat_point_date_code="3",
+        payment_due_date=datetime.date(2026, 2, 15),
+        preceding_invoice_references=(
+            PrecedingInvoiceReference(reference="FT-0", issue_date=datetime.date(2026, 1, 10)),
+        ),
+        seller=seller(
+            contact=SellerContact(telephone="0600000000", email="fatture@example.com"),
+            legal_registration_identifier=Identifier(value="CF:00000000001"),
+            postal_address=SellerPostalAddress(
+                address_line_1="Via Esempio",
+                address_line_2="1/A",
+                city="Roma",
+                post_code="00100",
+                country_subdivision="RM",
+                country_code="IT",
+            ),
+        ),
+        buyer=buyer(
+            vat_identifier=BUYER_VAT,
+            postal_address=BuyerPostalAddress(
+                address_line_1="Via Prova",
+                address_line_2="2",
+                city="Milano",
+                post_code="20100",
+                country_subdivision="MI",
+                country_code="IT",
+            ),
+        ),
+        charges=(
+            DocumentLevelCharge(
+                amount=Decimal("0.00"), vat_category_code="Z", vat_rate=Decimal(0), reason="BOLLO", reason_code="SAE"
+            ),
+        ),
+        payment_instructions=PaymentInstructions(
+            payment_means_type_code="58",
+            remittance_information="RF18000000000000000000001",
+            credit_transfers=(
+                CreditTransfer(payment_account_identifier=TEST_IBAN, payment_service_provider_identifier="AAAADEBBXXX"),
+            ),
+        ),
+        payee=Payee(name="Esempio Incassi S.p.A."),
+        it=italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02)),
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class Sample:
     """A named invoice and the options it is written with."""
 
     invoice: Invoice
-    options: WriterOptions = OPTIONS
+    options: Transmission = TRANSMISSION
 
 
 def samples() -> dict[str, Sample]:
@@ -303,17 +375,21 @@ def samples() -> dict[str, Sample]:
         "TD01 B2C": Sample(it_invoice()),
         "TD01 B2B with PEC": Sample(
             it_invoice(buyer=buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)),
-            OPTIONS.model_copy(update={"recipient_pec": "fatture@example.com"}),
+            TRANSMISSION.model_copy(update={"recipient_pec": "fatture@example.com"}),
         ),
         "TD01 B2B with SdI code": Sample(
             it_invoice(buyer=buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)),
-            WriterOptions(
-                transmitter_country="IT", transmitter_code="00000000001", progressive="A1", recipient_code="ABCDEF1"
+            Transmission(
+                transmitter_country="IT",
+                transmitter_code="00000000001",
+                transmission_number="A1",
+                recipient_code="ABCDEF1",
             ),
         ),
         "TD01 stamp duty": Sample(_stamp_duty()),
         "TD01 exempt and split payment": Sample(_exempt_and_split()),
         "TD01 rich line": Sample(_rich_line()),
+        "TD01 every written term": Sample(every_written_term()),
         "TD04 credit note": Sample(_credit_note()),
         "TD24 deferred": Sample(_deferred()),
         "TD17 self-billing": Sample(_self_billing()),

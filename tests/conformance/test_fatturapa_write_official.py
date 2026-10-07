@@ -12,9 +12,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from _fatturapa_write import BUYER_VAT, OPTIONS, Sample, buyer, it_draft, it_line, italian, samples
+from _fatturapa_write import BUYER_VAT, TRANSMISSION, Sample, buyer, it_draft, it_line, italian, samples
 from euinvoice import calc, detect, validate
-from euinvoice.model import Buyer, LineDraft, Seller, SellerPostalAddress
+from euinvoice.model import Buyer, Invoice, LineDraft, Seller, SellerPostalAddress
 from euinvoice.model.it import Natura, RegimeFiscale, SoggettoEmittente, TipoDocumento
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import write
@@ -76,7 +76,7 @@ _FOREIGN_SELLER: t.Final = Seller(
 
 
 @st.composite
-def _invoices(draw: st.DrawFn) -> t.Any:
+def _invoices(draw: st.DrawFn) -> Invoice:
     tipo = draw(st.sampled_from([TipoDocumento.TD01, TipoDocumento.TD04, TipoDocumento.TD24, TipoDocumento.TD17]))
     changes: dict[str, t.Any] = {
         "type_code": "381" if tipo is TipoDocumento.TD04 else "380",
@@ -100,5 +100,5 @@ def _invoices(draw: st.DrawFn) -> t.Any:
 
 @settings(max_examples=60)
 @given(_invoices())
-def test_random_v1_invoices_pass_the_xsd_and_the_sdi_checks(invoice: t.Any) -> None:
-    assert validate(write(invoice, OPTIONS)).findings == ()
+def test_random_v1_invoices_pass_the_xsd_and_the_sdi_checks(invoice: Invoice) -> None:
+    assert validate(write(invoice, TRANSMISSION)).findings == ()

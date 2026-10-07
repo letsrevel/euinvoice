@@ -8,9 +8,9 @@ the element order is the pinned XSD 1.2.3 (``Schema_VFPR12_v1.2.3.xsd``): ``Fatt
 ``DatiGeneraliDocumentoType``, ``DatiBolloType``, ``DatiDocumentiCorrelatiType``, ``DatiPagamentoType`` and
 ``DettaglioPagamentoType`` here, the parties and lines in their modules.
 
-Nothing is dropped silently (plan §1): :func:`preflight` reports what is missing, and :func:`write` refuses with
-:class:`~euinvoice.errors.ModelError` whatever FatturaPA cannot carry (see :mod:`._write_refuse`) or carry exactly
-(see :mod:`._write_format`).
+Nothing is dropped silently (plan §1): :func:`~._write_preflight.preflight` reports what is missing and what FPR12
+cannot carry, and :func:`serialize` refuses with :class:`~euinvoice.errors.ModelError` a value that does not fit its
+XSD type (see :mod:`._write_format`).
 """
 
 import typing as t
@@ -21,133 +21,84 @@ from lxml import etree
 from euinvoice import _xml
 from euinvoice.errors import ModelError
 from euinvoice.model import Invoice, PaymentInstructions
-from euinvoice.model.it import ItalianExtension, ItalianPayment, ModalitaPagamento, TipoDocumento
-from euinvoice.report import Severity, ValidationReport
+from euinvoice.model.it import ItalianExtension, ItalianPayment, ModalitaPagamento
+from euinvoice.report import Severity
 from euinvoice.syntax.fatturapa._write_codes import PAYMENT_METHOD_OF_MEANS
-from euinvoice.syntax.fatturapa._write_format import BASIC, amount2, cannot_express, child, date, matching, text
-from euinvoice.syntax.fatturapa._write_lines import write_goods
+from euinvoice.syntax.fatturapa._write_format import BASIC, amount2, child, date, matching, text
+from euinvoice.syntax.fatturapa._write_lines import summarize, write_goods
 from euinvoice.syntax.fatturapa._write_parties import write_buyer, write_seller
 from euinvoice.syntax.fatturapa._write_preflight import preflight
-from euinvoice.syntax.fatturapa._write_refuse import refuse_unwritten
-from euinvoice.syntax.fatturapa.options import WriterOptions
+from euinvoice.syntax.fatturapa._write_refuse import stamp_duty
+from euinvoice.syntax.fatturapa.transmission import Transmission
 
-__all__ = ["FORMAT", "STAMP_DUTY_ALLOWANCE", "STAMP_DUTY_CHARGE", "STAMP_DUTY_REASON", "write"]
+__all__ = ["FORMAT", "serialize", "write"]
 
 FORMAT: t.Final = "FPR12"
 """``FormatoTrasmissione`` (1.1.3) and the root's ``versione`` (SdI 00428 requires them equal)."""
-STAMP_DUTY_CHARGE: t.Final = "SAE"
-"""BT-105 of the document level charge that is the stamp duty of an invoice (App. 4.1 row 2.1.1.6)."""
-STAMP_DUTY_ALLOWANCE: t.Final = "95"
-"""BT-98 of the document level allowance that is the stamp duty of a credit note (App. 4.1 row 2.1.1.6)."""
-STAMP_DUTY_REASON: t.Final = "BOLLO"
-"""The reason text BR-IT-DC-480 of the Regole tecniche v2.6 (App. 2) gives the stamp duty charge."""
 
 
-def write(invoice: Invoice, options: WriterOptions) -> bytes:
+def write(invoice: Invoice, transmission: Transmission) -> bytes:
     """Serialize an invoice as an FPR12 FatturaPA 1.2.3 document with one body.
+
+    The pre-flight (:func:`~euinvoice.syntax.fatturapa.preflight`) runs first. The SdI checks of Allegato A 1.9.1 do
+    not: run :func:`euinvoice.validate` on the result, or write through :func:`euinvoice.to_xml`, which runs them.
 
     Args:
         invoice: The invoice, with ``Invoice.it`` set.
-        options: The transmission header (:class:`~euinvoice.syntax.fatturapa.WriterOptions`).
+        transmission: The transmission header (:class:`~euinvoice.syntax.fatturapa.Transmission`).
 
     Returns:
         The UTF-8 encoded document with an XML declaration, unsigned.
 
     Raises:
-        ModelError: :func:`preflight` reports an ``error`` (the message lists them), or the invoice holds something
-            FPR12 cannot carry: a business term outside the mapping, a value that does not fit its XSD type (length,
-            characters, decimals), a document level allowance or charge other than the stamp duty, VAT category O, L
-            or M, a VAT BREAKDOWN its lines do not add up to, or an ``it.vat_summaries`` entry no line matches. The
-            message starts with the business term or extension path.
+        ModelError: The pre-flight reports an ``error`` (the message lists every one), or a value does not fit its XSD
+            type (length, characters, decimals, CAP, Provincia, line number, IBAN, …); that message starts with the
+            business term and its model path.
     """
-    report = ValidationReport(preflight(invoice))
-    if not report.ok:
+    blocking = [f for f in preflight(invoice) if f.severity in (Severity.FATAL, Severity.ERROR)]
+    if blocking:
         raise ModelError(
             "invoice fails the FatturaPA pre-flight: "
-            + "; ".join(
-                f"{f.rule_id} at {f.location}: {f.message}"
-                for f in report.findings
-                if f.severity in (Severity.FATAL, Severity.ERROR)
-            )
+            + "; ".join(f"{f.rule_id} at {f.location}: {f.message}" for f in blocking)
         )
-    it = t.cast(ItalianExtension, invoice.it)  # preflight requires it
-    refuse_unwritten(invoice)
-    stamp_duty = _stamp_duty(invoice, it)
+    return serialize(invoice, transmission)
+
+
+def serialize(invoice: Invoice, transmission: Transmission) -> bytes:
+    """Write an invoice whose pre-flight has no ``error`` (:func:`write` without that gate, for ``to_xml``).
+
+    Raises:
+        ModelError: A value does not fit its XSD type.
+    """
+    it = t.cast(ItalianExtension, invoice.it)  # the pre-flight requires it
+    blocks, _ = summarize(invoice, it)
     root = etree.Element(f"{{{_xml.FATTURAPA}}}FatturaElettronica", nsmap={"p": _xml.FATTURAPA})
     root.set("versione", FORMAT)
     header = child(root, "FatturaElettronicaHeader")
-    _transmission(header, options)
+    _transmission(header, transmission)
     write_seller(header, invoice, it)
     write_buyer(header, invoice)
     if it.issuer is not None:
         child(header, "SoggettoEmittente", it.issuer)
     body = child(root, "FatturaElettronicaBody")
-    _general(body, invoice, it, stamp_duty)
-    write_goods(body, invoice, it)
+    _general(body, invoice, it, stamp_duty(invoice, it))
+    write_goods(body, invoice, blocks)
     if it.payment is not None:
         _payment(body, invoice, it.payment)
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
 
 
-def _transmission(header: etree._Element, options: WriterOptions) -> None:
-    """1.1 DatiTrasmissione from the writer options (``ContattiTrasmittente`` is not written)."""
-    transmission = child(header, "DatiTrasmissione")
-    transmitter = child(transmission, "IdTrasmittente")
-    child(transmitter, "IdPaese", options.transmitter_country)
-    child(transmitter, "IdCodice", options.transmitter_code)
-    child(transmission, "ProgressivoInvio", options.progressive)
-    child(transmission, "FormatoTrasmissione", FORMAT)
-    child(transmission, "CodiceDestinatario", options.recipient_code)
-    if options.recipient_pec is not None:
-        child(transmission, "PECDestinatario", options.recipient_pec)
-
-
-def _stamp_duty(invoice: Invoice, it: ItalianExtension) -> Decimal | None:
-    """ImportoBollo of 2.1.1.6 DatiBollo, from the one allowance or charge that is the stamp duty (row 2.1.1.6).
-
-    Every other document level allowance or charge is refused: FatturaPA's 2.1.1.8 ScontoMaggiorazione does not
-    reduce the summaries' taxable amount (SdI 00422), so it cannot carry BG-20 / BG-21 (#133).
-    """
-    credit_note = it.document_type is TipoDocumento.TD04
-    found: Decimal | None = None
-    entries = [
-        (
-            f"allowances[{i}]",
-            "BG-20",
-            "BT-97",
-            e.amount,
-            e.reason,
-            credit_note and e.reason_code == STAMP_DUTY_ALLOWANCE,
-        )
-        for i, e in enumerate(invoice.allowances)
-    ] + [
-        (f"charges[{i}]", "BG-21", "BT-104", e.amount, e.reason, not credit_note and e.reason_code == STAMP_DUTY_CHARGE)
-        for i, e in enumerate(invoice.charges)
-    ]
-    for path, group, reason_term, amount, reason, is_stamp_duty in entries:
-        term = f"{group} ({path})"
-        if not is_stamp_duty:
-            raise cannot_express(
-                term,
-                "only the stamp duty is written (2.1.1.6 DatiBollo: BT-105 = SAE on an invoice, BT-98 = 95 on a "
-                "credit note, App. 4.1); 2.1.1.8 ScontoMaggiorazione does not reduce the DatiRiepilogo taxable amount "
-                "(SdI 00422), so other document level allowances and charges are refused (#133)",
-            )
-        if found is not None:
-            raise cannot_express(term, "2.1.1.6 DatiBollo occurs at most once (DatiGeneraliDocumentoType)")
-        if amount != 0:
-            raise cannot_express(
-                f"{group} ({path}.amount)",
-                "a stamp duty charged to the buyer is not written: its amount would be in the VAT BREAKDOWN, which "
-                "DatiRiepilogo cannot carry (SdI 00422), and BR-IT-DC-480 sets it to 0 (#133)",
-            )
-        if reason is not None and reason != STAMP_DUTY_REASON:
-            raise cannot_express(
-                f"{reason_term} ({path}.reason)",
-                f"2.1.1.6 DatiBollo has no reason; only {STAMP_DUTY_REASON!r} (BR-IT-DC-480) is implied by it",
-            )
-        found = amount
-    return found
+def _transmission(header: etree._Element, transmission: Transmission) -> None:
+    """1.1 DatiTrasmissione from the transmission header (``ContattiTrasmittente`` is not written)."""
+    data = child(header, "DatiTrasmissione")
+    transmitter = child(data, "IdTrasmittente")
+    child(transmitter, "IdPaese", transmission.transmitter_country)
+    child(transmitter, "IdCodice", transmission.transmitter_code)
+    child(data, "ProgressivoInvio", transmission.transmission_number)
+    child(data, "FormatoTrasmissione", FORMAT)
+    child(data, "CodiceDestinatario", transmission.recipient_code)
+    if transmission.recipient_pec is not None:
+        child(data, "PECDestinatario", transmission.recipient_pec)
 
 
 def _general(body: etree._Element, invoice: Invoice, it: ItalianExtension, stamp_duty: Decimal | None) -> None:
@@ -215,19 +166,11 @@ def _document_id(value: str, term: str) -> str:
 
 
 def _method(invoice: Invoice, payment: ItalianPayment) -> ModalitaPagamento:
-    """2.4.2.2 ModalitaPagamento: ``it.payment.method``, else BT-81 through App. 5.6 (preflight checks one exists)."""
-    instructions: PaymentInstructions | None = invoice.payment_instructions
-    means = None if instructions is None else instructions.payment_means_type_code
-    mapped = None if means is None else PAYMENT_METHOD_OF_MEANS.get(means)
-    if payment.method is None:
-        return t.cast(ModalitaPagamento, mapped)
-    if means is not None and mapped is not payment.method:
-        found = "no ModalitaPagamento" if mapped is None else f"ModalitaPagamento {mapped}"
-        raise cannot_express(
-            "BT-81 (payment_instructions.payment_means_type_code)",
-            f"App. 5.6 gives BT-81 {means} {found}, but it.payment.method is {payment.method}; 2.4.2.2 holds one code",
-        )
-    return payment.method
+    """2.4.2.2 ModalitaPagamento: ``it.payment.method``, else BT-81 through App. 5.6 (the pre-flight checks them)."""
+    if payment.method is not None:
+        return payment.method
+    instructions = t.cast(PaymentInstructions, invoice.payment_instructions)
+    return PAYMENT_METHOD_OF_MEANS[instructions.payment_means_type_code]
 
 
 def _payment(body: etree._Element, invoice: Invoice, payment: ItalianPayment) -> None:
@@ -259,14 +202,7 @@ def _payment(body: etree._Element, invoice: Invoice, payment: ItalianPayment) ->
     instructions = invoice.payment_instructions
     if instructions is None:
         return
-    transfers = instructions.credit_transfers
-    if len(transfers) > 1:
-        raise cannot_express(
-            "BG-17 (payment_instructions.credit_transfers)",
-            "one DettaglioPagamento has one IBAN; the v1 writer writes one DettaglioPagamento",
-        )
-    if transfers:
-        transfer = transfers[0]
+    for transfer in instructions.credit_transfers[:1]:  # the pre-flight refuses a second one
         path = "payment_instructions.credit_transfers[0]"
         child(
             detail,

@@ -41,21 +41,21 @@ _ITALY: t.Final = "IT"
 _NAME: t.Final = re.compile(r"([A-Z]{2})([A-Za-z0-9]+)_([A-Za-z0-9]{1,5})(\.xml|\.xml\.p7m|\.zip)")
 
 
-def _problem(country: str, identifier: str, progressive: str, extension: str) -> str | None:
+def _problem(country: str, identifier: str, file_number: str, extension: str) -> str | None:
     """What makes the parts of a file name invalid, or ``None``."""
     if country not in ISO_3166_1_COUNTRY or not re.fullmatch(r"[A-Z]{2}", country):
         return f"the country code {country!r} is not ISO 3166-1 alpha-2"
     low, high = (11, 16) if country == _ITALY else (2, 28)
     if not low <= len(identifier) <= high or not re.fullmatch(r"[A-Za-z0-9]+", identifier):
         return f"the identifier {identifier!r} is not {low} to {high} letters or digits for country {country}"
-    if not re.fullmatch(r"[A-Za-z0-9]{1,5}", progressive):
-        return f"the progressive {progressive!r} is not 1 to 5 letters or digits"
+    if not re.fullmatch(r"[A-Za-z0-9]{1,5}", file_number):
+        return f"the file number {file_number!r} is not 1 to 5 letters or digits"
     if extension not in EXTENSIONS:
         return f"the extension {extension!r} is not one of {', '.join(EXTENSIONS)}"
     return None
 
 
-def file_name(country: str, identifier: str, progressive: str, *, extension: str = ".xml") -> str:
+def file_name(country: str, identifier: str, file_number: str, *, extension: str = ".xml") -> str:
     """Build an SdI file name (Allegato A 1.9.1 §1.2.2), e.g. ``IT01234567890_00001.xml``.
 
     The name must also differ from every name sent to SdI before (00002), which only the sender can ensure.
@@ -64,8 +64,9 @@ def file_name(country: str, identifier: str, progressive: str, *, extension: str
         country: The ISO 3166-1 alpha-2 code of the identifier, e.g. ``"IT"``.
         identifier: The tax identifier of the transmitter or another subject (11 to 16 characters for ``IT``, 2 to
             28 otherwise; letters and digits).
-        progressive: The file's progressive, 1 to 5 letters or digits.
-        extension: One of :data:`EXTENSIONS`.
+        file_number: The "progressivo univoco del file", 1 to 5 letters or digits. Not ``Transmission``'s
+            ``transmission_number`` (1.1.2 ProgressivoInvio), which follows other rules.
+        extension: One of :data:`EXTENSIONS`: ``.xml``, ``.xml.p7m`` or ``.zip``.
 
     Returns:
         The file name.
@@ -73,9 +74,9 @@ def file_name(country: str, identifier: str, progressive: str, *, extension: str
     Raises:
         ValueError: A part does not follow §1.2.2; the message says which.
     """
-    if problem := _problem(country, identifier, progressive, extension):
+    if problem := _problem(country, identifier, file_number, extension):
         raise ValueError(f"invalid SdI file name (Allegato A 1.9.1 §1.2.2, SdI {FILE_NAME}): {problem}")
-    return f"{country}{identifier}_{progressive}{extension}"
+    return f"{country}{identifier}_{file_number}{extension}"
 
 
 def check_file(name: str, size: int) -> tuple[Finding, ...]:
@@ -93,7 +94,7 @@ def check_file(name: str, size: int) -> tuple[Finding, ...]:
     findings: list[Finding] = []
     match = _NAME.fullmatch(name)
     problem = (
-        "it does not have the form <country><identifier>_<progressive><extension>"
+        "it does not have the form <country><identifier>_<file number><extension>"
         if match is None
         else (_problem(*match.groups()))
     )

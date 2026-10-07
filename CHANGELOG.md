@@ -49,28 +49,33 @@ All notable changes to this project are documented here. The format follows
   - `parse()` refuses FatturaPA until its reader exists (#120), and `calc.check(syntax="fatturapa")` raises
     `ValueError`.
 - FatturaPA FPR12 writer ([#119](https://github.com/letsrevel/euinvoice/issues/119)).
-  - `euinvoice.syntax.fatturapa.write(invoice, options)` writes an `Invoice` with `Invoice.it` as one unsigned FPR12
+  - `euinvoice.syntax.fatturapa.write(invoice, transmission)` writes an `Invoice` with `Invoice.it` as one unsigned FPR12
     file with one body, for TipoDocumento TD01, TD04, TD24 and TD17. The mapping follows App. 4.1 and the App. 5
     code tables of the SdI "Regole tecniche fatture europee" v2.6; the element order and the lexical forms (exactly
     two decimals for amounts, two to eight for prices and quantities, Basic Latin / Latin-1 text, lengths) follow
     the XSD 1.2.3. Values that do not fit are refused, never rounded or cut.
-  - `WriterOptions` holds the transmission header: IdTrasmittente, ProgressivoInvio, CodiceDestinatario (default
-    `0000000`, or `XXXXXXX`) and PECDestinatario.
-  - `preflight(invoice)` reports what FatturaPA needs and the invoice lacks (`Invoice.it`, TipoDocumento vs BT-3,
-    required elements, Natura vs VAT category per App. 5.1, CondizioniPagamento / ModalitaPagamento), and warns
-    about BT-20, BT-120 and BT-121, which FatturaPA carries in other elements.
+  - `Transmission` holds the transmission header: IdTrasmittente, `transmission_number` (ProgressivoInvio),
+    CodiceDestinatario (default `RECIPIENT_UNKNOWN` `0000000`, or `RECIPIENT_FOREIGN` `XXXXXXX`) and
+    PECDestinatario.
+  - `preflight(invoice)` reports, as `error` findings by model path, everything that keeps the invoice from being
+    written: what FatturaPA needs and the invoice lacks (`Invoice.it`, TipoDocumento vs BT-3, required elements,
+    Natura vs VAT category per App. 5.1, CondizioniPagamento / ModalitaPagamento); every business term FPR12
+    cannot carry (generic document level allowances and charges, VAT categories O, L and M, line allowances and
+    charges, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be built; and
+    totals that disagree with the summaries written (ImportoTotaleDocumento, ImportoPagamento and the derived
+    BT-106..BT-110). It warns about BT-20, BT-120 and BT-121, which FatturaPA carries in other elements and which
+    are not written. `write` raises `ModelError` for its errors and for values that do not fit their XSD type.
+    The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
+    (`needs-human`).
   - DatiRiepilogo blocks are keyed by rate, Natura and split payment (category B → EsigibilitaIVA S) and filled
-    from `Invoice.it.vat_summaries`; an entry that matches no block raises `ModelError` naming it. ModalitaPagamento
-    comes from `it.payment.method` or BT-81 through App. 5.6. The stamp duty (BG-21 SAE, credit notes BG-20 95) is
-    DatiBollo.
-  - Everything else FPR12 cannot carry raises `ModelError` naming the business term: generic document level
-    allowances and charges, VAT categories O, L and M, line allowances and charges, BT-154, and every term with no
-    App. 4.1 row the writer fills. The policies behind these refusals are open in
-    [#133](https://github.com/letsrevel/euinvoice/issues/133) (`needs-human`).
-  - `to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_options=...)` runs the pre-flight (raising
-    `PreflightError` with `profile_id` `"fatturapa"`) and the writer; FatturaPA takes no profile.
-  - `file_name()` builds an SdI file name and `check_file()` reports SdI 00001 (file name, Allegato A §1.2.2) and
-    00003 (file size over 5 000 000 bytes, the smaller reading of "5MB").
+    from `Invoice.it.vat_summaries`. ModalitaPagamento comes from `it.payment.method` or BT-81 through App. 5.6.
+    The stamp duty (BG-21 SAE, credit notes BG-20 95) is DatiBollo.
+  - `to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=...)` runs the pre-flight, writes, then runs
+    the offline SdI checks of `euinvoice.validation.sdi` on the result; an `error` from either raises
+    `PreflightError` with `profile_id` `"fatturapa"`. FatturaPA takes no profile, and the CEN checks do not run.
+  - `file_name(country, identifier, file_number)` builds an SdI file name and `check_file()` reports SdI 00001 (file
+    name, Allegato A §1.2.2) and 00003 (file size over `MAX_FILE_SIZE`, 5 000 000 bytes, the smaller reading of
+    "5MB").
 
 ### Changed
 

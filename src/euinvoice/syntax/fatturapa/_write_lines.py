@@ -11,9 +11,10 @@ dell'imposta ("scissione dei pagamenti" od ordinaria), e/o per ogni natura", so 
 block lies inside one VAT BREAKDOWN (BG-23) of the same category and rate (App. 5.1 gives each Natura one category),
 and its ``ImponibileImporto`` is the sum of its lines' BT-131. A BG-23 must equal the sum of its blocks: an amount the
 lines do not carry (a document level allowance or charge) has no place in DatiRiepilogo (SdI 00422 compares it with
-the lines). A BG-23 with one block gives it its BT-117 (row 2.2.2.6); one split by Natura (rate 0 only) gives each
-block ``AliquotaIVA * ImponibileImporto / 100`` rounded half up (Allegato A, DatiRiepilogo / Imposta), and their sum
-must equal BT-117.
+the lines), and a BG-23 without lines has no block at all (except the zero stamp duty's own). A BG-23 with one block
+gives it its BT-117 (row 2.2.2.6); one split by Natura (rate 0 only) gives each block
+``AliquotaIVA * ImponibileImporto / 100`` rounded half up (Allegato A, DatiRiepilogo / Imposta), and their sum must
+equal BT-117. :func:`summarize` reports what keeps the blocks from being built as pre-flight findings.
 """
 
 import dataclasses
@@ -26,6 +27,7 @@ from euinvoice.model import Invoice, InvoiceLine, VatBreakdown
 from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ItalianExtension, ItalianVatSummary, Natura, TipoCessionePrestazione
+from euinvoice.report import Finding
 from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT
 from euinvoice.syntax.fatturapa._write_format import (
     BASIC,
@@ -38,9 +40,10 @@ from euinvoice.syntax.fatturapa._write_format import (
     rate,
     text,
 )
-from euinvoice.syntax.fatturapa._write_preflight import UNSUPPORTED_CATEGORIES
+from euinvoice.syntax.fatturapa._write_refuse import is_stamp_duty_group
+from euinvoice.syntax.fatturapa._write_rules import SUMMARY, UNSUPPORTED_CATEGORIES, finding
 
-__all__ = ["write_goods"]
+__all__ = ["Block", "summarize", "write_goods"]
 
 _LINE_NUMBER_MAX: t.Final = 9999  # NumeroLineaType
 _HUNDRED: t.Final = Decimal(100)
@@ -55,16 +58,6 @@ def _line_number(identifier: str, term: str) -> str:
     if not canonical or not 1 <= int(identifier) <= _LINE_NUMBER_MAX:
         raise cannot_express(term, f"NumeroLinea (NumeroLineaType) is an integer from 1 to 9999, got {identifier!r}")
     return identifier
-
-
-def _category(line: InvoiceLine, index: int) -> VatCategory:
-    category = VatCategory(line.vat_information.category_code)
-    if category in UNSUPPORTED_CATEGORIES:
-        raise cannot_express(
-            f"BT-151 (lines[{index}].vat_information.category_code)",
-            f"VAT category {category} has no Natura in App. 5.1 of the Regole tecniche v2.6 (#133)",
-        )
-    return category
 
 
 def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
@@ -126,12 +119,7 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
             amount8(price.item_net_price, term("BT-146", "price_details.item_net_price"), "2.2.1.9 PrezzoUnitario"),
         )
     if price.item_price_discount is not None:
-        _price_discount(
-            element,
-            price.item_price_discount,
-            price.item_gross_price is not None,
-            term("BT-147", "price_details.item_price_discount"),
-        )
+        _price_discount(element, price.item_price_discount, term("BT-147", "price_details.item_price_discount"))
     child(element, "PrezzoTotale", amount8(line.net_amount, term("BT-131", "net_amount"), "2.2.1.11 PrezzoTotale"))
     child(
         element,
@@ -156,30 +144,22 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
         )
 
 
-def _price_discount(element: etree._Element, discount: Decimal, gross: bool, term: str) -> None:
-    """2.2.1.10 ScontoMaggiorazione from BT-147.
+def _price_discount(element: etree._Element, discount: Decimal, term: str) -> None:
+    """2.2.1.10 ScontoMaggiorazione from BT-147, after the gross price BT-148 (preflight requires one).
 
     Row 2.2.1.10.1: "Se BT-147 maggiore di zero è valorizzato con 'SC', se minore di zero con 'MG'"; row 2.2.1.10.3:
-    the amount "a meno del segno".
+    the amount "a meno del segno". A zero discount needs no element: PrezzoUnitario then equals BT-146.
     """
-    if not gross:
-        raise cannot_express(
-            term,
-            "2.2.1.9 PrezzoUnitario is the net price BT-146 without a gross price BT-148, so "
-            "a discount on it would be applied twice",
-        )
     if discount == 0:
-        raise cannot_express(
-            term, "row 2.2.1.10.1 maps a discount above zero to SC and below zero to MG; zero is neither"
-        )
+        return
     adjustment = child(element, "ScontoMaggiorazione")
     child(adjustment, "Tipo", "SC" if discount > 0 else "MG")
     child(adjustment, "Importo", amount8(discount.copy_abs(), term, "2.2.1.10.3 Importo"))
 
 
 @dataclasses.dataclass
-class _Block:
-    """One DatiRiepilogo being built."""
+class Block:
+    """One DatiRiepilogo (2.2.2)."""
 
     rate: Decimal
     nature: Natura | None
@@ -188,24 +168,28 @@ class _Block:
     accessory: Decimal | None = None
     tax: Decimal = Decimal("0.00")
     summary: ItalianVatSummary | None = None
+    chargeability: EsigibilitaIVA | None = None
 
     @property
     def split(self) -> bool:
+        """Split payment: VAT category B (EsigibilitaIVA S, row 2.2.2.7)."""
         return self.category is VatCategory.SPLIT_PAYMENT
 
 
 type _Key = tuple[Decimal, Natura | None, bool]
 
 
-def _blocks(invoice: Invoice) -> dict[_Key, _Block]:
-    blocks: dict[_Key, _Block] = {}
-    for index, line in enumerate(invoice.lines):
-        category = _category(line, index)
+def _blocks(invoice: Invoice) -> dict[_Key, Block]:
+    """The blocks of the lines; a line without a rate or of category O/L/M is left to its own finding."""
+    blocks: dict[_Key, Block] = {}
+    for line in invoice.lines:
+        category = VatCategory(line.vat_information.category_code)
+        line_rate = line.vat_information.rate
+        if line_rate is None or category in UNSUPPORTED_CATEGORIES:
+            continue
         nature = None if line.it is None else line.it.nature
-        rate_ = t.cast(Decimal, line.vat_information.rate)
-        block = blocks.setdefault(
-            (rate_, nature, category is VatCategory.SPLIT_PAYMENT), _Block(rate_, nature, category)
-        )
+        key = (line_rate, nature, category is VatCategory.SPLIT_PAYMENT)
+        block = blocks.setdefault(key, Block(line_rate, nature, category))
         block.taxable += line.net_amount
         if line.it is not None and line.it.supply_type is TipoCessionePrestazione.AC:
             # Row 2.2.2.3 SpeseAccessorie: the sum of BT-131 of the lines whose TipoCessionePrestazione is AC.
@@ -213,95 +197,127 @@ def _blocks(invoice: Invoice) -> dict[_Key, _Block]:
     return blocks
 
 
-def _of_group(group: VatBreakdown, block: _Block) -> bool:
+def _of_group(group: VatBreakdown, block: Block) -> bool:
     return VatCategory(group.category_code) is block.category and group.rate == block.rate
 
 
-def _amounts(invoice: Invoice, blocks: dict[_Key, _Block]) -> None:
-    """Give each block its Imposta and check every BG-23 against its blocks (see the module docstring)."""
-    claimed: set[_Key] = set()
+def _group(invoice: Invoice, it: ItalianExtension, index: int, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """Check one BG-23 against its blocks and give them their Imposta."""
+    group = invoice.vat_breakdown[index]
+    location = f"vat_breakdown[{index}]"
+    mine = [block for block in blocks.values() if _of_group(group, block)]
+    if not mine:
+        own = group.taxable_amount == group.tax_amount == 0 and is_stamp_duty_group(
+            invoice, it, group.category_code, group.rate
+        )
+        if not own:
+            yield finding(
+                SUMMARY,
+                location,
+                f"BG-23 of category {group.category_code} has no line, so no DatiRiepilogo can carry it (only the zero "
+                "stamp duty's own breakdown, BR-IT-DC-480, is left to 2.1.1.6 DatiBollo)",
+            )
+        return
+    taxable = sum((block.taxable for block in mine), Decimal("0.00"))
+    if taxable != group.taxable_amount:
+        yield finding(
+            SUMMARY,
+            f"{location}.taxable_amount",
+            f"BT-116 {group.taxable_amount} differs from the sum of its lines' BT-131, {taxable}; DatiRiepilogo has no "
+            "place for a document level allowance or charge (SdI 00422 compares ImponibileImporto with the lines)",
+        )
+    if len(mine) == 1:
+        mine[0].tax = group.tax_amount
+        return
+    for block in mine:
+        block.tax = quantize_amount(block.rate * block.taxable / _HUNDRED)
+    tax = sum((block.tax for block in mine), Decimal("0.00"))
+    if tax != group.tax_amount:
+        yield finding(
+            SUMMARY,
+            f"{location}.tax_amount",
+            f"BT-117 {group.tax_amount} differs from the Imposta of its {len(mine)} DatiRiepilogo by Natura, {tax}",
+        )
+
+
+def _amounts(invoice: Invoice, it: ItalianExtension, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """Check every BG-23 against its blocks (see the module docstring) and every block against a BG-23."""
     for index, group in enumerate(invoice.vat_breakdown):
-        term = f"BG-23 (vat_breakdown[{index}])"
-        if VatCategory(group.category_code) in UNSUPPORTED_CATEGORIES:
-            raise cannot_express(
-                term,
-                f"VAT category {group.category_code} has no Natura in App. 5.1 of the Regole tecniche v2.6 (#133)",
-            )
-        mine = [key for key, block in blocks.items() if _of_group(group, block)]
-        claimed.update(mine)
-        taxable = sum((blocks[key].taxable for key in mine), Decimal("0.00"))
-        if taxable != group.taxable_amount:
-            raise cannot_express(
-                term,
-                f"BT-116 {group.taxable_amount} differs from the sum of its lines' BT-131, "
-                f"{taxable}; DatiRiepilogo has no place for a document level allowance or charge "
-                "(SdI 00422 compares ImponibileImporto with the lines)",
-            )
-        if len(mine) == 1:
-            blocks[mine[0]].tax = group.tax_amount
-            continue
-        for key in mine:
-            block = blocks[key]
-            block.tax = quantize_amount(block.rate * block.taxable / _HUNDRED)
-        tax = sum((blocks[key].tax for key in mine), Decimal("0.00"))
-        if tax != group.tax_amount:
-            raise cannot_express(
-                term,
-                f"BT-117 {group.tax_amount} differs from the Imposta of its {len(mine)} DatiRiepilogo by Natura, {tax}",
-            )
-    for key, block in blocks.items():
-        if key not in claimed:
-            raise cannot_express(
-                "BG-23 (vat_breakdown)",
-                f"no VAT BREAKDOWN of category {block.category} at rate "
-                f"{format(block.rate, 'f')}, which lines carry (BR-CO-18)",
+        if VatCategory(group.category_code) not in UNSUPPORTED_CATEGORIES:  # else reported by structure()
+            yield from _group(invoice, it, index, blocks)
+    for block in blocks.values():
+        if not any(_of_group(group, block) for group in invoice.vat_breakdown):
+            yield finding(
+                SUMMARY,
+                "vat_breakdown",
+                f"no VAT BREAKDOWN of category {block.category} at rate {format(block.rate, 'f')}, which lines carry "
+                "(BR-CO-18)",
             )
 
 
-def _match_summaries(it: ItalianExtension, blocks: dict[_Key, _Block]) -> None:
-    """Attach each ``it.vat_summaries`` entry to the block of its key; an entry with no block is refused."""
+def _match_summaries(it: ItalianExtension, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """Attach each ``it.vat_summaries`` entry to the block of its key; an entry with no block is reported."""
     for index, summary in enumerate(it.vat_summaries):
         key = (summary.rate, summary.nature, summary.vat_chargeability is EsigibilitaIVA.S)
         if key not in blocks:
             mode = "split payment (EsigibilitaIVA S, VAT category B)" if key[2] else "ordinary payment"
-            raise cannot_express(
+            yield finding(
+                SUMMARY,
                 f"it.vat_summaries[{index}]",
-                f"no line has rate {format(summary.rate, 'f')}, Natura {summary.nature} and {mode}, so this "
-                "DatiRiepilogo data belongs to no summary",
+                f"it.vat_summaries[{index}] cannot be written in FatturaPA: no line has rate "
+                f"{format(summary.rate, 'f')}, Natura {summary.nature} and {mode}, so this DatiRiepilogo data belongs "
+                "to no summary",
             )
+            continue
         blocks[key].summary = summary
 
 
-def _chargeability(invoice: Invoice, block: _Block) -> EsigibilitaIVA | None:
+def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
     """EsigibilitaIVA (row 2.2.2.7): S for category B; else the summary's, or BT-8's (3, 35 → I, 432 → D)."""
-    if block.split:
-        return EsigibilitaIVA.S
-    own = None if block.summary is None else block.summary.vat_chargeability
     code = invoice.vat_point_date_code
     derived = None if code is None else CHARGEABILITY_OF_VAT_POINT[code]
-    if own is not None and derived is not None and own is not derived:
-        raise cannot_express(
-            "BT-8 (vat_point_date_code)",
-            f"it gives EsigibilitaIVA {derived} (App. 4.1 row "
-            f"2.2.2.7), but it.vat_summaries sets {own} for rate {format(block.rate, 'f')}",
+    if derived is not None and blocks and all(block.split for block in blocks.values()):
+        yield finding(
+            SUMMARY,
+            "vat_point_date_code",
+            "BT-8: every DatiRiepilogo is split payment (EsigibilitaIVA S, App. 4.1 row 2.2.2.7), so none can carry it",
         )
-    return own or derived
+    for block in blocks.values():
+        if block.split:
+            block.chargeability = EsigibilitaIVA.S
+            continue
+        own = None if block.summary is None else block.summary.vat_chargeability
+        if own is not None and derived is not None and own is not derived:
+            yield finding(
+                SUMMARY,
+                "vat_point_date_code",
+                f"BT-8 gives EsigibilitaIVA {derived} (App. 4.1 row 2.2.2.7), but it.vat_summaries sets {own} for rate "
+                f"{format(block.rate, 'f')}",
+            )
+        block.chargeability = own or derived
 
 
-def write_goods(body: etree._Element, invoice: Invoice, it: ItalianExtension) -> None:
-    """2.2 DatiBeniServizi: the lines, then one DatiRiepilogo per (rate, Natura, split payment)."""
+def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list[Finding]]:
+    """The DatiRiepilogo blocks of an invoice and the pre-flight findings that keep them from being written.
+
+    Args:
+        invoice: The invoice.
+        it: Its ``Invoice.it``.
+
+    Returns:
+        The blocks in the order their first line appears, and ``SUMMARY`` findings located by model path.
+    """
     blocks = _blocks(invoice)
-    _amounts(invoice, blocks)
-    _match_summaries(it, blocks)
-    if invoice.vat_point_date_code is not None and all(block.split for block in blocks.values()):
-        raise cannot_express(
-            "BT-8 (vat_point_date_code)",
-            "every DatiRiepilogo is split payment (EsigibilitaIVA S, App. 4.1 row 2.2.2.7), so none can carry it",
-        )
+    findings = [*_amounts(invoice, it, blocks), *_match_summaries(it, blocks), *_chargeability(invoice, blocks)]
+    return list(blocks.values()), findings
+
+
+def write_goods(body: etree._Element, invoice: Invoice, blocks: list[Block]) -> None:
+    """2.2 DatiBeniServizi: the lines, then one DatiRiepilogo per block (from :func:`summarize`)."""
     goods = child(body, "DatiBeniServizi")
     for index, line in enumerate(invoice.lines):
         _write_line(goods, index, line)
-    for block in blocks.values():
+    for block in blocks:
         where = f"DatiRiepilogo at rate {format(block.rate, 'f')}"
         summary = child(goods, "DatiRiepilogo")
         child(summary, "AliquotaIVA", rate(block.rate, "BT-119", f"2.2.2.1 AliquotaIVA of the {where}"))
@@ -317,8 +333,7 @@ def write_goods(body: etree._Element, invoice: Invoice, it: ItalianExtension) ->
             summary, "ImponibileImporto", amount2(block.taxable, "BT-116", f"2.2.2.5 ImponibileImporto of the {where}")
         )
         child(summary, "Imposta", amount2(block.tax, "BT-117", f"2.2.2.6 Imposta of the {where}"))
-        chargeability = _chargeability(invoice, block)
-        if chargeability is not None:
-            child(summary, "EsigibilitaIVA", chargeability)
+        if block.chargeability is not None:
+            child(summary, "EsigibilitaIVA", block.chargeability)
         if block.summary is not None and block.summary.legal_reference is not None:
             child(summary, "RiferimentoNormativo", block.summary.legal_reference)

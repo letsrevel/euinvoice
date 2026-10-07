@@ -15,10 +15,10 @@ from _fatturapa_write import (
     BUYER_VAT,
     GENERAL,
     GOODS,
-    OPTIONS,
     PAYMENT,
     SELLER,
     TEST_IBAN,
+    TRANSMISSION,
     buyer,
     it_draft,
     it_invoice,
@@ -52,7 +52,7 @@ from euinvoice.model.it import (
     TipoCessionePrestazione,
     TipoDocumento,
 )
-from euinvoice.syntax.fatturapa import RECIPIENT_UNKNOWN, WriterOptions, write
+from euinvoice.syntax.fatturapa import RECIPIENT_UNKNOWN, Transmission, write
 
 
 def _tags(element: etree._Element | None) -> list[str]:
@@ -77,12 +77,15 @@ def test_root_is_an_unsigned_fpr12_with_one_body() -> None:
     assert root.tag == f"{{{_xml.FATTURAPA}}}FatturaElettronica"
     assert root.get("versione") == "FPR12"
     assert _tags(root) == ["FatturaElettronicaHeader", "FatturaElettronicaBody"]
-    assert write(it_invoice(), OPTIONS).startswith(b"<?xml version='1.0' encoding='UTF-8'?>")
+    assert write(it_invoice(), TRANSMISSION).startswith(b"<?xml version='1.0' encoding='UTF-8'?>")
 
 
 def test_transmission_header_comes_from_the_options() -> None:
-    options = WriterOptions(
-        transmitter_country="IT", transmitter_code="00000000003", progressive="ZZ9", recipient_pec="a@example.com"
+    options = Transmission(
+        transmitter_country="IT",
+        transmitter_code="00000000003",
+        transmission_number="ZZ9",
+        recipient_pec="a@example.com",
     )
     transmission = _find(written(it_invoice(), options), "FatturaElettronicaHeader/DatiTrasmissione")
 
@@ -263,6 +266,17 @@ def test_negative_price_discount_is_a_markup() -> None:
     adjustment = _find(written(it_invoice(line)), f"{GOODS}/DettaglioLinee/ScontoMaggiorazione")
 
     assert _pairs(adjustment) == [("Tipo", "MG"), ("Importo", "1.00")]
+
+
+@pytest.mark.parametrize("gross", [Decimal(50), None])
+def test_zero_price_discount_needs_no_element(gross: Decimal | None) -> None:
+    line = it_line(
+        price_details=PriceDetails(item_net_price=Decimal(50), item_gross_price=gross, item_price_discount=Decimal(0))
+    )
+    element = _find(written(it_invoice(line)), f"{GOODS}/DettaglioLinee")
+
+    assert element.find("ScontoMaggiorazione") is None
+    assert element.findtext("PrezzoUnitario") == "50.00"
 
 
 def test_without_a_gross_price_the_net_price_is_prezzo_unitario() -> None:
