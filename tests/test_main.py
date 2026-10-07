@@ -302,10 +302,10 @@ def test_unreadable_file_exits_2(tmp_path: Path, capsys: pytest.CaptureFixture[s
 def test_missing_extra_exits_2(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def no_pypdf(data: bytes) -> ParseResult:
+    def no_pypdf(data: bytes) -> tuple[ParseResult, ...]:
         raise ImportError("euinvoice.facturx needs the [pdf] extra: uv add 'euinvoice[pdf]'")
 
-    monkeypatch.setattr(cli, "parse_detailed", no_pypdf)
+    monkeypatch.setattr(cli, "parse_all", no_pypdf)
     assert cli.main(["convert", "--to", "ubl", _write(tmp_path, "a.xml", b"<x/>")]) == 2
     assert capsys.readouterr().err == "error: euinvoice.facturx needs the [pdf] extra: uv add 'euinvoice[pdf]'\n"
 
@@ -324,7 +324,6 @@ def test_unreadable_documents_exit_1(data: bytes, tmp_path: Path, capsys: pytest
         ["validate", "--profile", "nope", "a.xml"],
         ["convert", "a.xml"],
         ["convert", "--to", "pdf", "a.xml"],
-        ["convert", "--to", "fatturapa", "a.xml"],  # writing FatturaPA is #119 / #122
         ["info"],
     ],
 )
