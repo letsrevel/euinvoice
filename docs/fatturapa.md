@@ -1,10 +1,10 @@
 # FatturaPA (Italy)
 
-FatturaPA is the XML format of the Italian Sistema di Interscambio (SdI). It is not an EN 16931 syntax: many of
-its elements have no business term (App. 4.1 marks them `EXT`, e.g. RegimeFiscale, TipoDocumento, DatiRitenuta),
-and others map onto one only in part (Natura, EsigibilitaIVA). euinvoice maps the rest to the semantic model per App. 4.1 and the App. 5 code tables of the SdI "Regole tecniche fatture
-europee" v2.6, and keeps the Italian data in an optional extension, `Invoice.it`
-([ADR 0001](adr/0001-fatturapa-d3-d8.md)).
+FatturaPA is the XML format of the Italian Sistema di Interscambio (SdI). It is not an EN 16931 syntax: many of its
+elements have no business term (App. 4.1 marks them `EXT`, e.g. RegimeFiscale, TipoDocumento, DatiRitenuta), and others
+map onto one only in part (Natura, EsigibilitaIVA). euinvoice maps the rest to the semantic model per App. 4.1 and the
+App. 5 code tables of the SdI "Regole tecniche fatture europee" v2.6, and keeps the Italian data in an optional
+extension, `Invoice.it` ([ADR 0001](adr/0001-fatturapa-d3-d8.md)).
 
 ## Scope
 
@@ -78,12 +78,12 @@ that carries no VAT. Each field cites its FatturaPA element id. Here, a ticket a
 Decimal('81.00')
 ```
 
-The VAT summaries (`DatiRiepilogo`) are derived from the lines. Set `Invoice.it.vat_summaries` only where the
-business terms do not determine a summary: an EsigibilitaIVA that BT-8 and the VAT category do not give (App. 4.1
-row 2.2.2.7: BT-8 3 or 35 gives I, 432 gives D, category B gives S), or a RiferimentoNormativo the writer cannot
-take from BT-120 (row 2.2.2.8), because the VAT breakdown has several DatiRiepilogo. Set `Invoice.it.payment` when the invoice has
-payment instructions (BG-16), a due date (BT-9) or a payee (BG-10): FatturaPA then needs CondizioniPagamento, which
-has no business term.
+The VAT summaries (`DatiRiepilogo`) are derived from the lines. Set `Invoice.it.vat_summaries` only where the business
+terms do not determine a summary: an EsigibilitaIVA that BT-8 and the VAT category do not give (App. 4.1 row 2.2.2.7:
+BT-8 3 or 35 gives I, 432 gives D, category B gives S), or a RiferimentoNormativo the writer cannot take from BT-120
+(row 2.2.2.8), because the VAT breakdown has several DatiRiepilogo. Set `Invoice.it.payment` when the invoice has
+payment instructions (BG-16), a due date (BT-9) or a payee (BG-10): FatturaPA then needs CondizioniPagamento, which has
+no business term.
 
 ## 2. Write FPR12
 
@@ -203,10 +203,10 @@ Here the tax of the 22 % summary (`Imposta`) is off by more than a cent, which S
 [('00421', <Severity.ERROR: 'error'>, 'sdi')]
 ```
 
-`report.ok` can be `True` for a file SdI still rejects. Where Allegato A and SdI's "Elenco dei controlli" v2.0
-disagree, it can also report a code SdI does not raise: 00418 is checked on every document, while the Elenco
-checks it only on TD04 ([#130](https://github.com/letsrevel/euinvoice/issues/130)). `validate()` does **not** check (IMPLEMENTATION_PLAN.md D8;
-the module docstring of `euinvoice.validation.sdi` lists every code with its reason):
+`report.ok` can be `True` for a file SdI still rejects. Where Allegato A and SdI's "Elenco dei controlli" v2.0 disagree,
+it can also report a code SdI does not raise: 00418 is checked on every document, while the Elenco checks it only on
+TD04 ([#130](https://github.com/letsrevel/euinvoice/issues/130)). `validate()` does **not** check
+(IMPLEMENTATION_PLAN.md D8; the module docstring of `euinvoice.validation.sdi` lists every code with its reason):
 
 - the tax register and SdI's state: identifiers and VAT groups (00300-00306, 00320-00327), whether the
   CodiceDestinatario exists and is active (00311, 00312), a PEC address that is one of SdI's own (00330), the IPA
@@ -259,10 +259,10 @@ euinvoice builds, reads and checks the document. Italian compliance needs more, 
 
 - **Signing** the file (CAdES `.p7m` or XAdES) is deferred.
 - **Sending** it through SdI, directly or via an intermediary, needs network access and credentials, which the core
-  never has. Delivery belongs in separate packages
-  ([#114](https://github.com/letsrevel/euinvoice/issues/114)). Fatture in Cloud cannot send externally generated
-  XML: it sends only documents created in Fatture in Cloud (e.g. through its API), so it would need an adapter from `Invoice` to its
-  JSON ([#124](https://github.com/letsrevel/euinvoice/issues/124)).
+  never has. Delivery belongs in separate packages ([#114](https://github.com/letsrevel/euinvoice/issues/114)). Fatture
+  in Cloud cannot send externally generated XML: it sends only documents created in Fatture in Cloud (e.g. through its
+  API), so it would need an adapter from `Invoice` to its JSON
+  ([#124](https://github.com/letsrevel/euinvoice/issues/124)).
 - **Ticket sales**: shows may need SIAE-approved ticketing systems rather than invoices, and retail-type sales to
   consumers the corrispettivi telematici. Which regime applies is a question for a commercialista
   ([#125](https://github.com/letsrevel/euinvoice/issues/125)).
