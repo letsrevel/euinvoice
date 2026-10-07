@@ -128,7 +128,7 @@ class SoggettoEmittente(enum.StrEnum):
     """1.6 ``<SoggettoEmittente>``, XSD ``SoggettoEmittenteType``.
 
     "Da valorizzare in tutti i casi in cui la fattura è emessa da un soggetto diverso dal cedente/prestatore"
-    (Rappresentazione tabellare 1.9.1, row 1.6), e.g. by the buyer for TD17.
+    (Rappresentazione tabellare, row 1.6), e.g. by the buyer for TD17.
     """
 
     CC = "CC"
@@ -204,7 +204,7 @@ class TipoCessionePrestazione(enum.StrEnum):
     """2.2.1.2 ``<TipoCessionePrestazione>``, XSD ``TipoCessionePrestazioneType``.
 
     "Da valorizzare nei soli casi in cui si voglia utilizzare la riga per rappresentare uno sconto/premio/abbuono
-    ovvero una spesa accessoria" (Rappresentazione tabellare 1.9.1, row 2.2.1.2).
+    ovvero una spesa accessoria" (Rappresentazione tabellare, row 2.2.1.2).
     """
 
     SC = "SC"
