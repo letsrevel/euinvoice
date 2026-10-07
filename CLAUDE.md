@@ -57,10 +57,12 @@ pushing. Run `make conformance` too when you touch serialization, parsing, valid
 ```
 src/euinvoice/
   model/      EN 16931 semantic model (Pydantic v2, frozen, Decimal-only, BT ids in field metadata)
+  model/it/   Invoice.it extension (M11): non-EN data, fields cite FatturaPA element ids (D3)
   calc/       totals + VAT breakdown per EN 16931 rounding rules; check() → findings
   report.py   Finding, Severity, ValidationReport (pure data, shared by calc and validate)
   _syntax.py  the Syntax enum (leaf; calc uses it, euinvoice.syntax re-exports it)
   syntax/     ubl.py, cii.py: bidirectional mappers (write: Invoice → bytes, read: root → Invoice)
+  syntax/fatturapa/  FatturaPA FPR12 write/read (M11); no signing, no transmission
   profiles/   en16931, peppol, xrechnung, facturx: BT-24 ids, defaults, pre-flight checks, rule sets
   validation/ manifest.toml (pinned artifacts), artifacts.py (fetch), xsd.py, schematron.py
   facturx/    PDF/A-3 embed/extract on pypdf
