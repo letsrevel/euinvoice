@@ -16,9 +16,10 @@ EN 16931 European e-invoicing (UBL / CII / Factur-X; Peppol BIS, XRechnung, ZUGF
 ## Operating principles
 
 1. **Conformance over convenience.** This library exists to produce invoices that tax authorities and
-   Peppol access points accept. The pinned **official Schematron is the oracle** (D8). Never suppress,
-   filter or downgrade an official rule, never weaken a test, and never lower a threshold to get green.
-   If our code and the Schematron disagree, our code is wrong.
+   Peppol access points accept. The pinned **official Schematron is the oracle** (D8); for FatturaPA,
+   which has no Schematron, it is the pinned XSD 1.2.3 plus the Allegato A SdI checks (D8, ADR 0001).
+   Never suppress, filter or downgrade an official rule, never weaken a test, and never lower a
+   threshold to get green. If our code and the oracle disagree, our code is wrong.
 2. **Never answer conformance questions from memory.** Verify every identifier, code, XPath, cardinality
    and rounding rule against the pinned artifacts and free specs in plan §3 (fetched with `make artifacts`
    into `$EUINVOICE_ARTIFACTS_DIR`, default `~/.cache/euinvoice`). Cite the source (rule id, file, spec
@@ -103,6 +104,9 @@ Dependency direction: `model` ← `calc` ← `syntax` ← `profiles` ← `valida
 - `validate()` returns a `ValidationReport` and never raises on rule failures. It raises only for misuse,
   malformed XML or missing artifacts (`ArtifactsNotAvailableError` with the fix command).
 - `validate()` never downloads anything. Only `euinvoice artifacts fetch` touches the network.
+- FatturaPA exception (D8, `docs/adr/0001-fatturapa-d3-d8.md`): no Schematron exists, so the oracle is
+  the pinned XSD 1.2.3 plus the offline SdI checks of Allegato A 1.9.1 App. 1, each a `Finding` whose
+  `rule_id` is the SdI error code. Out-of-scope codes are listed with reasons in the plan's D8.
 
 ### Artifacts and fixtures (D7)
 - **Never commit** official artifacts, XSDs, Schematron, upstream examples or corpora. They are
