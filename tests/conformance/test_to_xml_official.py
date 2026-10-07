@@ -19,7 +19,7 @@ CASES: t.Final[list[tuple[profiles.Profile, t.Callable[[], Invoice]]]] = [
 ]
 
 
-@pytest.mark.parametrize("syntax", list(Syntax))
+@pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 @pytest.mark.parametrize(("profile", "build"), CASES, ids=[profile.id for profile, _ in CASES])
 def test_to_xml_output_validates(profile: profiles.Profile, build: t.Callable[[], Invoice], syntax: Syntax) -> None:
     xml = to_xml(build(), profile=profile, syntax=syntax)

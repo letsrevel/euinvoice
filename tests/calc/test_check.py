@@ -144,7 +144,7 @@ def test_paid_and_rounding_amounts_enter_the_amount_due(invoice: Invoice) -> Non
     assert calc.check(paid) == ()
 
 
-@pytest.mark.parametrize("syntax", [None, *Syntax])
+@pytest.mark.parametrize("syntax", [None, Syntax.UBL, Syntax.CII])
 def test_absent_bt110_without_any_vat_passes_both_bindings(syntax: Syntax | None) -> None:
     # The UBL writer states BT-110 = 0.00 when BT-112 = BT-109 and Σ BT-117 = 0 (bt-mapping.md "Normalizations")
     invoice = with_totals(not_subject_to_vat(), total_vat=None)
@@ -560,3 +560,9 @@ def test_syntax_given_as_its_value_selects_that_binding() -> None:
 def test_invalid_syntax_is_refused(invoice: Invoice) -> None:
     with pytest.raises(ValueError, match="pdf"):
         calc.check(invoice, syntax="pdf")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("syntax", [Syntax.FATTURAPA, "fatturapa"])
+def test_fatturapa_has_no_cen_binding_to_check(invoice: Invoice, syntax: Syntax) -> None:
+    with pytest.raises(ValueError, match="FatturaPA has none"):
+        calc.check(invoice, syntax=syntax)

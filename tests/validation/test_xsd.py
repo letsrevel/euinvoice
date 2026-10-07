@@ -351,8 +351,14 @@ def test_fatturapa_schema_needs_the_ubl_source_for_xmldsig(fatturapa_cache: path
         xsd._load(xsd._FATTURAPA)
 
 
-@pytest.mark.usefixtures("fatturapa_cache")
-def test_fatturapa_is_not_selected_by_validate_yet() -> None:
-    # Wiring FatturaPA into validate() is #121.
-    with pytest.raises(UnsupportedDocumentError):
-        xsd.validate(_xml.parse(f'<p:FatturaElettronica xmlns:p="{FATTURAPA_NS}"/>'.encode()))
+def test_fatturapa_namespace_selects_the_fatturapa_schema(
+    fatturapa_cache: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    warm(fatturapa_cache, "ubl-2_1", {"xsd/common/UBL-xmldsig-core-schema-2.1.xsd": DSIG_XSD})
+    monkeypatch.setattr(xsd, "_cache", {})
+
+    assert xsd.validate(_xml.parse(f'<p:FatturaElettronica xmlns:p="{FATTURAPA_NS}"/>'.encode())) == ()
+    (finding,) = xsd.validate(
+        _xml.parse(f'<p:FatturaElettronica xmlns:p="{FATTURAPA_NS}"><x/></p:FatturaElettronica>'.encode())
+    )
+    assert (finding.rule_id, finding.severity, finding.source) == ("XSD", Severity.FATAL, "xsd:fatturapa-xsd")

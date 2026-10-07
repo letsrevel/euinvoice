@@ -2,8 +2,8 @@
 
 Subcommands (each registers its handler with ``set_defaults(run=...)``):
 
-* ``validate FILE [--profile ID] [--json]``: :func:`euinvoice.validate` on a UBL / CII document or the invoice
-  of a Factur-X / ZUGFeRD PDF; one line per finding, then a verdict line.
+* ``validate FILE [--profile ID] [--json]``: :func:`euinvoice.validate` on a UBL / CII / FatturaPA document or the
+  invoice of a Factur-X / ZUGFeRD PDF; one line per finding, then a verdict line. FatturaPA takes no ``--profile``.
 * ``convert FILE --to ubl|cii [--profile ID] [-o OUT]``: :func:`euinvoice.parse_detailed`, then
   :func:`euinvoice.to_xml`; the XML goes to ``OUT`` or stdout. Input that has no business term in the model is
   not converted, and each such XPath is reported on stderr (readers never drop input silently, plan §1).
@@ -263,7 +263,7 @@ def _parser() -> argparse.ArgumentParser:
     profile_help = f"profile id (default: from BT-24): {', '.join(PROFILES)}"
 
     check = commands.add_parser(
-        "validate", help="validate a UBL / CII invoice or Factur-X / ZUGFeRD PDF", epilog=_EPILOG
+        "validate", help="validate a UBL / CII / FatturaPA invoice or Factur-X / ZUGFeRD PDF", epilog=_EPILOG
     )
     check.add_argument("file", metavar="FILE", help="the invoice; - reads stdin")
     check.add_argument("--profile", type=_profile_arg, metavar="ID", help=profile_help)
@@ -272,7 +272,8 @@ def _parser() -> argparse.ArgumentParser:
 
     convert = commands.add_parser("convert", help="convert an invoice to UBL or CII", epilog=_EPILOG)
     convert.add_argument("file", metavar="FILE", help="the invoice (XML or Factur-X / ZUGFeRD PDF); - reads stdin")
-    convert.add_argument("--to", required=True, choices=[str(s) for s in Syntax], help="target syntax")
+    targets = [str(s) for s in Syntax if s in profiles.SYNTAXES]  # writing FatturaPA is #119 / #122
+    convert.add_argument("--to", required=True, choices=targets, help="target syntax")
     convert.add_argument("--profile", type=_profile_arg, metavar="ID", help=profile_help)
     convert.add_argument("-o", "--output", metavar="OUT", help="write here instead of stdout")
     convert.set_defaults(run=_convert)

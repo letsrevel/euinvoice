@@ -112,6 +112,8 @@ def test_load_manifest_reads_a_single_file_source() -> None:
         ('file = "../a.xsd"', "file"),
         ('file = "sub/a.xsd"', "file"),
         ('file = ".."', "file"),
+        ('file = ".euinvoice-fingerprint"', "file"),  # the cache marker would overwrite it (#128)
+        ('file = ".hidden.xsd"', "file"),
         ('file = "a.xsd"\nstrip_components = 1', "strip_components"),
         ('file = "a.xsd"\nprecompile = ["a.sch"]', "precompile"),
     ],

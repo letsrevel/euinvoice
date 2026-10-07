@@ -124,7 +124,8 @@ def parse_detailed(data: bytes) -> ParseResult:
             form a valid invoice (the message names the BT/BG id). Factur-X MINIMUM and BASIC WL documents raise it,
             as they lack terms EN 16931 requires (issue #69).
         UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote or a CII D16B
-            CrossIndustryInvoice.
+            CrossIndustryInvoice. A FatturaPA document raises it too: its reader is not implemented yet (#120);
+            :func:`euinvoice.validate` and :func:`euinvoice.detect` accept it.
         PdfError: ``data`` is a PDF that does not name exactly one embedded invoice (see
             :func:`euinvoice.facturx.extract`).
         ImportError: ``data`` is a PDF and the ``[pdf]`` extra (pypdf) is not installed.
@@ -136,7 +137,13 @@ def parse_detailed(data: bytes) -> ParseResult:
 
         data = facturx.extract(data).xml
     root = _xml.parse(data)
-    return ubl.read(root) if detect_root(root).syntax is Syntax.UBL else cii.read(root)
+    syntax = detect_root(root).syntax
+    if syntax is Syntax.FATTURAPA:
+        raise UnsupportedDocumentError(
+            "reading FatturaPA is not implemented yet (https://github.com/letsrevel/euinvoice/issues/120); "
+            "euinvoice.validate() checks it"
+        )
+    return ubl.read(root) if syntax is Syntax.UBL else cii.read(root)
 
 
 def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Syntax:
@@ -149,6 +156,10 @@ def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Sy
         (only,) = profile.syntaxes
         return only
     target = Syntax(syntax)
+    if target is Syntax.FATTURAPA:
+        raise UnsupportedDocumentError(
+            "writing FatturaPA is not implemented yet (https://github.com/letsrevel/euinvoice/issues/119)"
+        )
     if target not in profile.syntaxes:
         raise UnsupportedDocumentError(
             f"profile {profile.id!r} does not support {target.upper()}; it supports "

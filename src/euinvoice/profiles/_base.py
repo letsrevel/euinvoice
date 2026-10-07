@@ -12,8 +12,11 @@ from euinvoice.syntax import Syntax
 
 __all__ = ["FACTURX_RULE_SET", "RULE_SETS", "SYNTAXES", "Preflight", "Profile", "no_preflight"]
 
-SYNTAXES: t.Final[frozenset[Syntax]] = frozenset(Syntax)
-"""The syntaxes a profile can support: UBL 2.1 (``Syntax.UBL``) and UN/CEFACT CII D16B (``Syntax.CII``)."""
+SYNTAXES: t.Final[frozenset[Syntax]] = frozenset({Syntax.UBL, Syntax.CII})
+"""The syntaxes a profile can support: UBL 2.1 (``Syntax.UBL``) and UN/CEFACT CII D16B (``Syntax.CII``).
+
+``Syntax.FATTURAPA`` is not among them: FatturaPA has no BT-24 and no Schematron, so ``validate()`` selects its
+checks by syntax, not by profile (#121)."""
 
 FACTURX_RULE_SET: t.Final = "facturx"
 """The rule-set name of the Factur-X / ZUGFeRD per-profile Schematron, not pinned yet (issue #42)."""

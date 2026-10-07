@@ -71,7 +71,7 @@ from euinvoice.model.allowances import (
     InvoiceLineCharge,
 )
 from euinvoice.model.datatypes import normalize_space
-from euinvoice.profiles._base import Profile
+from euinvoice.profiles._base import SYNTAXES, Profile
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax import Syntax, ubl
 
@@ -350,7 +350,7 @@ PEPPOL: t.Final = Profile(
     id="peppol",
     title="Peppol BIS Billing 3.0",
     specification_identifier=SPECIFICATION_IDENTIFIER,
-    syntaxes=frozenset(Syntax),
+    syntaxes=SYNTAXES,
     # XSD, then CEN, then Peppol (rule sets per profile verified on issue #17).
     rule_sets=("cen", "peppol"),
     business_process_type=BILLING_PROCESS,

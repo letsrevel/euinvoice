@@ -30,7 +30,7 @@ from euinvoice.errors import ArtifactsNotAvailableError, ParseError, Unsupported
 from euinvoice.model import Invoice, bt_id
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import Finding
-from euinvoice.syntax import cii, ubl
+from euinvoice.syntax import Syntax, cii, ubl
 from euinvoice.syntax.result import ParseResult
 from euinvoice.validation import artifacts, validate
 
@@ -46,7 +46,8 @@ COUNTS: t.Final[dict[tuple[str, str], int]] = {
     ("xrechnung-testsuite", "cii"): 41,
     ("zugferd-corpus", "ubl"): 31,
     ("zugferd-corpus", "cii"): 42,
-    ("zugferd-corpus", "not an invoice"): 15,
+    ("zugferd-corpus", "not an invoice"): 1,
+    ("zugferd-corpus", "fatturapa"): 14,
     ("zugferd-corpus", "pdf"): 74,
 }
 """Samples per corpus and kind (the buckets of ``test_detect_corpora.py``), so a new upstream file is noticed."""
@@ -134,9 +135,14 @@ def test_round_trip_invariant(sample: Sample) -> None:
     data = sample.data()
     not_invoice = NOT_INVOICES.get(sample.source, {}).get(sample.file)
     if not_invoice is not None:
-        # Not an EN 16931 invoice (FatturaPA): detect refuses it, as test_detect_corpora.py documents.
+        # Not an invoice detect() can classify, as test_detect_corpora.py documents.
         with pytest.raises(not_invoice):
             detect(data)
+        return
+    if _kind(sample) == Syntax.FATTURAPA:
+        # No reader yet (#120), so no round trip; validate() judges it with the FatturaPA XSD and the SdI checks only.
+        # The official examples' verdicts are in test_sdi_official.py.
+        assert {f.source for f in validate(data).findings} <= {"xsd:fatturapa-xsd", "sdi", "euinvoice"}
         return
     if sample.id in TOO_LARGE:
         assert len(data) > 20_000_000

@@ -30,7 +30,7 @@ XRECHNUNG_PROFILES = (profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION, profiles
 
 def rule_ids(profile: profiles.Profile, invoice: Invoice) -> set[str]:
     """Rule ids of the pre-flight findings, for cases where both syntaxes agree."""
-    ubl, cii = (profile.preflight(invoice, syntax) for syntax in Syntax)
+    ubl, cii = (profile.preflight(invoice, syntax) for syntax in (Syntax.UBL, Syntax.CII))
     assert ubl == cii
     return {f.rule_id for f in ubl}
 
@@ -52,7 +52,7 @@ class TestDeclarations:
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
     def test_both_syntaxes_cen_then_xrechnung_never_peppol(self, profile: profiles.Profile) -> None:
-        assert profile.syntaxes == set(Syntax)
+        assert profile.syntaxes == {Syntax.UBL, Syntax.CII}
         assert profile.rule_sets == ("cen", "xrechnung")
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)

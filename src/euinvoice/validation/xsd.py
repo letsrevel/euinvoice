@@ -11,9 +11,8 @@ then checked by the schema itself (a wrong one is a ``No matching global declara
   ``xrechnung-validator-configuration`` source: the D16B SCRDM Subset ("uncoupled clm") schema the CEN
   EN 16931 CII artifacts are written for, and the schema every CII scenario of the KoSIT
   ``scenarios.xml`` (XRechnung, XRechnung extension, CVD and plain EN 16931) validates against.
-
-The FatturaPA 1.2.3 schema of the ``fatturapa-xsd`` source is pinned and compiles offline (:data:`_FATTURAPA`),
-but :func:`validate` does not select it yet (#121).
+* FatturaPA 1.2 ``FatturaElettronica`` (FPA12 and FPR12) is validated against ``Schema_VFPR12_v1.2.3.xsd`` of the
+  ``fatturapa-xsd`` source, with its xmldsig import served from the ``ubl-2_1`` copy (no network, D10).
 
 Every schema-validity error becomes a :class:`~euinvoice.report.Finding` with rule id ``XSD``
 and severity ``fatal``, located by line number and element path: a document that is not schema-valid
@@ -66,6 +65,23 @@ class _SchemaSpec:
     redirects: tuple[tuple[str, artifacts.SourceName, str], ...] = ()
 
 
+XMLDSIG_W3C_LOCATION: t.Final = "http://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd"
+"""The ``schemaLocation`` FatturaPA 1.2.3 imports xmldsig from (``Schema_VFPR12_v1.2.3.xsd``, line 8)."""
+
+# FatturaPA 1.2.3 (FPA12 and FPR12 share one schema). Its xmldsig import is served from the OASIS UBL 2.1 copy,
+# ``UBL-xmldsig-core-schema-2.1.xsd``, which the UBL package documents as the W3C file "modified only to remove
+# these PUBLIC and SYSTEM identifiers from the DOCTYPE"; a diff against the W3C download confirms that the
+# leading comment and those identifiers are the only differences (checked 2026-10-07). Reusing it avoids a second
+# pin of the same schema. Like the W3C file it keeps an internal DOCTYPE subset; it is an import, so libxml2 parses
+# it, not _xml.parse (see load_trusted_schema), and its sha256 pin is the protection, as for every UBL import.
+_FATTURAPA: t.Final = _SchemaSpec(
+    "fatturapa-xsd",
+    "Schema_VFPR12_v1.2.3.xsd",
+    ".",
+    redirects=((XMLDSIG_W3C_LOCATION, "ubl-2_1", "xsd/common/UBL-xmldsig-core-schema-2.1.xsd"),),
+)
+
+
 # Root namespace → schema. UBL 2.1 maindoc schemas import ``../common/*.xsd``, so the confinement root
 # is the whole ``xsd`` directory of the OASIS UBL 2.1 package.
 _SCHEMAS: t.Final[t.Mapping[str, _SchemaSpec]] = {
@@ -83,25 +99,8 @@ _SCHEMAS: t.Final[t.Mapping[str, _SchemaSpec]] = {
         "resources/cii/16b/xsd/CrossIndustryInvoice_100pD16B.xsd",
         "resources/cii/16b/xsd",
     ),
+    _xml.FATTURAPA: _FATTURAPA,
 }
-
-
-XMLDSIG_W3C_LOCATION: t.Final = "http://www.w3.org/TR/2002/REC-xmldsig-core-20020212/xmldsig-core-schema.xsd"
-"""The ``schemaLocation`` FatturaPA 1.2.3 imports xmldsig from (``Schema_VFPR12_v1.2.3.xsd``, line 8)."""
-
-# FatturaPA 1.2.3 (FPA12 and FPR12 share one schema). Its xmldsig import is served from the OASIS UBL 2.1 copy,
-# ``UBL-xmldsig-core-schema-2.1.xsd``, which the UBL package documents as the W3C file "modified only to remove
-# these PUBLIC and SYSTEM identifiers from the DOCTYPE"; a diff against the W3C download confirms that the
-# leading comment and those identifiers are the only differences (checked 2026-10-07). Reusing it avoids a second
-# pin of the same schema. Like the W3C file it keeps an internal DOCTYPE subset; it is an import, so libxml2 parses
-# it, not _xml.parse (see load_trusted_schema), and its sha256 pin is the protection, as for every UBL import.
-# ponytail: not in _SCHEMAS yet, so validate() does not pick it; wiring it in (by namespace) is #121.
-_FATTURAPA: t.Final = _SchemaSpec(
-    "fatturapa-xsd",
-    "Schema_VFPR12_v1.2.3.xsd",
-    ".",
-    redirects=((XMLDSIG_W3C_LOCATION, "ubl-2_1", "xsd/common/UBL-xmldsig-core-schema-2.1.xsd"),),
-)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -163,9 +162,7 @@ def _load(spec: _SchemaSpec) -> _Compiled:
     return _compiled(directory / spec.path, directory / spec.root, redirects)
 
 
-def _compiled(
-    path: pathlib.Path, root: pathlib.Path, redirects: t.Mapping[str, pathlib.Path] | None = None
-) -> _Compiled:
+def _compiled(path: pathlib.Path, root: pathlib.Path, redirects: t.Mapping[str, pathlib.Path]) -> _Compiled:
     """Return the compiled schema for ``path``, compiling it on first use.
 
     Keyed by path alone: the path contains the pinned version, and ``artifacts.source_dir`` rejects an

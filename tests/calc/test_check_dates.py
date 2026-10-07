@@ -59,7 +59,7 @@ def test_br_29_end_before_start_is_fatal_in_both_bindings() -> None:
     assert "BT-74" in finding.message
     assert "2026-01-01" in finding.message
     assert "2026-02-01" in finding.message
-    for syntax in Syntax:
+    for syntax in (Syntax.UBL, Syntax.CII):
         assert ids(found, syntax) == {("BR-29", Severity.FATAL, "delivery.invoicing_period.end_date")}
 
 
@@ -67,7 +67,7 @@ def test_br_co_19_empty_invoicing_period_is_fatal_in_both_bindings() -> None:
     found = invoice()
 
     assert ids(found) == {("BR-CO-19", Severity.FATAL, "delivery.invoicing_period")}
-    for syntax in Syntax:
+    for syntax in (Syntax.UBL, Syntax.CII):
         assert ids(found, syntax) == {("BR-CO-19", Severity.FATAL, "delivery.invoicing_period")}
 
 
@@ -109,7 +109,7 @@ def test_br_30_and_br_co_20_are_fatal_per_line() -> None:
         ("BR-CO-20", Severity.FATAL, "lines[2].period"),
     }
     assert ids(found) == expected
-    for syntax in Syntax:
+    for syntax in (Syntax.UBL, Syntax.CII):
         assert ids(found, syntax) == expected
     messages = {f.rule_id: f.message for f in calc.check(found)}
     assert "BT-135" in messages["BR-30"]
@@ -127,7 +127,7 @@ def test_br_29_bt_8_does_not_excuse_an_inverted_invoicing_period() -> None:
 
     expected = {("BR-29", Severity.FATAL, "delivery.invoicing_period.end_date")}
     assert ids(found) == expected
-    for syntax in Syntax:
+    for syntax in (Syntax.UBL, Syntax.CII):
         assert ids(found, syntax) == expected
 
 
@@ -140,5 +140,5 @@ def test_credit_note_periods_follow_the_same_rules() -> None:
         ("BR-CO-20", Severity.FATAL, "lines[0].period"),
     }
     assert ids(found) == expected
-    for syntax in Syntax:
+    for syntax in (Syntax.UBL, Syntax.CII):
         assert ids(found, syntax) == expected
