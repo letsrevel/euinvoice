@@ -1,19 +1,21 @@
 """Fetch, verify and look up the pinned official validation artifacts (IMPLEMENTATION_PLAN.md D7).
 
 The sources are pinned in ``manifest.toml`` next to this module. :func:`fetch` is the only code in
-euinvoice that touches the network: it downloads each archive with :mod:`urllib` (https only, also
-across redirects), checks its sha256, extracts the selected members safely into
-``<cache>/<source>/<version>/`` and, for rule sets that ship as Schematron only (Peppol), compiles them
-to XSLT with SchXslt. Everything else, :func:`source_dir` in particular, only reads the cache and raises
-:class:`ArtifactsNotAvailableError` when it is cold.
+euinvoice that touches the network: it downloads each source with :mod:`urllib` (https only, also
+across redirects), checks its sha256, extracts the selected members of a zip archive safely into
+``<cache>/<source>/<version>/`` (or stores a single-file source there under its ``file`` name) and, for
+rule sets that ship as Schematron only (Peppol), compiles them to XSLT with SchXslt. Everything else,
+:func:`source_dir` in particular, only reads the cache and raises :class:`ArtifactsNotAvailableError` when
+it is cold.
 
 Layout of a complete entry::
 
     <cache>/<source>/<version>/...                       extracted members (minus ``strip_components``)
+    <cache>/<source>/<version>/<file>                    or the one downloaded file of a ``file`` source
     <cache>/<source>/<version>/.euinvoice-fingerprint    marker, written last
 
-The marker holds a fingerprint of the whole recipe (archive sha256, member globs, stripping,
-precompile list and, when precompiling, the SchXslt pin), so changing any of them rebuilds the entry.
+The marker holds a fingerprint of the whole recipe (download sha256, member globs or file name,
+stripping, precompile list and, when precompiling, the SchXslt pin), so changing any of them rebuilds the entry.
 It is written into a temporary directory that is renamed into place, so an entry is either complete
 or absent. A warm cache therefore needs no network at all.
 """
@@ -58,6 +60,7 @@ SourceName = t.Literal[
     "ubl-2_1",
     "zugferd-corpus",
     "schxslt",
+    "fatturapa-xsd",
 ]
 
 # The Schematron → XSLT compiler source and its entry point for queryBinding="xslt2" schemas
@@ -73,15 +76,18 @@ _SHA256 = re.compile(r"[0-9a-f]{64}")
 
 @dataclass(frozen=True, slots=True)
 class Source:
-    """One pinned upstream archive from ``manifest.toml``.
+    """One pinned upstream download from ``manifest.toml``: a zip archive (``members``) or a single file (``file``).
 
     Attributes:
         name: Manifest key, also the cache sub-directory.
         version: Upstream version; the cache directory below ``name``.
-        url: HTTPS URL of the zip archive.
-        sha256: Expected sha256 of the archive bytes (lowercase hex).
+        url: HTTPS URL of the zip archive or the single file.
+        sha256: Expected sha256 of the downloaded bytes (lowercase hex).
         license: Licence of the upstream content.
-        members: fnmatch globs selecting archive members (after stripping); ``*`` matches ``/``.
+        members: fnmatch globs selecting archive members (after stripping); ``*`` matches ``/``. Empty for
+            a single-file source.
+        file: For a single-file source, the name the download is stored under in the version directory;
+            empty for a zip archive. Exactly one of ``members`` and ``file`` is set.
         strip_components: Number of leading path components dropped from every member.
         precompile: ``.sch`` paths (relative to the extracted directory) compiled to sibling ``.xslt``.
         note: Free-text provenance note.
@@ -92,10 +98,11 @@ class Source:
     url: str
     sha256: str
     license: str
-    members: tuple[str, ...]
+    members: tuple[str, ...] = ()
     strip_components: int = 0
     precompile: tuple[str, ...] = ()
     note: str = ""
+    file: str = ""
 
 
 def _check_source(source: Source) -> Source:
@@ -111,6 +118,7 @@ def _check_source(source: Source) -> Source:
         problems.append(f"sha256 {source.sha256!r} must be 64 hex characters")
     if source.strip_components < 0:
         problems.append("strip_components must be >= 0")
+    problems += _layout_problems(source)
     for rel in source.precompile:
         path = PurePosixPath(rel)
         if path.is_absolute() or ".." in path.parts or path.suffix != ".sch":
@@ -118,6 +126,18 @@ def _check_source(source: Source) -> Source:
     if problems:
         raise ArtifactIntegrityError(f"manifest source {source.name!r}: " + "; ".join(problems))
     return source
+
+
+def _layout_problems(source: Source) -> list[str]:
+    """A source is a zip archive (``members``) or a single file (``file``) stored as one path segment."""
+    if bool(source.members) == bool(source.file):
+        return ["set exactly one of members or file"]
+    problems = []
+    if source.file and (not _SAFE_SEGMENT.fullmatch(source.file) or source.file in {".", ".."}):
+        problems.append(f"file {source.file!r} must match [A-Za-z0-9._-]+ and not be '.' or '..'")
+    if source.file and (source.strip_components or source.precompile):
+        problems.append("a single-file source takes neither strip_components nor precompile")
+    return problems
 
 
 def load_manifest(text: str | None = None) -> dict[str, Source]:
@@ -144,10 +164,11 @@ def load_manifest(text: str | None = None) -> dict[str, Source]:
                 url=entry["url"],
                 sha256=entry["sha256"].lower(),
                 license=entry["license"],
-                members=tuple(entry["members"]),
+                members=tuple(entry.get("members", ())),
                 strip_components=entry.get("strip_components", 0),
                 precompile=tuple(entry.get("precompile", ())),
                 note=entry.get("note", ""),
+                file=entry.get("file", ""),
             )
         )
         for name, entry in raw["sources"].items()
@@ -250,6 +271,8 @@ def _fingerprint(source: Source, sources: t.Mapping[str, Source]) -> str:
         "strip_components": source.strip_components,
         "precompile": list(source.precompile),
     }
+    if source.file:  # only when set, so the fingerprints of existing zip entries stay the same
+        recipe["file"] = source.file
     if source.precompile:
         recipe["schxslt"] = [sources[SCHXSLT_SOURCE].sha256, SCHXSLT_PIPELINE]
     return hashlib.sha256(json.dumps(recipe, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -314,17 +337,20 @@ def _download(source: Source, dest: Path) -> None:
 
 
 def _install(source: Source, target: Path, fingerprint: str, compiler: Path | None) -> None:
-    """Download, extract and precompile into a temp dir, then rename it to ``target`` atomically."""
+    """Download, extract (or place the single file) and precompile into a temp dir, then rename it atomically."""
     parent = target.parent
     parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{source.version}-", dir=parent))
     try:
-        archive = staging / ".archive.zip"
-        _download(source, archive)
+        download = staging / ".download"
+        _download(source, download)
         content = staging / "content"
         content.mkdir()
-        _extract(source, archive, content)
-        archive.unlink()
+        if source.file:
+            download.rename(content / source.file)
+        else:
+            _extract(source, download, content)
+            download.unlink()
         if source.precompile:
             _precompile(source, content, compiler)
         (content / MARKER).write_text(fingerprint + "\n", encoding="ascii")

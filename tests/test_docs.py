@@ -64,7 +64,7 @@ def render_artifacts_page() -> str:
 Run `EUINVOICE_REGEN_DOCS=1 uv run pytest -q tests/test_docs.py` to regenerate. -->
 
 The official validation artifacts and example corpora are third-party works under their own licences. euinvoice
-never bundles or redistributes them: `python -m euinvoice artifacts fetch` downloads each archive from its
+never bundles or redistributes them: `python -m euinvoice artifacts fetch` downloads each archive or file from its
 upstream URL into your cache and checks its sha256 (`src/euinvoice/validation/manifest.toml`). Using them is
 subject to the licence of each source.
 

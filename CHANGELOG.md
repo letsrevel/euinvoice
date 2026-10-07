@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format follows
   unchanged. The CLI prints a `kosit:` line and adds a `kosit` key to `--json`; the exit code still follows `ok`.
   This resolves the 0.1.0 known issue on KoSIT's severity overrides
   ([#49](https://github.com/letsrevel/euinvoice/issues/49)).
+- New pinned artifact `fatturapa-xsd` 1.2.3: the FatturaPA XML Schema (FPA12 and FPR12), fetched from Agenzia delle
+  Entrate's copy (sha256 `152944f6…8a8c`, byte-identical to the fatturapa.gov.it file). `python -m euinvoice artifacts
+  fetch` now also supports single-file sources (`file` in `manifest.toml` instead of `members`), with the same cache
+  layout and sha256 check; the fingerprints of existing entries are unchanged, so warm caches stay warm. The
+  schema's xmldsig import by W3C `http://` URL is redirected to the pinned UBL 2.1 copy (the same schema without the
+  DOCTYPE's external identifiers), so it compiles offline. `validate()` does not use it yet
+  ([#117](https://github.com/letsrevel/euinvoice/issues/117)).
 
 ## [0.1.0] - 2026-10-06
 
