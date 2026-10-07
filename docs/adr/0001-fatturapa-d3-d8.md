@@ -24,6 +24,10 @@ The #115 research (official sources only) found:
 2. **D3:** data with no EN 16931 business term lives only in optional, frozen per-country extension
    objects rooted at `Invoice.it` (also on the draft). Each extension field cites its national element
    id in its metadata instead of a BT.
+   Refined in #118 under the delegation in plan D3: line-level concepts (2.2.1.x) hang on
+   `InvoiceLine.it` (also on `LineDraft`). VAT-summary concepts (2.2.2.x) are keyed from
+   `Invoice.it.vat_summaries` by (rate, Natura, split payment or not), because BG-23 is derived.
+   Every hook carries the `extension("it")` marker.
 3. **D8:** for FatturaPA, the oracle is the pinned XSD 1.2.3 plus the offline-decidable SdI checks,
    encoded as findings that each cite their Allegato A 1.9.1 error code. Registry and state checks are
    out of scope.

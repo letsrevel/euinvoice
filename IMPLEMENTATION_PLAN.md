@@ -69,9 +69,10 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   (`json_schema_extra={"bt": "BT-31"}`). Error messages and docs cite BT/BG ids.
   *Amended by the maintainer on 2026-10-07 (#115, ADR 0001):* data with no EN 16931 business term lives
   only in optional, frozen per-country extension objects (`.it`), rooted at `Invoice.it` (also on the
-  draft). Whether line- and VAT-breakdown-level concepts nest on the line / BG-23 or are keyed from
-  `Invoice.it` is decided in #118 (BG-23 is derived by `calc.complete`). Each extension field cites its
-  national element id in its metadata under a per-syntax key instead of `bt`, e.g.
+  draft). Line-level concepts nest on `InvoiceLine.it` (also on `LineDraft`), and VAT-breakdown
+  concepts are keyed from `Invoice.it` by rate, `Natura` and split payment, because BG-23 is derived
+  by `calc.complete` (decided in #118). Each extension field cites its national element id in its
+  metadata under a per-syntax key instead of `bt`, e.g.
   `json_schema_extra={"fatturapa": "2.1.1.1"}` (`TipoDocumento`). EN terms stay in the core model;
   `bt_index` skips extensions, and a test asserts every extension field carries such an id.
 - **D4 · One document model.** Invoice and credit note share one model. The document type code

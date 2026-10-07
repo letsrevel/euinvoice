@@ -60,6 +60,9 @@ def to_xml(
             BASIC WL, BASIC, EXTENDED, plan §1), whose official Schematron is not pinned (issue #42), so nothing
             could tell whether its rules accept the document.
         ValueError: ``syntax`` is not a syntax, or is ``None`` for a profile that supports more than one.
+        ModelError: The invoice holds something the target syntax cannot express, e.g. a set national extension
+            (``Invoice.it``, D3 as amended); see :func:`euinvoice.syntax.ubl.write` and
+            :func:`euinvoice.syntax.cii.write`.
     """
     if profile is None:
         profile = profiles.get(invoice.process_control.specification_identifier)
