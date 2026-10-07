@@ -156,7 +156,7 @@ standards**. Do not reproduce their text. Use these free, authoritative equivale
 | Schematron → XSLT compiler (only for rule sets shipped as `.sch` only, e.g. Peppol) | SchXslt (github.com/schxslt/schxslt), run on Saxon | MIT | latest 1.x release |
 | FatturaPA XSD (one schema for FPA12 and FPR12; namespace `http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2`, root `FatturaElettronica`; imports xmldsig by absolute http URL, resolved to a local copy per D10) | Agenzia Entrate (AE) file `https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3` (preferred), linked from the AE page for the 1.9.1 specs, agenziaentrate.gov.it/portale/specifiche-tecniche-versione-1.9.1-%C2%A0-utilizzabili-dal-15-maggio-2026-; byte-identical copy at fatturapa.gov.it `/export/documenti/fatturapa/v1.4/Schema_VFPR12_v1.2.3.xsd` | fatturapa.gov.it reserves all rights; fetch only, never committed or redistributed, AE copies preferred (maintainer, 2026-10-07, #115) | 1.2.3 (valid from 2025-04-01), sha256 `152944f6eef9f5d69ef6e955ee173b32142b00a8c1c5222fc97dfab5910e8a8c` |
 | SdI checks and error codes (**Allegato A**, Specifiche tecniche, Appendix 1; prose). This is the check list we follow for FPR12 (D8). The fatturapa.gov.it "Elenco dei controlli" PDF v2.0 (31/01/2025, `/export/documenti/fatturapa/v1.4/Elenco-Controlli-versione-2.0.pdf`) is a different list: it also has the IPA checks 00398/00399 for public-administration buyers and lacks 00313, 00325, 00326, 00327 and 00330. It is not used | AE file `https://www.agenziaentrate.gov.it/portale/documents/d/guest/allegato-a-specifiche-tecniche-vers-1-9-1`, linked from the same 1.9.1 page | as above: fetch only | 1.9.1 (31/03/2026, usable from 15/05/2026) |
-| FatturaPA example invoices (corpus for 11.5/11.6): `IT01234567890_FPR01.xml`, `_FPR02.xml`, `_FPR03.xml` (and `_FPA01`–`_FPA03`), linked from the fatturapa.gov.it "Formato FatturaPA" page | fatturapa.gov.it `/export/documenti/fatturapa/v1.2/IT01234567890_FPR0{1,2,3}.xml` | as above: fetch only | as published; FPR02 is known-invalid against XSD 1.2.3 (`ContattiTrasmittente` not expected); FPR03 has 2 bodies. Pinned by sha256 in #117 |
+| FatturaPA example invoices (corpus for 11.5/11.6): `IT01234567890_FPR01.xml`, `_FPR02.xml`, `_FPR03.xml` (and `_FPA01`–`_FPA03`), linked from the fatturapa.gov.it "Formato FatturaPA" page | fatturapa.gov.it `/export/documenti/fatturapa/v1.2/IT01234567890_FPR0{1,2,3}.xml` | as above: fetch only | as published; FPR02 is known-invalid against XSD 1.2.3 (`ContattiTrasmittente` not expected); FPR03 has 2 bodies. Not pinned separately (#117): the conformance tests use the copies in the pinned `zugferd-corpus` (`fatturaPA/official/valid/`), content-identical to the fatturapa.gov.it files apart from line endings (FPA02 byte-identical; verified 2026-10-07) |
 | Official EN 16931 ↔ FatturaPA mapping: SdI rules for European invoices, "Regole tecniche relative alla gestione delle fatture di cui all'art. 3, comma 1, d.lgs. 148/2018" (App. 4.1 FatturaPA ↔ semantic model; App. 5 code tables: Natura, Ritenuta, Cassa previdenziale, TipoDocumento, RegimeFiscale, ModalitaPagamento). Written for UBL/CII to public administration; applies to FPR12 by analogy (same XSD) | fatturapa.gov.it `/export/documenti/Specifiche-Tecniche-Fatturazione-Europea-v2.6.pdf` | as above: fetch only | 2.6 (15/05/2025) |
 
 **Facts verified during scoping (2026-10-05):** with `saxonche` 13.0.0 on macOS arm64, the compiled CEN
@@ -206,7 +206,7 @@ src/euinvoice/
   calc/              # D11: build/derive totals + VAT breakdown; check() → findings with BR-CO ids
   report.py          # ValidationReport, Finding, Severity (pure data; used by calc and validate)
   syntax/
-    __init__.py      # Syntax enum {UBL, CII}; dispatch (FatturaPA joins in 11.6)
+    __init__.py      # Syntax enum {UBL, CII}; dispatch (FatturaPA joins with 11.5/11.6)
     ubl.py           # write(invoice, profile) -> bytes ; read(root) -> Invoice   (Invoice + CreditNote)
     cii.py           # write / read for rsm:CrossIndustryInvoice
     fatturapa/       # M11: FPR12 write (one body; transmission header from writer options) / read
@@ -222,7 +222,7 @@ src/euinvoice/
   validation/        # was validate/ (and detect.py) until #93: the functions shadow no module
     __init__.py      # validate(xml_bytes, profile=None) -> ValidationReport
     manifest.toml    # D7 pinned artifact sources
-    artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip + SchXslt precompile
+    artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip (or single file) + SchXslt precompile
     xsd.py           # lxml XMLSchema per syntax/profile
     schematron.py    # saxonche runner, per-process compiled-executable cache, SVRL → Finding
     sdi.py           # M11: offline SdI checks for FatturaPA (Allegato A 1.9.1), rule_id = SdI code (D8)
@@ -449,7 +449,7 @@ the §3 sources do not settle them.
 - **11.2 · Pin the FatturaPA artifacts** ([#117](https://github.com/letsrevel/euinvoice/issues/117)).
   *deps: none.* Single-file (non-zip) sources in the manifest, sha256-verified, same cache layout; the
   XSD 1.2.3 from the AE copy; the xmldsig import resolved locally with no network (D10); the
-  fatturapa.gov.it example invoices (§3) as a fetch-only corpus. *AC:*
+  fatturapa.gov.it example invoices (§3) come from the pinned `zugferd-corpus` copies, not a separate pin. *AC:*
   `make artifacts` fetches them, `make conformance` is green, and a test proves validation never touches
   the network.
 - **11.3 · `Invoice.it` extension model** ([#118](https://github.com/letsrevel/euinvoice/issues/118)).
