@@ -62,12 +62,12 @@ class Summaries:
     Attributes:
         read: Each summary as read, in document order.
         extension: The ``Invoice.it.vat_summaries`` entries, one per rate, Natura and split payment.
-        split: Per rate of the summaries without ``Natura``: whether each is split payment (``EsigibilitaIVA`` S).
+        split: Per rate of the summaries without ``Natura``: whether it is split payment (``EsigibilitaIVA`` S).
     """
 
     read: tuple[Summary, ...]
     extension: tuple[ItalianVatSummary, ...]
-    split: t.Mapping[Decimal, frozenset[bool]]
+    split: t.Mapping[Decimal, bool]
 
 
 def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
@@ -77,8 +77,10 @@ def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
     ``Natura``, ``EsigibilitaIVA`` and ``RiferimentoNormativo`` go to the extension, keyed by rate, Natura and split
     payment (#118). Two summaries of one key that differ (a D vs I split, two legal references) keep the first in
     the extension, and what the second says differently is reported (#132 item 15). ``SpeseAccessorie`` (derived
-    from the lines) and ``Arrotondamento`` ("Mappatura non considerabile") are reported. Split payment together with
-    ordinary VAT is refused: EN 16931 forbids category B next to S (BR-B-02, #132 item 16).
+    from the lines) and ``Arrotondamento`` ("Mappatura non considerabile") are reported. Each rate has one payment
+    mode (row 2.2.2.7), so split payment at one rate and ordinary VAT at another read as categories B and S, as
+    declared, for validation to report BR-B-02 (#132 item 22); both at one rate are refused, as a line has no
+    ``EsigibilitaIVA`` (#132 item 16).
     """
     read: list[Summary] = []
     entries: dict[tuple[Decimal, Natura | None, bool], ItalianVatSummary] = {}
@@ -109,14 +111,15 @@ def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
             cursor.discard(cursor.children(element, "EsigibilitaIVA")[0])
         if legal is not None and kept.legal_reference != entry.legal_reference:
             cursor.discard(cursor.children(element, "RiferimentoNormativo")[0])
-    if any(True in modes for modes in split.values()) and any(False in modes for modes in split.values()):
-        raise ParseError(
-            "2.2.2.7: split payment (EsigibilitaIVA S, VAT category B) and ordinary VAT in one document: EN 16931 "
-            "does not allow category B next to S (BR-B-02), and at one rate a line, which has no EsigibilitaIVA, "
-            f"could not even be told apart ({POLICY_ISSUE})",
-            location=cursor.path(goods if goods is not None else cursor.root),
-        )
-    return Summaries(tuple(read), tuple(entries.values()), {r: frozenset(m) for r, m in split.items()})
+    for rate, modes in split.items():
+        if len(modes) > 1:
+            raise ParseError(
+                f"2.2.2.7: the rate {format(rate, 'f')} has both a split-payment (EsigibilitaIVA S) and an ordinary "
+                "DatiRiepilogo, and a line has no EsigibilitaIVA (XSD 1.2.3), so its VAT category B or S is "
+                f"undecidable ({POLICY_ISSUE})",
+                location=cursor.path(goods if goods is not None else cursor.root),
+            )
+    return Summaries(tuple(read), tuple(entries.values()), {rate: True in modes for rate, modes in split.items()})
 
 
 def _required(cursor: Cursor, element: etree._Element, name: str, ident: str) -> Decimal:
@@ -127,7 +130,7 @@ def _required(cursor: Cursor, element: etree._Element, name: str, ident: str) ->
 
 
 def breakdown(
-    vat: Summaries, root: etree._Element, extra: t.Iterable[tuple[str, Decimal]] = ()
+    vat: Summaries, at: etree._Element, extra: t.Iterable[tuple[str, Decimal]] = ()
 ) -> tuple[VatBreakdown, ...]:
     """BG-23: one per VAT category and rate, from the summaries of that category and rate.
 
@@ -162,7 +165,7 @@ def breakdown(
             "exemption_reason": reason,
             "exemption_reason_code": code,
         }
-        found.append(build(VatBreakdown, members[0].element if members else root, values))
+        found.append(build(VatBreakdown, members[0].element if members else at, values))
     return tuple(found)
 
 
@@ -284,7 +287,7 @@ def vat_category(
             "VAT category (BT-151, BT-102)",
             location=cursor.path(element),
         )
-    return "B" if True in vat.split.get(rate, frozenset()) else "S"
+    return "B" if vat.split.get(rate, False) else "S"
 
 
 def _unit(cursor: Cursor, element: etree._Element) -> str:

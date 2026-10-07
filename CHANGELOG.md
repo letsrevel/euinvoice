@@ -67,8 +67,10 @@ All notable changes to this project are documented here. The format follows
     listed in `ParseResult.unmapped`, never dropped.
   - Values the model cannot hold without rounding or guessing are refused with `ParseError` naming the element:
     `PrezzoTotale` with more than two decimals, the generic Natura N2/N3/N6, a Natura with a rate other than 0,
-    several `ScontoMaggiorazione` on one line, rate 0 without Natura, split payment next to ordinary VAT (BR-B-02). The mapping-policy questions are in [#132](https://github.com/letsrevel/euinvoice/issues/132)
-    (`needs-human`).
+    several `ScontoMaggiorazione` on one line, rate 0 without Natura, split payment and ordinary VAT at the same
+    rate (a line has no EsigibilitaIVA). At different rates they read as categories B and S, as declared, and
+    validation reports BR-B-02. The mapping-policy questions are in
+    [#132](https://github.com/letsrevel/euinvoice/issues/132) (`needs-human`).
   - New `parse_all()`: one `ParseResult` per invoice. A FatturaPA lotto (several `FatturaElettronicaBody`) gives
     one per body, and `parse()` / `parse_detailed()` refuse it with `UnsupportedDocumentError` naming
     `parse_all()`; UBL, CII and Factur-X give a single result.

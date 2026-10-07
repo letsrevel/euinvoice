@@ -376,3 +376,11 @@ VARIANTS.update(
         ),
     }
 )
+
+VARIANTS["split payment and ordinary VAT at two rates"] = document(
+    body(
+        lines=line() + line(2, rate="10.00"),
+        summaries=summary(chargeability="S") + summary("10.00", "100.00", "10.00", chargeability="D"),
+    )
+)
+"""Split payment at 22 %, ordinary VAT at 10 %: the #135 writer emits it (one summary per rate and payment mode)."""

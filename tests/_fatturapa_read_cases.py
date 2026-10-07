@@ -215,16 +215,6 @@ REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
         "2.2.1.14 Natura is required with AliquotaIVA 0",
     ),
     (
-        "split payment and ordinary VAT at two rates",
-        document(
-            body(
-                lines=line() + line(2, rate="10.00"),
-                summaries=summary(chargeability="S") + summary("10.00", "100.00", "10.00", chargeability="D"),
-            )
-        ),
-        "does not allow category B next to S (BR-B-02)",
-    ),
-    (
         "a social-security fund at rate 0 without Natura",
         document(
             body(
@@ -237,7 +227,7 @@ REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
     (
         "split and ordinary at one rate",
         document(body(summaries=summary(chargeability="S") + summary())),
-        "does not allow category B next to S (BR-B-02)",
+        "has both a split-payment (EsigibilitaIVA S) and an ordinary DatiRiepilogo",
     ),
     (
         "two adjustments on a line",

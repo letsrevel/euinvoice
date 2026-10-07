@@ -465,3 +465,13 @@ def test_a_fund_subject_to_withholding_says_so_in_bt_104() -> None:
     (charge,) = parse(VARIANTS["professional with a fund and withholding"]).charges
 
     assert charge.reason == "TC04 SI"
+
+
+def test_split_payment_and_ordinary_vat_at_two_rates_read_as_b_and_s() -> None:
+    # Each rate has one payment mode (row 2.2.2.7), so each line's category is decidable; EN forbids B next to S
+    # (BR-B-02), which validation reports on the declared document (#132 item 22).
+    invoice = parse(VARIANTS["split payment and ordinary VAT at two rates"])
+
+    assert [x.vat_information.category_code for x in invoice.lines] == ["B", "S"]
+    assert [(g.category_code, g.rate) for g in invoice.vat_breakdown] == [("B", D(22)), ("S", D(10))]
+    assert "BR-B-02" in {f.rule_id for f in calc.check(invoice)}

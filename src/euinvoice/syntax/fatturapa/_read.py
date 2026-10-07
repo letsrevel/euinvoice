@@ -25,7 +25,7 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.errors import ParseError, UnsupportedDocumentError
-from euinvoice.model import Invoice, InvoiceLine, VatBreakdown
+from euinvoice.model import DocumentLevelAllowance, DocumentLevelCharge, Invoice, InvoiceLine, VatBreakdown
 from euinvoice.model.it import TipoDocumento
 from euinvoice.syntax._marks import XML_SPACE
 from euinvoice.syntax._read_errors import build
@@ -50,14 +50,12 @@ SPECIFICATION: t.Final = "urn:cen.eu:en16931:2017"
 # 2.1.1.6 DatiBollo → a zero document level charge, BT-105 SAE, BT-104 BOLLO, category Z (App. 4.1 rows 2.1.1.6.1-2;
 # BR-IT-DC-480 of App. 2: "il BT-99 … deve essere posto a 0; il BT-95 … a Z"); on a TD04 credit note an allowance with
 # BT-98 95 and BT-92 (row 2.1.1.6.1). The writer (#119) writes them back as DatiBollo.
-_STAMP_DUTY_CHARGE: t.Final = {
-    "amount": _ZERO,
-    "vat_category_code": "Z",
-    "vat_rate": _ZERO,
-    "reason": "BOLLO",
-    "reason_code": "SAE",
-}
-_STAMP_DUTY_ALLOWANCE: t.Final = {"amount": _ZERO, "vat_category_code": "Z", "vat_rate": _ZERO, "reason_code": "95"}
+_STAMP_DUTY_CHARGE: t.Final = DocumentLevelCharge(
+    amount=_ZERO, vat_category_code="Z", vat_rate=_ZERO, reason="BOLLO", reason_code="SAE"
+)
+_STAMP_DUTY_ALLOWANCE: t.Final = DocumentLevelAllowance(
+    amount=_ZERO, vat_category_code="Z", vat_rate=_ZERO, reason_code="95"
+)
 
 
 def read(root: etree._Element) -> ParseResult:
@@ -182,8 +180,8 @@ def _document_type(cursor: Cursor, document: etree._Element | None) -> TipoDocum
 
 def _stamp_duty(
     cursor: Cursor, document: etree._Element | None, credit_note: bool
-) -> tuple[tuple[dict[str, object], ...], tuple[dict[str, object], ...]]:
-    """2.1.1.6 ``DatiBollo`` → (BG-20, BG-21) as model input (see ``_STAMP_DUTY_CHARGE``).
+) -> tuple[tuple[DocumentLevelAllowance, ...], tuple[DocumentLevelCharge, ...]]:
+    """2.1.1.6 ``DatiBollo`` → (BG-20, BG-21) (see ``_STAMP_DUTY_CHARGE``).
 
     The EN amount is 0 (BR-IT-DC-480), so a non-zero ``ImportoBollo`` (the duty itself) has no EN home and is
     reported (#132 item 9).
@@ -271,8 +269,8 @@ def _totals(
     invoice_lines: tuple[InvoiceLine, ...],
     groups: tuple[VatBreakdown, ...],
     paid: Payment,
-    allowances: tuple[dict[str, object], ...],
-    charges: tuple[dict[str, object], ...],
+    allowances: tuple[DocumentLevelAllowance, ...],
+    charges: tuple[DocumentLevelCharge, ...],
 ) -> dict[str, object]:
     """BG-22, with the declared totals as declared.
 
@@ -283,8 +281,8 @@ def _totals(
     values are kept even when they break those rules (#132 item 22).
     """
     line_total = sum((line.net_amount for line in invoice_lines), _ZERO)
-    allowance_total = sum((t.cast(Decimal, a["amount"]) for a in allowances), _ZERO)
-    charge_total = sum((t.cast(Decimal, c["amount"]) for c in charges if c["amount"] is not None), _ZERO)
+    allowance_total = sum((allowance.amount for allowance in allowances), _ZERO)
+    charge_total = sum((charge.amount for charge in charges), _ZERO)
     without_vat = line_total - allowance_total + charge_total
     vat_total = sum((group.tax_amount for group in groups), _ZERO)
     with_vat = cursor.decimal(document, "ImportoTotaleDocumento", "2.1.1.9")

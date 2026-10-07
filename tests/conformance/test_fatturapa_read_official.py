@@ -248,7 +248,9 @@ INCONSISTENT: t.Final[t.Mapping[str, t.Mapping[str, frozenset[str]]]] = {
     "professional with a fund and withholding": {"ubl": frozenset({"BR-CO-16"}), "cii": frozenset({"BR-CO-16"})},
     "00422 passing 0": {"ubl": frozenset({"BR-S-08"}), "cii": frozenset({"BR-S-08"})},
     "00422 passing 1": {"ubl": frozenset({"BR-S-08"}), "cii": frozenset({"BR-S-08"})},
+    # UBL's BR-S-08 allows ±1 (TaxableAmount - 1 < sum < TaxableAmount + 1); CII's compares exactly.
     "00423 passing 0": {"ubl": frozenset(), "cii": frozenset({"BR-S-08"})},
+    "split payment and ordinary VAT at two rates": {"ubl": frozenset({"BR-B-02"}), "cii": frozenset({"BR-B-02"})},
     "IT01234567890_FPR03.xml": {"ubl": frozenset({"BR-CO-16", "BR-S-08"}), "cii": frozenset({"BR-CO-16", "BR-S-08"})},
 }
 
