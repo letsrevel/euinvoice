@@ -86,12 +86,23 @@ def test_convert_to_fatturapa_refuses_an_invoice_without_italian_data(
         (["--to", "fatturapa", *HEADER, "--drop-extensions"], "--drop-extensions applies to --to ubl or cii"),
         (["--to", "ubl", "--transmitter", "IT00000000009"], "--transmitter applies only to --to fatturapa"),
         (["--to", "cii", "--pec", "a@example.com"], "--pec applies only to --to fatturapa"),
-        (["--to", "fatturapa", *HEADER, "--recipient-code", "ABC123"], "CodiceDestinatario of an FPR12 must be 7"),
-        (["--to", "fatturapa", "--transmitter", "I", "--transmission-number", "1"], "IdPaese must be two capital"),
+        (
+            ["--to", "fatturapa", *HEADER, "--recipient-code", "ABC123"],
+            "--recipient-code: CodiceDestinatario of an FPR12 must be 7",
+        ),
+        (
+            ["--to", "fatturapa", "--transmitter", "I", "--transmission-number", "1"],
+            "--transmitter: IdPaese must be two capital",
+        ),
         (
             ["--to", "fatturapa", *HEADER, "--recipient-code", "ABC1234", "--pec", "a@example.com"],
-            "PECDestinatario is used only with CodiceDestinatario 0000000",
+            "--pec: PECDestinatario is used only with CodiceDestinatario 0000000",
         ),
+        (
+            ["--to", "fatturapa", "--transmitter", "IT00000000009", "--transmission-number", "12345678901"],
+            "--transmission-number: ProgressivoInvio must be 1 to 10",
+        ),
+        (["--to", "fatturapa", *HEADER, "--pec", "not an address"], "--pec: PECDestinatario must be an address"),
     ],
     ids=[
         "no transmitter",
@@ -103,6 +114,8 @@ def test_convert_to_fatturapa_refuses_an_invoice_without_italian_data(
         "6-character recipient code",
         "short transmitter",
         "pec with a recipient code",
+        "long transmission number",
+        "bad pec",
     ],
 )
 def test_convert_flag_misuse_is_a_usage_error(

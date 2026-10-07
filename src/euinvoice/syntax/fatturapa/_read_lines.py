@@ -176,7 +176,12 @@ def _exemption(category: str, members: list[Summary]) -> tuple[str | None, str |
     if category in _NO_EXEMPTION or not members:
         return None, None
     # A member of a category outside _NO_EXEMPTION has a Natura: only App. 5.1's Natura rows give one (vat_category).
-    reason = exemption_reason((m.nature, m.legal) for m in members if m.nature is not None)
+    natures: list[tuple[Natura, str | None]] = []
+    for member in members:
+        if member.nature is None:  # pragma: no cover - the invariant above: fail loudly if it ever breaks
+            raise AssertionError(f"a category {category} VAT summary without Natura reached BT-120")
+        natures.append((member.nature, member.legal))
+    reason = exemption_reason(natures)
     codes = {member.reason_code for member in members}
     return reason, codes.pop() if len(codes) == 1 else None
 

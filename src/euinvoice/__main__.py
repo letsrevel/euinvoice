@@ -185,6 +185,15 @@ _TRANSMISSION_FLAGS: t.Final = (
 )
 """The ``convert`` flags of the FatturaPA transmission header (:class:`euinvoice.syntax.fatturapa.Transmission`)."""
 
+_FLAG_OF_FIELD: t.Final = {
+    "transmitter_country": "--transmitter",
+    "transmitter_code": "--transmitter",
+    "transmission_number": "--transmission-number",
+    "recipient_code": "--recipient-code",
+    "recipient_pec": "--pec",
+}
+"""The flag that sets each :class:`~euinvoice.syntax.fatturapa.Transmission` field, to name it in a usage error."""
+
 
 class _UsageError(Exception):
     """A command-line usage error that argparse cannot detect: ``main`` prints it and exits with 2."""
@@ -206,8 +215,15 @@ def _transmission(args: argparse.Namespace) -> fatturapa.Transmission:
     try:
         return fatturapa.Transmission(**fields)
     except pydantic.ValidationError as exc:
-        # The model raises ModelError (a ValueError) with the XSD / Allegato A rule; pydantic keeps it in ``ctx``.
-        raise _UsageError("; ".join(str(e.get("ctx", {}).get("error", e["msg"])) for e in exc.errors())) from None
+        # The model raises ModelError (a ValueError) with the XSD / Allegato A rule; pydantic keeps it in ``ctx``. The
+        # only model-level check (empty ``loc``) is PECDestinatario against CodiceDestinatario.
+        raise _UsageError(
+            "; ".join(
+                f"{_FLAG_OF_FIELD[str(e['loc'][0]) if e['loc'] else 'recipient_pec']}: "
+                f"{e.get('ctx', {}).get('error', e['msg'])}"
+                for e in exc.errors()
+            )
+        ) from None
 
 
 def _convert_flags(args: argparse.Namespace, target: Syntax) -> fatturapa.Transmission | None:
