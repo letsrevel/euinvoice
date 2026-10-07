@@ -100,6 +100,7 @@ DERIVED: t.Final = frozenset(
         "BT-3",  # checked against TipoDocumento (App. 5.4)
         "BT-24",  # the EN 16931 specification identifier
         "BT-121",  # carried by Natura: the pre-flight requires the App. 5.1 VATEX code of the group's Natura
+        "BT-20",  # carried by CondizioniPagamento: accepted only as its code (App. 4.1 row 2.4.1)
         "BT-95",  # the stamp duty's category, rate and reason: implied by DatiBollo (BR-IT-DC-480)
         "BT-96",
         "BT-97",

@@ -55,8 +55,8 @@ WRITTEN: t.Final = frozenset(
     {
         # Document (App. 4.1 rows 2.1.1.2-2.1.1.11, 2.1.2-2.1.6, 2.2.2.7, 2.4.2.5); BT-3 selects nothing, it is
         # checked against TipoDocumento (App. 5.4); BT-24 identifies an EN 16931 syntax and has no FatturaPA
-        # counterpart. BT-20 is not here: its free text has no element (2.4.1 and 2.4.2.4 are codes; #133 item 11).
-        *("BT-1", "BT-2", "BT-3", "BT-5", "BT-8", "BT-9", "BT-12", "BT-13", "BT-15", "BT-19"),
+        # counterpart. BT-20 is accepted only as the CondizioniPagamento code it carries (structure(); #133 item 11).
+        *("BT-1", "BT-2", "BT-3", "BT-5", "BT-8", "BT-9", "BT-12", "BT-13", "BT-15", "BT-19", "BT-20"),
         *("BG-1", "BT-22", "BG-2", "BT-24", "BG-3", "BT-25", "BT-26"),
         # Seller and buyer (rows 1.2, 1.4)
         *("BG-4", "BT-27", "BT-30", "BT-31", "BG-5", "BT-35", "BT-36", "BT-37", "BT-38", "BT-39", "BT-40"),
@@ -84,7 +84,8 @@ checked one by one."""
 _REASONS: t.Final[t.Mapping[str, str]] = {
     "BT-6": "FatturaPA has one currency, Divisa (2.1.1.2); App. 4.1 maps no element to BT-6",
     "BT-20": "App. 4.1 builds it from 2.4.1 CondizioniPagamento and 2.4.2.4 GiorniTerminiPagamento, which are codes "
-    "and a number with no place for its free text (#133 item 11); the CondizioniPagamento code comes from it.payment",
+    "and a number with no place for free text: only the CondizioniPagamento code of it.payment is carried "
+    "(#133 item 11)",
     "BT-23": "App. 4.1 maps no FatturaPA element to the business process (#133)",
     "BT-34": "App. 4.1 maps no FatturaPA element to the seller's electronic address (#133)",
     "BT-49": "the SdI routing (CodiceDestinatario, PECDestinatario) comes from Transmission, not from the model "
@@ -148,6 +149,11 @@ def structure(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
                 f"only a codice fiscale is written (CodiceFiscale, rows 1.2.1.2 / 1.4.1.2): scheme "
                 f"{CODICE_FISCALE_SCHEME} or the prefix {CODICE_FISCALE_PREFIX!r}; got scheme {identifier.scheme_id!r}",
             )
+    # BT-20 is carried only when it is what App. 4.1 builds from the elements written: the CondizioniPagamento code
+    # (GiorniTerminiPagamento is not written), in the reader's form (#120). Any other text would be lost.
+    carried = None if it.payment is None else str(it.payment.conditions)
+    if invoice.payment_terms is not None and invoice.payment_terms != carried:
+        yield _unwritable("BT-20", "payment_terms", _REASONS["BT-20"])
     instructions = invoice.payment_instructions
     if instructions is not None and len(instructions.credit_transfers) > 1:
         yield _unwritable(

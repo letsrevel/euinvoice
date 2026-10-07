@@ -31,6 +31,7 @@ __all__ = [
     "cannot_express",
     "child",
     "date",
+    "fits",
     "matching",
     "quantity",
     "rate",
@@ -87,6 +88,21 @@ def matching(value: str, pattern: str, term: str, element: str) -> str:
     return value
 
 
+def fits(value: str, *, maximum: int, charset: str = LATIN, minimum: int = 1) -> bool:
+    """Whether ``value`` fits a FatturaPA string type (the test :func:`text` refuses on).
+
+    Args:
+        value: The text.
+        maximum: The maximum length in characters.
+        charset: :data:`BASIC` or :data:`LATIN`.
+        minimum: The minimum length.
+
+    Returns:
+        ``True`` when its length is in range and it holds only ``charset`` characters and no tab or line break.
+    """
+    return minimum <= len(value) <= maximum and not re.search(f"[^{charset}]|[{_NORMALIZED}]", value)
+
+
 def text(value: str, term: str, element: str, *, maximum: int, charset: str = LATIN, minimum: int = 1) -> str:
     """Return ``value`` if it fits a FatturaPA string type.
 
@@ -105,16 +121,17 @@ def text(value: str, term: str, element: str, *, maximum: int, charset: str = LA
         ModelError: ``value`` is too short or too long, or holds a character outside ``charset`` or a tab or line
             break.
     """
+    if fits(value, maximum=maximum, charset=charset, minimum=minimum):
+        return value
     name = "Basic Latin (U+0000..U+007F)" if charset == BASIC else "Basic Latin and Latin-1 (U+0000..U+00FF)"
     if not minimum <= len(value) <= maximum:
         raise cannot_express(term, f"{element} takes {minimum} to {maximum} characters, got {len(value)}")
-    if bad := re.search(f"[^{charset}]|[{_NORMALIZED}]", value):
-        raise cannot_express(
-            term,
-            f"{element} takes only {name} characters without tab or line break (xs:normalizedString would "
-            f"replace them), got {bad.group()!r} at position {bad.start()}",
-        )
-    return value
+    bad = t.cast(re.Match[str], re.search(f"[^{charset}]|[{_NORMALIZED}]", value))  # fits() failed on a character
+    raise cannot_express(
+        term,
+        f"{element} takes only {name} characters without tab or line break (xs:normalizedString would "
+        f"replace them), got {bad.group()!r} at position {bad.start()}",
+    )
 
 
 def _fixed(value: Decimal, term: str, element: str, *, decimals: tuple[int, int], digits: int, signed: bool) -> str:

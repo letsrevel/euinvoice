@@ -427,6 +427,24 @@ def test_payment_terms_text_is_reported() -> None:
     _reported(it_invoice(payment_terms="30 giorni"), UNWRITTEN, "payment_terms", r"^BT-20 cannot be written .*#133")
 
 
+def test_payment_terms_equal_to_the_conditions_code_are_carried() -> None:
+    payment = ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento.MP05)
+    invoice = it_invoice(payment_terms="TP02", it=italian(payment=payment))
+
+    assert preflight(invoice) == ()
+    other = it_invoice(payment_terms="TP01", it=italian(payment=payment))
+    _reported(other, UNWRITTEN, "payment_terms", r"^BT-20 cannot be written")
+
+
+def test_exemption_reason_as_app_4_1_concatenates_it_is_carried() -> None:
+    summary = ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="Art. 10")
+    reason = calc.ExemptionReason(text="N2.1; N4 Art. 10")
+    invoice = _exempt(Natura.N2_1, Natura.N4, reason=reason, it=italian(vat_summaries=(summary,)))
+
+    assert preflight(invoice) == ()
+    assert _riferimento(invoice) == [None, "Art. 10"]
+
+
 def _exempt(*natures: Natura, reason: calc.ExemptionReason, **changes: t.Any) -> Invoice:
     lines = [it_line(str(i), "1", "10", "E", "0", nature=n) for i, n in enumerate(natures, 1)]
     return it_invoice(*lines, exemption_reasons={"E": reason}, **changes)

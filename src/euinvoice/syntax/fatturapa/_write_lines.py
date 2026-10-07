@@ -18,7 +18,6 @@ equal BT-117. :func:`summarize` reports what keeps the blocks from being built a
 """
 
 import dataclasses
-import re
 import typing as t
 from decimal import Decimal
 
@@ -37,6 +36,7 @@ from euinvoice.syntax.fatturapa._write_format import (
     cannot_express,
     child,
     date,
+    fits,
     quantity,
     rate,
     text,
@@ -48,6 +48,7 @@ __all__ = ["Block", "summarize", "write_goods"]
 
 _LINE_NUMBER_MAX: t.Final = 9999  # NumeroLineaType
 _HUNDRED: t.Final = Decimal(100)
+_CENT: t.Final = Decimal("0.01")
 
 
 def _line_number(identifier: str, term: str) -> str:
@@ -275,7 +276,7 @@ def _match_summaries(it: ItalianExtension, blocks: dict[_Key, Block]) -> t.Itera
         blocks[key].legal_reference = summary.legal_reference
 
 
-def _split_and_ordinary(blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+def _split_and_ordinary(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
     """Split payment (B) and ordinary VAT at one rate: refused, as a reader could not tell their lines apart.
 
     FatturaPA lines carry no EsigibilitaIVA (only DatiRiepilogo does, App. 4.1 row 2.2.2.7), so two summaries at one
@@ -283,12 +284,14 @@ def _split_and_ordinary(blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
     """
     split = {block.rate for block in blocks.values() if block.split}
     for shared in sorted({block.rate for block in blocks.values() if not block.split} & split):
+        indexes = [i for i, line in enumerate(invoice.lines) if line.vat_information.rate == shared]
         yield finding(
             SUMMARY,
-            "lines",
-            f"split payment (VAT category B, EsigibilitaIVA S) and ordinary VAT at rate {format(shared, 'f')} would be "
-            "two DatiRiepilogo whose lines FatturaPA cannot tell apart (DettaglioLinee has no EsigibilitaIVA, App. 4.1 "
-            "row 2.2.2.7), so each line's BT-151 would be lost",
+            f"lines[{indexes[0]}]",
+            f"split payment (VAT category B, EsigibilitaIVA S) and ordinary VAT at rate "
+            f"{format(shared.quantize(_CENT), 'f')} (lines {', '.join(map(str, indexes))}) would be two DatiRiepilogo "
+            "whose lines FatturaPA cannot tell apart (DettaglioLinee has no EsigibilitaIVA, App. 4.1 row 2.2.2.7), so "
+            "each line's BT-151 would be lost",
         )
 
 
@@ -317,17 +320,27 @@ def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Fi
         block.chargeability = own or derived
 
 
-_REFERENCE: t.Final = re.compile(r"[\x00-\xff]{1,100}")  # String100LatinType (xs:normalizedString)
+def concatenated_reason(blocks: list[Block]) -> str:
+    """BT-120 as App. 4.1 builds it from the blocks written.
+
+    Each ``Natura`` and ``RiferimentoNormativo`` (rows 2.2.2.2, 2.2.2.8: "vengono concatenati") joined by a space, the
+    blocks of one VAT BREAKDOWN by ``"; "``. The separators are the reader's (#120; #132): a BT-120 read from
+    FatturaPA is this text, so it is carried by the elements written and is accepted as such.
+    """
+    texts = [str(b.nature) if b.legal_reference is None else f"{b.nature} {b.legal_reference}" for b in blocks]
+    return "; ".join(dict.fromkeys(texts))
 
 
 def _reference(reason: str, mine: list[Block]) -> str | None:
-    """Put BT-120 into the group's one block as RiferimentoNormativo; why it cannot be, or ``None``."""
+    """Accept BT-120 or put it into the group's one block as RiferimentoNormativo; why it cannot be, or ``None``."""
+    if all(block.nature is not None for block in mine) and reason == concatenated_reason(mine):
+        return None  # carried by Natura and RiferimentoNormativo (App. 4.1 rows 2.2.2.2, 2.2.2.8)
     if len(mine) != 1:
         return f"its VAT BREAKDOWN has {len(mine)} DatiRiepilogo, not one"
     given = mine[0].legal_reference
     if given is not None:
         return None if given == reason else f"it.vat_summaries sets RiferimentoNormativo {given!r} for that summary"
-    if not _REFERENCE.fullmatch(reason) or any(c in reason for c in "\t\n\r"):
+    if not fits(reason, maximum=100):
         return "String100LatinType takes 1 to 100 Latin-1 characters without tab or line break"
     mine[0].legal_reference = reason
     return None
@@ -337,9 +350,10 @@ def _exemption_reasons(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterato
     """BT-120 and BT-121 of each VAT BREAKDOWN: written, carried by Natura, or reported (never dropped).
 
     * BT-120 is 2.2.2.8 RiferimentoNormativo (App. 4.1 rows 2.2.2.2 and 2.2.2.8: "In BT-120 vengono concatenati
-      2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). It is written into the group's DatiRiepilogo when the group
-      has exactly one and ``it.vat_summaries`` gives it no ``legal_reference``; equal to that ``legal_reference`` it
-      is already written. Otherwise it would be lost: an ``error``.
+      2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). Equal to that concatenation of what is written
+      (:func:`concatenated_reason`, the form the reader produces) it is carried. Otherwise it is written into the
+      group's DatiRiepilogo when the group has exactly one and ``it.vat_summaries`` gives it no ``legal_reference``;
+      equal to that ``legal_reference`` it is already written. Otherwise it would be lost: an ``error``.
     * BT-121 is carried by Natura when it is the code App. 5.1 gives every Natura of the group (``VATEX-EU-132`` for
       N2.x, N4, N5; ``-G`` for N3.1, N3.3-N3.5; ``-IC`` for N3.2, N3.6; ``-AE`` for N6.x; ``-151`` for N7).
       Otherwise: an ``error``.
@@ -379,7 +393,7 @@ def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list
     findings = [
         *_amounts(invoice, it, blocks),
         *_match_summaries(it, blocks),
-        *_split_and_ordinary(blocks),
+        *_split_and_ordinary(invoice, blocks),
         *_chargeability(invoice, blocks),
         *_exemption_reasons(invoice, blocks),
     ]

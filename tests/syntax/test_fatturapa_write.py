@@ -316,9 +316,9 @@ def test_split_and_ordinary_payment_at_one_rate_are_refused() -> None:
     invoice = it_invoice(it_line("1"), it_line("2", category="B"))
 
     errors = [(f.rule_id, f.location) for f in preflight(invoice)]
-    assert errors == [(SUMMARY, "lines")]
-    assert "at rate 22 would be" in preflight(invoice)[0].message
-    with pytest.raises(ModelError, match=r"SUMMARY at lines: split payment .* BT-151 would be lost"):
+    assert errors == [(SUMMARY, "lines[0]")]
+    assert "at rate 22.00 (lines 0, 1) would be" in preflight(invoice)[0].message
+    with pytest.raises(ModelError, match=r"SUMMARY at lines\[0\]: split payment .* BT-151 would be lost"):
         write(invoice, TRANSMISSION)
 
 

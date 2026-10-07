@@ -63,8 +63,12 @@ All notable changes to this project are documented here. The format follows
     charges, BT-20, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be
     built; and totals that disagree with the summaries written (BR-CO-10/13/14/15/16 through App. 4.1:
     ImportoTotaleDocumento, ImportoPagamento and the derived BT-106..BT-110). Every set term is written or reported:
-    BT-120 becomes RiferimentoNormativo when its VAT breakdown has one summary, and BT-121 must be the App. 5.1
-    VATEX code of the group's Natura, which carries it. `write` raises `ModelError` for the errors and for values
+    BT-120 becomes RiferimentoNormativo when its VAT breakdown has one summary, or is accepted when it is the App. 4.1
+    concatenation of the Natura and RiferimentoNormativo written (the reader's form); BT-121 must be the App. 5.1
+    VATEX code of the group's Natura; BT-20 is accepted only as the CondizioniPagamento code it carries. So an
+    invoice read from FatturaPA is written back unchanged: model → FPR12 → model is lossless up to the documented
+    App. 4.1 / 5 normalizations, and FPR12 → model → FPR12 is a fixed point wherever the writer supports the
+    content (round-trip tests with the #120 reader). `write` raises `ModelError` for the errors and for values
     that do not fit their XSD type.
     The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
     (`needs-human`).
