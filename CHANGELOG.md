@@ -26,6 +26,25 @@ All notable changes to this project are documented here. The format follows
   schema's xmldsig import by W3C `http://` URL is redirected to the pinned UBL 2.1 copy (the same schema without the
   DOCTYPE's external identifiers), so it compiles offline. `validate()` does not use it yet
   ([#117](https://github.com/letsrevel/euinvoice/issues/117)).
+- FatturaPA detection and validation ([#121](https://github.com/letsrevel/euinvoice/issues/121)).
+  - `detect()` recognizes a FatturaPA 1.2 `FatturaElettronica` root by its namespace as `Syntax.FATTURAPA`;
+    `Detection.fatturapa_version` holds its `versione` (`FPA12` / `FPR12`).
+  - `validate()` validates FatturaPA by syntax, not by profile: the pinned XSD 1.2.3, then the new
+    `euinvoice.validation.sdi` checks. These are the offline-decidable SdI checks of Allegato A 1.9.1, Appendix 1,
+    each an `error` finding whose `rule_id` is the SdI code (e.g. `00421`) and whose message quotes Allegato A.
+  - Registry, SdI-state, file-name, file-size, signature and compressed-file checks are out of scope (D8). The
+    ambiguous parts are tracked in [#130](https://github.com/letsrevel/euinvoice/issues/130).
+  - FPA12 gets the same checks, after an `information` finding `EUINVOICE-FATTURAPA-FPA12`.
+  - Passing a profile for a FatturaPA document raises `UnsupportedDocumentError`.
+  - The CLI `validate` command accepts FatturaPA.
+  - `parse()` refuses FatturaPA until its reader exists (#120), and `calc.check(syntax="fatturapa")` raises `ValueError`.
+
+### Changed
+
+- `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
+  `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
+- A single-file artifact source whose `file` starts with a dot is refused, so the cache marker
+  `.euinvoice-fingerprint` can never be a source's file ([#128](https://github.com/letsrevel/euinvoice/issues/128)).
 
 ## [0.1.0] - 2026-10-06
 

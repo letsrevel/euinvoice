@@ -241,7 +241,7 @@ CLEAN: t.Final = {
 }
 
 
-@pytest.mark.parametrize("syntax", list(Syntax))
+@pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 @pytest.mark.parametrize("name", list(CASES))
 def test_check_agrees_with_the_official_cen_schematron(name: str, syntax: Syntax) -> None:
     invoice = CASES[name]()

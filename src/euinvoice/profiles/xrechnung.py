@@ -39,7 +39,7 @@ from collections.abc import Iterator
 
 from euinvoice.model import Invoice, PaymentInstructions
 from euinvoice.model.datatypes import normalize_space
-from euinvoice.profiles._base import Profile
+from euinvoice.profiles._base import SYNTAXES, Profile
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax import Syntax
 
@@ -49,7 +49,7 @@ PREFLIGHT_SOURCE: t.Final = "xrechnung-preflight"
 """``source`` of the findings of the XRechnung pre-flight checks."""
 
 _CIUS_ID: t.Final = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
-_SYNTAXES: t.Final = frozenset(Syntax)
+_SYNTAXES: t.Final = SYNTAXES
 _RULE_SETS: t.Final = ("cen", "xrechnung")
 
 # BR-DE-16 (lines 332-333 / 339): the VAT category codes that require BT-31, BT-32 or BG-11.

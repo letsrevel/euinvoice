@@ -72,7 +72,7 @@ def _in_eur(document: bytes, xpath: str, namespaces: dict[str, str]) -> bytes:
     return etree.tostring(root)
 
 
-@pytest.mark.parametrize("syntax", list(Syntax))
+@pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 @pytest.mark.parametrize("name", list(CASES))
 def test_official_rules_reject_bt6_equal_to_bt5_with_bt111(name: str, syntax: Syntax) -> None:
     write, rule_set, xpath, namespaces = WRITERS[syntax]

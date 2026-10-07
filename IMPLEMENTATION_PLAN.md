@@ -102,7 +102,9 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   no public validator. Its oracle is the pinned **XSD 1.2.3** plus the offline-decidable SdI checks of
   **Allegato A 1.9.1, Appendix 1**, which we encode ourselves as `Finding`s whose `rule_id` is the SdI
   error code (e.g. `00421`) and whose message cites it. They are our reading of official prose, so each
-  cites its code and has a passing and a failing test. The finding severity is decided in #121. This
+  cites its code and has a passing and a failing test. Every such finding is an `error` (decided in
+  #121: SdI rejects the file for each code, and `fatal` stays the flag of official machine-readable
+  artifacts). FatturaPA is validated by syntax, not by profile (it has no BT-24). This
   includes 00409 (duplicate invoice within the lotto), which is decidable from the file's bodies. Out of
   scope, each with its reason, and documented as such:
   - **tax register or SdI state** (#115 decision 2): identifiers and VAT groups (00300–00306,
@@ -115,7 +117,14 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   - **signature** (00100–00105, 00107): v1 is unsigned (#115 decision 1), and certificate checks need
     CA state;
   - **compressed file** (00106, empty or unreadable archive): `validate()` receives the XML, not the
-    ZIP a sender may transmit.
+    ZIP a sender may transmit;
+  - **file size** (00003, decided in #121): the limit applies to the transmitted file (possibly a signed
+    envelope), and "5MB" (Allegato A §1.3.1) does not say 10^6 or 2^20 bytes; the #119 file helper owns it;
+  - **SdI receipt date** (00403): the invoice date is compared with the date SdI receives the file;
+  - **format** (00200, 00201): the XSD step, reported as `XSD` findings;
+  - **simplified invoices** (00460): FSM10 is not in scope;
+  - **ambiguous prose** (00424, and the parts of 00409, 00423, 00471–00473 that Allegato A leaves open):
+    listed in [#130](https://github.com/letsrevel/euinvoice/issues/130) (`needs-human`).
 - **D9 · Validation results are data, not exceptions.** `validate()` returns a `ValidationReport`
   (list of `Finding(rule_id, severity: fatal|error|warning|information, location (XPath), message, source
   rule set)`, `.ok` = no fatal/error). Exceptions are only for misuse (bad input type, malformed XML,
@@ -206,7 +215,7 @@ src/euinvoice/
   calc/              # D11: build/derive totals + VAT breakdown; check() → findings with BR-CO ids
   report.py          # ValidationReport, Finding, Severity (pure data; used by calc and validate)
   syntax/
-    __init__.py      # Syntax enum {UBL, CII}; dispatch (FatturaPA joins with 11.5/11.6)
+    __init__.py      # Syntax enum {UBL, CII, FATTURAPA}; FATTURAPA is detected and validated (11.6), read/written in 11.5/11.4
     ubl.py           # write(invoice, profile) -> bytes ; read(root) -> Invoice   (Invoice + CreditNote)
     cii.py           # write / read for rsm:CrossIndustryInvoice
     fatturapa/       # M11: FPR12 write (one body; transmission header from writer options) / read

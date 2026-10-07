@@ -53,6 +53,10 @@ CII_UDT: t.Final = "urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100"
 CII_QDT: t.Final = "urn:un:unece:uncefact:data:standard:QualifiedDataType:100"
 """CII D16B qualified data types (``qdt``)."""
 
+FATTURAPA: t.Final = "http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2"
+"""FatturaPA 1.2 ``FatturaElettronica`` root (FPA12 and FPR12): the ``targetNamespace`` of the pinned
+``Schema_VFPR12_v1.2.3.xsd``. Its child elements are unqualified (the schema sets no ``elementFormDefault``)."""
+
 SVRL: t.Final = "http://purl.oclc.org/dsdl/svrl"
 """Schematron Validation Report Language (ISO/IEC 19757-3 Annex D), the output of every compiled rule set.
 

@@ -1,6 +1,7 @@
 """The pinned FatturaPA 1.2.3 XSD compiles offline and accepts the official examples (needs ``make artifacts``).
 
-``validate()`` does not select FatturaPA yet (#121), so these tests drive ``xsd._load(xsd._FATTURAPA)``.
+These tests drive ``xsd._load(xsd._FATTURAPA)`` directly; ``tests/conformance/test_sdi_official.py`` runs the
+examples through ``validate()``.
 """
 
 import pathlib

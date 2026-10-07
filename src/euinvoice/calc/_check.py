@@ -233,9 +233,11 @@ def check(invoice: Invoice, *, syntax: Syntax | None = None) -> tuple[Finding, .
         syntax (both, without one).
 
     Raises:
-        ValueError: ``syntax`` is not a syntax.
+        ValueError: ``syntax`` is not a syntax, or not an EN 16931 one (``Syntax.FATTURAPA`` has no CEN binding).
     """
     target = None if syntax is None else Syntax(syntax)  # "ubl" must not fall through to the CII verdict
+    if target is Syntax.FATTURAPA:  # it must not fall through to the CII verdict either
+        raise ValueError("calc.check evaluates the CEN rules of the UBL and CII bindings; FatturaPA has none")
     verdicts = [*_sums(invoice), *_with_vat(invoice), *_accounting_currency(invoice), *_periods(invoice)]
     for index, group in enumerate(invoice.vat_breakdown):
         verdicts += _group(index, group)

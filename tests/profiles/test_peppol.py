@@ -40,7 +40,7 @@ from euinvoice.syntax import Syntax
 
 BT24 = "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
 BT23 = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
-SYNTAXES = pytest.mark.parametrize("syntax", list(Syntax))
+SYNTAXES = pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 UBL, CII = Syntax.UBL, Syntax.CII
 
 
@@ -66,7 +66,7 @@ class TestProfile:
         assert PEPPOL.business_process_type == BT23 == peppol.BILLING_PROCESS
 
     def test_supports_ubl_and_cii_and_runs_cen_then_peppol(self) -> None:
-        assert PEPPOL.syntaxes == frozenset(Syntax)
+        assert PEPPOL.syntaxes == frozenset({Syntax.UBL, Syntax.CII})
         assert PEPPOL.rule_sets == ("cen", "peppol")
 
     def test_is_registered_by_its_bt24(self) -> None:

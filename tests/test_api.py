@@ -210,6 +210,17 @@ def test_parse_refuses_an_unsupported_root() -> None:
         parse(b"<Invoice/>")
 
 
+def test_parse_refuses_fatturapa_until_its_reader_exists() -> None:
+    fatturapa = f'<p:FatturaElettronica xmlns:p="{_xml.FATTURAPA}" versione="FPR12"/>'.encode()
+    with pytest.raises(UnsupportedDocumentError, match="reading FatturaPA is not implemented yet"):
+        parse(fatturapa)
+
+
+def test_to_xml_refuses_fatturapa_as_no_profile_supports_it() -> None:
+    with pytest.raises(UnsupportedDocumentError, match="'en16931' does not support FATTURAPA"):
+        to_xml(_core_invoice(), syntax=Syntax.FATTURAPA)  # writing it is #119
+
+
 def test_parse_refuses_malformed_xml() -> None:
     with pytest.raises(ParseError):
         parse(b"<Invoice>")

@@ -323,6 +323,7 @@ def test_unreadable_documents_exit_1(data: bytes, tmp_path: Path, capsys: pytest
         ["validate", "--profile", "nope", "a.xml"],
         ["convert", "a.xml"],
         ["convert", "--to", "pdf", "a.xml"],
+        ["convert", "--to", "fatturapa", "a.xml"],  # writing FatturaPA is #119 / #122
         ["info"],
     ],
 )

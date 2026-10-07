@@ -81,7 +81,7 @@ def synthetic(syntax: Syntax, **changes: str) -> bytes:
     return to_xml(xrechnung_invoice(**changes), profile=profiles.XRECHNUNG, syntax=syntax)
 
 
-@pytest.mark.parametrize("syntax", list(Syntax))
+@pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 def test_cen_fatal_rule_kosit_downgrades_is_not_ok_but_accepted(syntax: Syntax) -> None:
     # BR-CL-23 (fatal, CEN 1.3.16): BT-130 must be a UN/ECE Rec 20/21 code; QQQ is not in the rule's list.
     # Every XRechnung scenario sets <customLevel level="warning">BR-CL-23</customLevel>.

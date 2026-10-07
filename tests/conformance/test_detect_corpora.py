@@ -34,6 +34,7 @@ FACTURX_EXTENDED = "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:exten
 UBL_INVOICE = ("ubl", "Invoice")
 UBL_CREDIT_NOTE = ("ubl", "CreditNote")
 CII = ("cii", "CrossIndustryInvoice")
+FATTURAPA = ("fatturapa", "FatturaElettronica")
 
 # Profile ids are pinned to the registry of today (EN 16931 core, Peppol BIS, XRechnung and the Factur-X levels
 # with a BT-24 of their own); a newly registered profile flips its buckets here.
@@ -67,33 +68,17 @@ EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
         (*CII, XRECHNUNG, "xrechnung"): 5,
         (*CII, XRECHNUNG_1_2, None): 2,
         (*CII, FACTURX_EXTENDED, "facturx-extended"): 3,
+        # Italian FatturaPA 1.2 (#121): fatturaPA/eigor/valid (8, one more is truncated below) and
+        # fatturaPA/official/valid (6). No BT-24, no profile.
+        (*FATTURAPA, None, None): 14,
     },
 }
 
-# Corpus files that are not EN 16931 invoices, keyed by path relative to the scanned directory.
-_FATTURA_PA = "fatturaPA/{}/valid/{}.xml"
+# Corpus files that are not invoices detect() can classify, keyed by path relative to the scanned directory.
 EXCLUDED: t.Final[dict[str, dict[str, type[Exception]]]] = {
     "zugferd-corpus": {
-        # Italian FatturaPA 1.2 (root p:FatturaElettronica): a national format, not UBL or CII.
-        **{
-            _FATTURA_PA.format("eigor", name): UnsupportedDocumentError
-            for name in (
-                "A10-Licenses-CreditNote",
-                "A10-Licenses",
-                "A4-Subscription",
-                "IT01234567890_FPA01",
-                "IT01234567890_FPA02",
-                "con-bollo",
-                "fatt-pa-plain-vanilla",
-                "fattpa-creditnote.to-ublcn-working-example",
-            )
-        },
-        **{
-            _FATTURA_PA.format("official", f"IT01234567890_{name}"): UnsupportedDocumentError
-            for name in ("FPA01", "FPA02", "FPA03", "FPR01", "FPR02", "FPR03")
-        },
-        # Truncated upstream (ends inside the FatturaElettronica element): not well-formed XML.
-        _FATTURA_PA.format("eigor", "con-ritenuta-acconto-e-cassa-previdenziale"): ParseError,
+        # FatturaPA truncated upstream (ends inside the FatturaElettronica element): not well-formed XML.
+        "fatturaPA/eigor/valid/con-ritenuta-acconto-e-cassa-previdenziale.xml": ParseError,
     },
 }
 

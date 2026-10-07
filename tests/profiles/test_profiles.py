@@ -101,7 +101,7 @@ class TestEn16931:
         assert EN16931.id == "en16931"
         assert EN16931.specification_identifier == "urn:cen.eu:en16931:2017"
         assert EN16931.business_process_type is None
-        assert EN16931.syntaxes == frozenset(Syntax)
+        assert EN16931.syntaxes == frozenset({Syntax.UBL, Syntax.CII})
 
     def test_runs_the_cen_rules_only(self) -> None:
         assert EN16931.rule_sets == ("cen",)

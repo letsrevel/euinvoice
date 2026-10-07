@@ -107,12 +107,14 @@ def _target_profile(sample: Sample, data: bytes, target: Syntax) -> profiles.Pro
 
 
 def _skipped_by_harness(sample: Sample) -> bool:
-    """Samples that never read (not invoices, too large, or a documented ``parse-error``): the harness asserts them."""
+    """Samples that never read (not invoices, too large, a documented ``parse-error``, or FatturaPA, whose reader is
+    #120): the harness asserts them."""
     expected = expected_invalid().get(sample.id)
     return (
         sample.file in NOT_INVOICES.get(sample.source, {})
         or sample.id in TOO_LARGE
         or (expected is not None and expected.outcome == "parse-error")
+        or (sample.level is None and detect_root(_xml.parse(sample.data())).syntax is Syntax.FATTURAPA)
     )
 
 

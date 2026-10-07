@@ -184,3 +184,38 @@ def test_detect_root_classifies_an_already_parsed_tree() -> None:
 def test_detect_root_rejects_an_unknown_root() -> None:
     with pytest.raises(UnsupportedDocumentError, match="root element"):
         detect_root(_xml.parse(b"<html/>"))
+
+
+def fatturapa(attributes: str = ' versione="FPR12"', namespace: str = _xml.FATTURAPA) -> bytes:
+    header = "<FatturaElettronicaHeader/>"
+    return f'<p:FatturaElettronica xmlns:p="{namespace}"{attributes}>{header}</p:FatturaElettronica>'.encode()
+
+
+@pytest.mark.parametrize("version", ["FPR12", "FPA12"])
+def test_fatturapa_is_detected_by_root_namespace_with_its_versione(version: str) -> None:
+    assert detect(fatturapa(f' versione="{version}"')) == Detection(
+        syntax=Syntax.FATTURAPA,
+        root="FatturaElettronica",
+        specification_identifier=None,
+        profile=None,
+        fatturapa_version=version,
+    )
+
+
+@pytest.mark.parametrize(("attributes", "version"), [("", None), (' versione="FSM10"', "FSM10")])
+def test_fatturapa_with_a_missing_or_unknown_versione_is_still_detected_for_the_xsd_to_report(
+    attributes: str, version: str | None
+) -> None:
+    detection = detect(fatturapa(attributes))
+    assert (detection.syntax, detection.fatturapa_version) == (Syntax.FATTURAPA, version)
+
+
+def test_ubl_and_cii_carry_no_fatturapa_version() -> None:
+    assert detect(ubl()).fatturapa_version is None
+    assert detect(cii(CORE)).fatturapa_version is None
+
+
+def test_the_simplified_invoice_namespace_is_not_fatturapa() -> None:
+    # FSM10 (fattura semplificata) has its own namespace, .../docs/xsd/fatture/v1.0; it is out of scope.
+    with pytest.raises(UnsupportedDocumentError, match=r"or a FatturaPA 1\.2 FatturaElettronica"):
+        detect(fatturapa(namespace="http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.0"))
