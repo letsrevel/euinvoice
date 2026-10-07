@@ -9,7 +9,7 @@ PRICE DETAILS (BG-29), LINE VAT INFORMATION (BG-30) and ITEM INFORMATION (BG-31)
 
 import typing as t
 
-from euinvoice.model._base import EuInvoiceModel, bt
+from euinvoice.model._base import EuInvoiceModel, bt, extension
 from euinvoice.model.allowances import InvoiceLineAllowance, InvoiceLineCharge
 from euinvoice.model.amounts import Amount, Percentage, Quantity, UnitPriceAmount
 from euinvoice.model.datatypes import (
@@ -25,6 +25,7 @@ from euinvoice.model.datatypes import (
     VatCategoryCode,
     not_negative,
 )
+from euinvoice.model.it.extension import ItalianLineExtension
 
 __all__ = [
     "InvoiceLine",
@@ -133,6 +134,8 @@ class _LineBody(EuInvoiceModel):
     """LINE VAT INFORMATION."""
     item: t.Annotated[ItemInformation, bt("BG-31")]
     """ITEM INFORMATION."""
+    it: t.Annotated[ItalianLineExtension | None, extension("it")] = None
+    """FatturaPA data of the line with no business term (D3 as amended, :mod:`euinvoice.model.it`)."""
 
 
 class InvoiceLine(_LineBody):

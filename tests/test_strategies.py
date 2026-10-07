@@ -13,7 +13,7 @@ from hypothesis import Phase, given, settings
 
 from _strategies import invoices
 from euinvoice.model import Invoice
-from euinvoice.model._base import EuInvoiceModel
+from euinvoice.model._base import EuInvoiceModel, extension_of
 
 # _unwrap is private, but it is the one place that reads the model's field annotations the way BT_INDEX does.
 from euinvoice.model.bt_index import BT_INDEX, _unwrap
@@ -28,9 +28,15 @@ _REQUIRED_BY_A_VALIDATOR: t.Final = {
 
 
 def _field_paths(model: type[pydantic.BaseModel], prefix: str = "") -> dict[str, bool]:
-    """Every field path below ``model`` in :data:`BT_INDEX` notation, mapped to whether the field is optional."""
+    """Every field path below ``model`` in :data:`BT_INDEX` notation, mapped to whether the field is optional.
+
+    National extension hooks (``Invoice.it``, D3 as amended) are left out: the strategy draws EN 16931 content for
+    UBL and CII round trips, and both writers refuse an extension (#118).
+    """
     paths: dict[str, bool] = {}
     for name, field in model.model_fields.items():
+        if extension_of(model, name) is not None:
+            continue
         inner, repeated = _unwrap(field.annotation)
         path = f"{prefix}{name}{'[]' if repeated else ''}"
         paths[path] = not field.is_required()

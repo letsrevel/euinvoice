@@ -7,7 +7,7 @@ name for it.
 
 import typing as t
 
-from euinvoice.model._base import EuInvoiceModel, bt
+from euinvoice.model._base import EuInvoiceModel, bt, extension
 from euinvoice.model.allowances import DocumentLevelAllowance, DocumentLevelCharge
 from euinvoice.model.datatypes import (
     OBJECT_SCHEME,
@@ -23,6 +23,7 @@ from euinvoice.model.datatypes import (
 )
 from euinvoice.model.delivery import DeliveryInformation
 from euinvoice.model.documents import AdditionalSupportingDocument
+from euinvoice.model.it.extension import ItalianExtension
 from euinvoice.model.lines import InvoiceLine, LineDraft
 from euinvoice.model.parties import Buyer, Payee, Seller, SellerTaxRepresentative
 from euinvoice.model.payment import PaymentInstructions
@@ -137,6 +138,9 @@ class _InvoiceBody(EuInvoiceModel):
     """DOCUMENT LEVEL CHARGES (0..n)."""
     additional_supporting_documents: t.Annotated[tuple[AdditionalSupportingDocument, ...], bt("BG-24")] = ()
     """ADDITIONAL SUPPORTING DOCUMENTS (0..n)."""
+    it: t.Annotated[ItalianExtension | None, extension("it")] = None
+    """FatturaPA data with no business term (D3 as amended, :mod:`euinvoice.model.it`). UBL and CII cannot carry
+    it, so their writers refuse an invoice that sets it."""
 
 
 class Invoice(_InvoiceBody):

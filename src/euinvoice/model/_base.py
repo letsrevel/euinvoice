@@ -6,6 +6,9 @@ Every model field carries its EN 16931 identifier in its metadata (IMPLEMENTATIO
     class Totals(EuInvoiceModel):
         tax_exclusive: t.Annotated[Amount, bt("BT-109")]
         prepaid: t.Annotated[Amount | None, bt("BT-113")] = None
+
+The one exception is a per-country extension hook (D3 as amended by ADR 0001), e.g. ``Invoice.it``: it carries
+:func:`extension` instead of a BT, the BT index skips it, and the fields inside cite their national element ids.
 """
 
 import re
@@ -17,9 +20,19 @@ from pydantic.fields import FieldInfo
 
 from euinvoice.errors import ModelError
 
-__all__ = ["XSD_DECIMAL_PATTERN", "EuInvoiceModel", "bt", "bt_id", "to_decimal"]
+__all__ = [
+    "XSD_DECIMAL_PATTERN",
+    "EuInvoiceModel",
+    "bt",
+    "bt_id",
+    "extension",
+    "extension_of",
+    "set_extensions",
+    "to_decimal",
+]
 
 _BT_ID = re.compile(r"B[TG]-(?:0|[1-9][0-9]*)")
+_COUNTRY = re.compile(r"[a-z]{2}")
 
 XSD_DECIMAL_PATTERN: t.Final = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)"
 """Lexical space of xs:decimal (XML Schema 1.1 Part 2, §3.3.3): optional sign, ASCII digits (unlike
@@ -79,6 +92,72 @@ def bt_id(model: type[pydantic.BaseModel], field: str) -> str | None:
     extra = model.model_fields[field].json_schema_extra
     ident = extra.get("bt") if isinstance(extra, dict) else None
     return ident if isinstance(ident, str) else None
+
+
+def extension(country: str) -> FieldInfo:
+    """Return the metadata of a per-country extension hook such as ``Invoice.it`` (D3 as amended, ADR 0001).
+
+    The hook has no EN 16931 id: :mod:`euinvoice.model.bt_index` skips it, and the fields of the extension cite
+    their national element ids instead. Use it inside ``typing.Annotated``.
+
+    Args:
+        country: The lower-case ISO 3166-1 alpha-2 code the hook is named after, e.g. ``"it"``.
+
+    Returns:
+        The pydantic ``FieldInfo``, ``json_schema_extra={"extension": country}``.
+
+    Raises:
+        ValueError: ``country`` is not two lower-case letters.
+    """
+    if not _COUNTRY.fullmatch(country):
+        raise ValueError(f"extension country must be two lower-case letters, got {country!r}")
+    return t.cast(FieldInfo, pydantic.Field(json_schema_extra={"extension": country}))
+
+
+def extension_of(model: type[pydantic.BaseModel], field: str) -> str | None:
+    """Return the country of the extension hook ``model.field`` (see :func:`extension`), or ``None``.
+
+    Args:
+        model: The model class.
+        field: The field name.
+
+    Returns:
+        E.g. ``"it"``, or ``None`` for a field that is not an extension hook.
+
+    Raises:
+        KeyError: ``model`` has no field called ``field``.
+    """
+    extra = model.model_fields[field].json_schema_extra
+    country = extra.get("extension") if isinstance(extra, dict) else None
+    return country if isinstance(country, str) else None
+
+
+def set_extensions(model: pydantic.BaseModel, prefix: str = "") -> tuple[str, ...]:
+    """Return the path of every extension hook that is set in ``model``, at any depth.
+
+    Writers of a syntax with no place for an extension use it to refuse the invoice instead of dropping the
+    extension silently (D3 as amended, plan §1).
+
+    Args:
+        model: An instance, e.g. an :class:`~euinvoice.model.Invoice`.
+        prefix: Prepended to every path (used by the recursion).
+
+    Returns:
+        The paths in field order, with indexes for repeated groups, e.g. ``("it", "lines[1].it")``.
+    """
+    found: list[str] = []
+    for name in type(model).model_fields:
+        value = getattr(model, name)
+        if extension_of(type(model), name) is not None:
+            if value is not None:
+                found.append(f"{prefix}{name}")
+        elif isinstance(value, pydantic.BaseModel):
+            found.extend(set_extensions(value, f"{prefix}{name}."))
+        elif isinstance(value, tuple):
+            for index, item in enumerate(value):
+                if isinstance(item, pydantic.BaseModel):
+                    found.extend(set_extensions(item, f"{prefix}{name}[{index}]."))
+    return tuple(found)
 
 
 def to_decimal(value: object) -> Decimal:

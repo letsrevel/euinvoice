@@ -92,6 +92,8 @@ def embed(
             the cause chained), is encrypted or signed, is not PDF/A-3, has a non-stream or malformed XMP
             packet, already carries Factur-X XMP, or already has an attachment with the level's file name.
         ValueError: ``relationship`` is not one of :data:`Relationship`.
+        ModelError: ``invoice`` is an ``Invoice`` holding something CII cannot express, e.g. a set national
+            extension (``Invoice.it``, D3 as amended); see :func:`euinvoice.syntax.cii.write`.
     """
     level, filename = _level(profile)
     if relationship is None:

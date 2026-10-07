@@ -21,6 +21,7 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.model import AdditionalSupportingDocument, Invoice, InvoiceNote, PaymentInstructions
+from euinvoice.model._base import set_extensions
 from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL
 from euinvoice.syntax.ubl._build import (
     Context,
@@ -94,8 +95,11 @@ def write(invoice: Invoice) -> bytes:
         ModelError: The invoice holds something UBL cannot express: BT-87 or the BT-125 mime code or
             filename missing (decisions M2, M3 in bt-mapping.md), BT-110 missing with VAT, BT-111 without BT-6,
             BT-6 equal to BT-5, BT-9 in a credit note without PAYMENT INSTRUCTIONS (BG-16), BT-148 below
-            BT-146, or BT-150 without BT-149. The message starts with the BT id.
+            BT-146, or BT-150 without BT-149. The message starts with the BT id. Also a set national extension
+            (``it``, ``lines[i].it``), which only its national syntax carries (D3 as amended); the message starts
+            with its path.
     """
+    _refuse_extensions(invoice)
     credit_note = is_credit_note(invoice.type_code)
     namespace = _xml.UBL_CREDIT_NOTE if credit_note else _xml.UBL_INVOICE
     nsmap = {None: namespace, "cac": _xml.UBL_CAC, "cbc": _xml.UBL_CBC}
@@ -117,6 +121,16 @@ def write(invoice: Invoice) -> bytes:
     for line in invoice.lines:
         write_line(root, line, context)
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
+
+
+def _refuse_extensions(invoice: Invoice) -> None:
+    """Refuse national extension data instead of dropping it silently (D3 as amended, plan §1)."""
+    if extensions := set_extensions(invoice):
+        raise cannot_express(
+            ", ".join(extensions),
+            "national extension data (e.g. FatturaPA data in Invoice.it, D3) has no place in UBL 2.1; it is written "
+            "only in its national syntax. Set it to None to write the EN 16931 content alone",
+        )
 
 
 def _note_text(note: InvoiceNote) -> str | None:

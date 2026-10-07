@@ -8,7 +8,7 @@ import pydantic
 import pytest
 
 from euinvoice.model import BT_INDEX, Invoice, id_of, path_of
-from euinvoice.model._base import EuInvoiceModel, bt, bt_id
+from euinvoice.model._base import EuInvoiceModel, bt, bt_id, extension_of
 from euinvoice.model.bt_index import PATH_INDEX, _unwrap, build_index
 
 # Every EN 16931 business group and business term with its name, as listed in the XRechnung 3.0.2
@@ -258,9 +258,24 @@ def _group_models(model: type[pydantic.BaseModel]) -> t.Iterator[type[pydantic.B
             yield from _group_models(inner)
 
 
+# The per-country extension hooks hold no business term (D3 as amended, ADR 0001); they are exempt explicitly.
+EXTENSION_HOOKS: t.Final = {("Invoice", "it"), ("InvoiceLine", "it")}
+
+
+def _core_fields(model: type[pydantic.BaseModel]) -> t.Iterator[tuple[str, pydantic.fields.FieldInfo]]:
+    for name, field in model.model_fields.items():
+        if extension_of(model, name) is None:
+            yield name, field
+
+
+def test_the_extension_hooks_are_exactly_the_exempt_ones() -> None:
+    hooks = {(m.__name__, n) for m in _group_models(Invoice) for n in m.model_fields if extension_of(m, n) is not None}
+    assert hooks == EXTENSION_HOOKS
+
+
 def test_every_field_of_every_group_carries_an_id() -> None:
     for model in _group_models(Invoice):
-        untagged = [name for name in model.model_fields if bt_id(model, name) is None]
+        untagged = [name for name, _ in _core_fields(model) if bt_id(model, name) is None]
         assert not untagged, (model.__name__, untagged)
 
 
@@ -284,7 +299,7 @@ def test_every_path_resolves_on_the_full_invoice(invoice: Invoice) -> None:
 def _model_cardinalities() -> dict[str, str]:
     cards = {"BG-0": "1"}
     for model in _group_models(Invoice):
-        for name, field in model.model_fields.items():
+        for name, field in _core_fields(model):
             _, repeated = _unwrap(field.annotation)
             ident = bt_id(model, name)
             assert ident is not None
