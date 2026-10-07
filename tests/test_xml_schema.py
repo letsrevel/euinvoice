@@ -68,6 +68,33 @@ def test_http_import_is_not_fetched(tmp_path: pathlib.Path, http_hits: tuple[str
     assert hits == []
 
 
+def test_redirected_http_import_loads_the_local_file_without_network(
+    tmp_path: pathlib.Path, http_hits: tuple[str, list[str]]
+) -> None:
+    # FatturaPA 1.2.3 imports xmldsig by an absolute http URL; the redirect target lives in another source.
+    base, hits = http_hits
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "other").mkdir()
+    (tmp_path / "other" / "b.xsd").write_text(B_XSD, encoding="utf-8")
+    (tmp_path / "pkg" / "a.xsd").write_text(a_xsd(f"{base}/b.xsd"), encoding="utf-8")
+
+    schema = _xml.load_trusted_schema(
+        tmp_path / "pkg" / "a.xsd", redirects={f"{base}/b.xsd": tmp_path / "other" / "b.xsd"}
+    )
+
+    assert schema.validate(_xml.parse(b'<a xmlns="urn:test:a"><b xmlns="urn:test:b">x</b></a>'))
+    assert hits == []
+
+
+def test_redirect_applies_to_the_exact_url_only(tmp_path: pathlib.Path, http_hits: tuple[str, list[str]]) -> None:
+    base, hits = http_hits
+    (tmp_path / "b.xsd").write_text(B_XSD, encoding="utf-8")
+    (tmp_path / "a.xsd").write_text(a_xsd(f"{base}/b.xsd"), encoding="utf-8")
+    with pytest.raises(ParseError, match=r"tried to load 'http://127\.0\.0\.1"):
+        _xml.load_trusted_schema(tmp_path / "a.xsd", redirects={f"{base}/B.xsd": tmp_path / "b.xsd"})
+    assert hits == []
+
+
 def test_schema_with_doctype_is_rejected(tmp_path: pathlib.Path) -> None:
     (tmp_path / "a.xsd").write_text("<!DOCTYPE xs:schema>" + B_XSD, encoding="utf-8")
     with pytest.raises(ParseError, match="DOCTYPE"):

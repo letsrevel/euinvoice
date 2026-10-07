@@ -184,7 +184,9 @@ def path_text(raw: bytes) -> str:
     return raw.decode("utf-8", "replace")
 
 
-def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None) -> etree.XMLSchema:
+def load_trusted_schema(
+    path: pathlib.Path, *, root: pathlib.Path | None = None, redirects: t.Mapping[str, pathlib.Path] | None = None
+) -> etree.XMLSchema:
     """Load an XML Schema from the local artifact cache.
 
     For **trusted local artifacts only** (the pinned, sha256-verified XSDs fetched by
@@ -194,13 +196,18 @@ def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None)
     resolver: every document or entity libxml2 tries to load (imports, includes, DTDs, external
     entities) must be a local file inside ``root``. Anything else (``http://``, other schemes, paths
     outside ``root``) is refused and turns the whole load into a ``ParseError``. This holds whether or
-    not the bundled libxml2 was built with HTTP support.
+    not the bundled libxml2 was built with HTTP support. ``redirects`` names the only exceptions: an
+    exact URL (typically an absolute ``http://`` ``schemaLocation``) that is loaded from a given local,
+    equally pinned file instead, wherever that file lives.
 
     Args:
         path: The root ``.xsd`` file.
         root: The directory every loaded file must be inside. Defaults to ``path``'s directory. Pass
             the schema package's top directory when the schema imports siblings such as
             ``../common/*.xsd`` (UBL 2.1 ``maindoc`` does).
+        redirects: Exact system URLs mapped to the trusted local files loaded in their place (FatturaPA
+            1.2.3 imports xmldsig by its W3C ``http://`` URL). Matched verbatim, after libxml2 resolved
+            the reference against its base.
 
     Returns:
         The compiled schema.
@@ -216,7 +223,7 @@ def load_trusted_schema(path: pathlib.Path, *, root: pathlib.Path | None = None)
     confine = (root or path.parent).resolve()
     if not path.resolve().is_relative_to(confine):
         raise ValueError(f"schema {path} is not inside {confine}")
-    resolver = _ConfiningResolver(confine)
+    resolver = _ConfiningResolver(confine, {url: target.resolve() for url, target in (redirects or {}).items()})
     parser = _new_parser()
     parser.resolvers.add(resolver)
     try:
@@ -261,15 +268,19 @@ def to_xdm(processor: t.Any, document: bytes | etree._Element) -> t.Any:
 
 
 class _ConfiningResolver(etree.Resolver):
-    """Lets libxml2 load only local files inside ``root``; records and refuses everything else."""
+    """Lets libxml2 load only local files inside ``root`` or redirected URLs; records and refuses the rest."""
 
-    def __init__(self, root: pathlib.Path) -> None:
+    def __init__(self, root: pathlib.Path, redirects: t.Mapping[str, pathlib.Path]) -> None:
         super().__init__()
         self.root = root
+        self.redirects = redirects
         self.refused: list[str] = []
 
     def resolve(self, system_url: str, public_id: str, context: object) -> t.Any:  # type: ignore[override]
         # lxml-stubs omit the `context` argument and `resolve_filename`; both exist since lxml 2.x.
+        redirected = self.redirects.get(system_url)
+        if redirected is not None:
+            return self.resolve_filename(str(redirected), context)  # type: ignore[attr-defined]  # see above
         local = _local_path(system_url)
         if local is None or not local.is_relative_to(self.root):
             self.refused.append(system_url)
