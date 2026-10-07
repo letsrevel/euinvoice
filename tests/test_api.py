@@ -216,11 +216,6 @@ def test_parse_refuses_fatturapa_until_its_reader_exists() -> None:
         parse(fatturapa)
 
 
-def test_to_xml_refuses_fatturapa_as_no_profile_supports_it() -> None:
-    with pytest.raises(UnsupportedDocumentError, match=r"writing FatturaPA is not implemented yet \(.*issues/119\)"):
-        to_xml(_core_invoice(), syntax=Syntax.FATTURAPA)  # writing it is #119
-
-
 def test_parse_refuses_malformed_xml() -> None:
     with pytest.raises(ParseError):
         parse(b"<Invoice>")

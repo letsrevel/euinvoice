@@ -44,9 +44,12 @@ class PreflightError(EuInvoiceError):
     ``Profile.prepare``; a blocking finding means the official rules would reject the written document, so nothing
     is written.
 
+    For FatturaPA, written without a profile, the check is the FatturaPA pre-flight
+    (``euinvoice.syntax.fatturapa.preflight``), and ``profile_id`` and ``syntax`` are both ``"fatturapa"``.
+
     Attributes:
-        profile_id: The ``id`` of the profile the invoice was to be written under.
-        syntax: The target syntax (``"ubl"`` or ``"cii"``).
+        profile_id: The ``id`` of the profile the invoice was to be written under (``"fatturapa"`` for FatturaPA).
+        syntax: The target syntax (``"ubl"``, ``"cii"`` or ``"fatturapa"``).
         findings: Every finding of both checks (warnings included), each naming its rule id and model location.
     """
 

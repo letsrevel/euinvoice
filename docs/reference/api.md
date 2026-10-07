@@ -52,6 +52,18 @@ Generated from the docstrings. Everything not listed here is internal.
 
 ::: euinvoice.facturx.Extracted
 
+## FatturaPA
+
+::: euinvoice.syntax.fatturapa.write
+
+::: euinvoice.syntax.fatturapa.preflight
+
+::: euinvoice.syntax.fatturapa.WriterOptions
+
+::: euinvoice.syntax.fatturapa.file_name
+
+::: euinvoice.syntax.fatturapa.check_file
+
 ## Model
 
 ::: euinvoice.model

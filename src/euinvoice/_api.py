@@ -15,7 +15,7 @@ from euinvoice.errors import PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import ValidationReport
-from euinvoice.syntax import Syntax, cii, ubl
+from euinvoice.syntax import Syntax, cii, fatturapa, ubl
 from euinvoice.syntax.result import ParseResult
 
 __all__ = ["parse", "parse_detailed", "to_xml"]
@@ -25,9 +25,15 @@ def to_xml(
     invoice: Invoice,
     *,
     profile: profiles.Profile | None = None,
-    syntax: Syntax | t.Literal["ubl", "cii"] | None = None,
+    syntax: Syntax | t.Literal["ubl", "cii", "fatturapa"] | None = None,
+    fatturapa_options: fatturapa.WriterOptions | None = None,
 ) -> bytes:
     """Write an invoice as UBL 2.1 or CII D16B XML under a profile, after its pre-flight and calculation checks.
+
+    ``syntax=Syntax.FATTURAPA`` writes an FPR12 FatturaPA 1.2.3 file instead (#119), with no profile (FatturaPA has
+    no BT-24) and the transmission header from ``fatturapa_options``: :func:`euinvoice.syntax.fatturapa.preflight`
+    runs, then :func:`euinvoice.syntax.fatturapa.write`. The CEN calculation checks do not run, as they are not
+    FatturaPA's rules (D8 as amended); run :func:`euinvoice.validate` on the result for the XSD and SdI checks.
 
     The invoice is first set up for the profile with :meth:`~euinvoice.profiles.Profile.prepare` (BT-24 becomes
     the profile's, BT-23 gets its default; see there), so the written document reads back as
@@ -45,25 +51,34 @@ def to_xml(
         profile: The profile to write under. ``None`` uses the profile registered for the invoice's own BT-24
             (:func:`euinvoice.profiles.get`); a Factur-X level shares its BT-24 with another profile, so pass it
             explicitly (and see :func:`euinvoice.facturx.embed` for the PDF).
-        syntax: ``Syntax.UBL`` / ``"ubl"`` or ``Syntax.CII`` / ``"cii"``. ``None`` is allowed only when the
-            profile supports a single syntax, which is then used (e.g. ``FACTURX_EN16931`` /
-            ``FACTURX_XRECHNUNG``: CII).
+        syntax: ``Syntax.UBL`` / ``"ubl"``, ``Syntax.CII`` / ``"cii"`` or ``Syntax.FATTURAPA`` / ``"fatturapa"``.
+            ``None`` is allowed only when the profile supports a single syntax, which is then used (e.g.
+            ``FACTURX_EN16931`` / ``FACTURX_XRECHNUNG``: CII).
+        fatturapa_options: The FatturaPA transmission header (:class:`euinvoice.syntax.fatturapa.WriterOptions`),
+            required with ``Syntax.FATTURAPA`` and refused with any other syntax.
 
     Returns:
         The serialized XML document.
 
     Raises:
         PreflightError: The pre-flight or calculation checks report a ``fatal`` or ``error`` finding; ``findings``
-            holds every finding of both.
+            holds every finding of both. For FatturaPA, the FatturaPA pre-flight reports one (``profile_id`` and
+            ``syntax`` are then ``"fatturapa"``).
         UnsupportedDocumentError: ``profile`` is ``None`` and no profile is registered for the invoice's BT-24;
+            a profile is given with ``Syntax.FATTURAPA``;
             the profile does not support ``syntax``; or it is a Factur-X level that is not generated (MINIMUM,
             BASIC WL, BASIC, EXTENDED, plan §1), whose official Schematron is not pinned (issue #42), so nothing
             could tell whether its rules accept the document.
-        ValueError: ``syntax`` is not a syntax, or is ``None`` for a profile that supports more than one.
+        ValueError: ``syntax`` is not a syntax, or is ``None`` for a profile that supports more than one;
+            ``fatturapa_options`` is missing with ``Syntax.FATTURAPA`` or given with another syntax.
         ModelError: The invoice holds something the target syntax cannot express, e.g. a set national extension
-            (``Invoice.it``, D3 as amended); see :func:`euinvoice.syntax.ubl.write` and
-            :func:`euinvoice.syntax.cii.write`.
+            (``Invoice.it``, D3 as amended) in UBL or CII; see :func:`euinvoice.syntax.ubl.write`,
+            :func:`euinvoice.syntax.cii.write` and :func:`euinvoice.syntax.fatturapa.write`.
     """
+    if syntax is not None and Syntax(syntax) is Syntax.FATTURAPA:
+        return _to_fatturapa(invoice, profile, fatturapa_options)
+    if fatturapa_options is not None:
+        raise ValueError("fatturapa_options apply only to syntax=Syntax.FATTURAPA")
     if profile is None:
         profile = profiles.get(invoice.process_control.specification_identifier)
     if FACTURX_RULE_SET in profile.rule_sets:
@@ -146,6 +161,20 @@ def parse_detailed(data: bytes) -> ParseResult:
     return ubl.read(root) if syntax is Syntax.UBL else cii.read(root)
 
 
+def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: fatturapa.WriterOptions | None) -> bytes:
+    """The FatturaPA branch of :func:`to_xml`."""
+    if profile is not None:
+        raise UnsupportedDocumentError(
+            f"FatturaPA is written without a profile (it has no BT-24, D8 as amended); got profile {profile.id!r}"
+        )
+    if options is None:
+        raise ValueError("writing FatturaPA needs fatturapa_options=euinvoice.syntax.fatturapa.WriterOptions(...)")
+    findings = fatturapa.preflight(invoice)
+    if not ValidationReport(findings).ok:
+        raise PreflightError(Syntax.FATTURAPA, Syntax.FATTURAPA, findings)
+    return fatturapa.write(invoice, options)
+
+
 def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Syntax:
     """The syntax to write: ``syntax`` if the profile supports it, else the profile's only one."""
     if syntax is None:
@@ -156,10 +185,6 @@ def _target_syntax(profile: profiles.Profile, syntax: Syntax | str | None) -> Sy
         (only,) = profile.syntaxes
         return only
     target = Syntax(syntax)
-    if target is Syntax.FATTURAPA:
-        raise UnsupportedDocumentError(
-            "writing FatturaPA is not implemented yet (https://github.com/letsrevel/euinvoice/issues/119)"
-        )
     if target not in profile.syntaxes:
         raise UnsupportedDocumentError(
             f"profile {profile.id!r} does not support {target.upper()}; it supports "
