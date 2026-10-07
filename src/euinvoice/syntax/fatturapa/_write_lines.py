@@ -275,6 +275,23 @@ def _match_summaries(it: ItalianExtension, blocks: dict[_Key, Block]) -> t.Itera
         blocks[key].legal_reference = summary.legal_reference
 
 
+def _split_and_ordinary(blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """Split payment (B) and ordinary VAT at one rate: refused, as a reader could not tell their lines apart.
+
+    FatturaPA lines carry no EsigibilitaIVA (only DatiRiepilogo does, App. 4.1 row 2.2.2.7), so two summaries at one
+    rate (one S, one not) would lose each line's BT-151 on reading. B and S at different rates stay written.
+    """
+    split = {block.rate for block in blocks.values() if block.split}
+    for shared in sorted({block.rate for block in blocks.values() if not block.split} & split):
+        yield finding(
+            SUMMARY,
+            "lines",
+            f"split payment (VAT category B, EsigibilitaIVA S) and ordinary VAT at rate {format(shared, 'f')} would be "
+            "two DatiRiepilogo whose lines FatturaPA cannot tell apart (DettaglioLinee has no EsigibilitaIVA, App. 4.1 "
+            "row 2.2.2.7), so each line's BT-151 would be lost",
+        )
+
+
 def _chargeability(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
     """EsigibilitaIVA (row 2.2.2.7): S for category B; else the summary's, or BT-8's (3, 35 → I, 432 → D)."""
     code = invoice.vat_point_date_code
@@ -362,6 +379,7 @@ def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list
     findings = [
         *_amounts(invoice, it, blocks),
         *_match_summaries(it, blocks),
+        *_split_and_ordinary(blocks),
         *_chargeability(invoice, blocks),
         *_exemption_reasons(invoice, blocks),
     ]

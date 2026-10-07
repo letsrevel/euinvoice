@@ -29,6 +29,7 @@ from _fatturapa_write import (
     written,
 )
 from euinvoice import _xml, calc
+from euinvoice.errors import ModelError
 from euinvoice.model import (
     CreditTransfer,
     Identifier,
@@ -52,7 +53,8 @@ from euinvoice.model.it import (
     TipoCessionePrestazione,
     TipoDocumento,
 )
-from euinvoice.syntax.fatturapa import RECIPIENT_UNKNOWN, Transmission, write
+from euinvoice.syntax.fatturapa import RECIPIENT_UNKNOWN, Transmission, preflight, write
+from euinvoice.syntax.fatturapa._write_rules import SUMMARY
 
 
 def _tags(element: etree._Element | None) -> list[str]:
@@ -310,13 +312,23 @@ def test_summaries_split_by_natura_and_payment_mode() -> None:
     assert _tags(goods)[-3:] == ["DatiRiepilogo"] * 3
 
 
-def test_split_and_ordinary_payment_at_one_rate_are_two_summaries() -> None:
+def test_split_and_ordinary_payment_at_one_rate_are_refused() -> None:
     invoice = it_invoice(it_line("1"), it_line("2", category="B"))
+
+    errors = [(f.rule_id, f.location) for f in preflight(invoice)]
+    assert errors == [(SUMMARY, "lines")]
+    assert "at rate 22 would be" in preflight(invoice)[0].message
+    with pytest.raises(ModelError, match=r"SUMMARY at lines: split payment .* BT-151 would be lost"):
+        write(invoice, TRANSMISSION)
+
+
+def test_split_and_ordinary_payment_at_different_rates_are_two_summaries() -> None:
+    invoice = it_invoice(it_line("1"), it_line("2", category="B", rate="10"))
 
     summaries = written(invoice).findall(f"{GOODS}/DatiRiepilogo")
     assert [(s.findtext("AliquotaIVA"), s.findtext("EsigibilitaIVA")) for s in summaries] == [
         ("22.00", None),
-        ("22.00", "S"),
+        ("10.00", "S"),
     ]
 
 

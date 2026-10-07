@@ -70,7 +70,8 @@ All notable changes to this project are documented here. The format follows
     The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
     (`needs-human`).
   - DatiRiepilogo blocks are keyed by rate, Natura and split payment (category B → EsigibilitaIVA S) and filled
-    from `Invoice.it.vat_summaries`. ModalitaPagamento comes from `it.payment.method` or BT-81 through App. 5.6.
+    from `Invoice.it.vat_summaries`. Split payment and ordinary VAT at one rate are refused: FatturaPA lines carry
+    no EsigibilitaIVA, so a reader could not tell which line is which. ModalitaPagamento comes from `it.payment.method` or BT-81 through App. 5.6.
     The stamp duty (BG-21 SAE, credit notes BG-20 95) is DatiBollo.
   - `to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=...)` runs the pre-flight, writes, then runs
     the offline SdI checks of `euinvoice.validation.sdi` on the result; an `error` from either raises
