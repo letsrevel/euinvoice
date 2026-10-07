@@ -27,7 +27,7 @@ __all__ = [
     "bt_id",
     "extension",
     "extension_of",
-    "set_extensions",
+    "extension_paths",
     "to_decimal",
     "without_extensions",
 ]
@@ -133,11 +133,11 @@ def extension_of(model: type[pydantic.BaseModel], field: str) -> str | None:
     return country if isinstance(country, str) else None
 
 
-def set_extensions(model: pydantic.BaseModel, prefix: str = "") -> tuple[str, ...]:
+def extension_paths(model: pydantic.BaseModel, prefix: str = "") -> tuple[str, ...]:
     """Return the path of every extension hook that is set in ``model``, at any depth.
 
     Writers of a syntax with no place for an extension use it to refuse the invoice instead of dropping the
-    extension silently (D3 as amended, plan §1).
+    extension silently (D3 as amended, plan §1); :func:`without_extensions` clears exactly these hooks.
 
     Args:
         model: An instance, e.g. an :class:`~euinvoice.model.Invoice`.
@@ -153,46 +153,44 @@ def set_extensions(model: pydantic.BaseModel, prefix: str = "") -> tuple[str, ..
             if value is not None:
                 found.append(f"{prefix}{name}")
         elif isinstance(value, pydantic.BaseModel):
-            found.extend(set_extensions(value, f"{prefix}{name}."))
+            found.extend(extension_paths(value, f"{prefix}{name}."))
         elif isinstance(value, tuple):
             for index, item in enumerate(value):
                 if isinstance(item, pydantic.BaseModel):
-                    found.extend(set_extensions(item, f"{prefix}{name}[{index}]."))
+                    found.extend(extension_paths(item, f"{prefix}{name}[{index}]."))
     return tuple(found)
 
 
-def without_extensions[M: pydantic.BaseModel](model: M) -> tuple[M, tuple[str, ...]]:
-    """Return ``model`` with every set extension hook cleared, and the paths of the hooks it cleared.
+def without_extensions[M: pydantic.BaseModel](model: M) -> M:
+    """Return ``model`` with every set extension hook cleared (the hooks :func:`extension_paths` lists).
 
     A read FatturaPA invoice sets ``Invoice.it`` (and often ``InvoiceLine.it``), so the UBL and CII writers refuse it
-    (D3 as amended: an extension is never dropped silently). This drops them on request and reports what it dropped,
-    so the caller can decide, e.g. before ``to_xml``. The paths are those of :func:`set_extensions`.
+    (D3 as amended: an extension is never dropped silently). This drops them on request, e.g. before ``to_xml``; call
+    :func:`extension_paths` first to see what goes. It walks the model as :func:`extension_paths` does and rebuilds
+    only the models on the way to a set hook.
 
     Args:
         model: An instance, e.g. an :class:`~euinvoice.model.Invoice`.
 
     Returns:
-        The model without extensions (``model`` itself when none is set) and the cleared paths, e.g.
-        ``("it", "lines[1].it")``.
+        The model without extensions; ``model`` itself when none is set.
     """
-    dropped = set_extensions(model)
-    return (model if not dropped else _strip(model)), dropped
-
-
-def _strip[V](value: V) -> V:
-    """``value`` with every extension hook below it set to ``None`` (models rebuilt only where something changed)."""
-    if isinstance(value, tuple):
-        return t.cast(V, tuple(_strip(item) for item in value))
-    if not isinstance(value, pydantic.BaseModel):
-        return value
     update: dict[str, object] = {}
-    for name in type(value).model_fields:
-        old = getattr(value, name)
-        new = None if extension_of(type(value), name) is not None else _strip(old)
-        if new != old:
-            update[name] = new
+    for name in type(model).model_fields:
+        value = getattr(model, name)
+        if extension_of(type(model), name) is not None:
+            if value is not None:
+                update[name] = None
+        elif isinstance(value, pydantic.BaseModel):
+            stripped = without_extensions(value)
+            if stripped is not value:
+                update[name] = stripped
+        elif isinstance(value, tuple):
+            items = tuple(without_extensions(i) if isinstance(i, pydantic.BaseModel) else i for i in value)
+            if any(new is not old for new, old in zip(items, value, strict=True)):
+                update[name] = items
     # model_copy skips validation, which is safe here: only optional hooks become None (their default).
-    return t.cast(V, value.model_copy(update=update))
+    return model.model_copy(update=update) if update else model
 
 
 def to_decimal(value: object) -> Decimal:

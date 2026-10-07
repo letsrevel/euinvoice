@@ -9,7 +9,9 @@ import re
 import typing as t
 from decimal import Decimal
 
+import hypothesis
 import pytest
+from hypothesis import strategies as st
 
 from _fatturapa_read import (
     FULL,
@@ -21,12 +23,12 @@ from _fatturapa_read import (
     body,
     document,
 )
-from euinvoice import _xml, parse, parse_all, parse_detailed
-from euinvoice.errors import ParseError, UnsupportedDocumentError
-from euinvoice.model import without_extensions
+from euinvoice import _xml, detect, parse, parse_all, parse_detailed, validate
+from euinvoice.detection import is_signed
+from euinvoice.errors import ModelError, ParseError, UnsupportedDocumentError
+from euinvoice.model import extension_paths, without_extensions
 from euinvoice.model.it import EsigibilitaIVA
-from euinvoice.syntax import fatturapa
-from euinvoice.syntax.fatturapa._read_signed import is_signed
+from euinvoice.syntax import fatturapa, ubl
 
 
 def unmapped(data: bytes) -> tuple[str, ...]:
@@ -61,15 +63,29 @@ def test_instalments_derive_the_amount_due() -> None:
     assert parse(VARIANTS["instalments"]).totals.amount_due == Decimal("122.00")
 
 
-def test_a_d_vs_i_split_keeps_both_breakdowns_and_reports_the_second_chargeability() -> None:
-    data = VARIANTS["D vs I split"]
+def test_a_d_vs_i_split_is_one_breakdown_and_reports_the_second_chargeability() -> None:
+    # One BG-23 per category and rate (BR-S-08); the extension keeps one entry per rate, Natura and split payment.
+    result = parse_detailed(VARIANTS["D vs I split"])
 
-    result = parse_detailed(data)
-
-    assert [g.taxable_amount for g in result.invoice.vat_breakdown] == [Decimal("100.00"), Decimal("100.00")]
+    (group,) = result.invoice.vat_breakdown
+    assert (group.taxable_amount, group.tax_amount) == (Decimal("200.00"), Decimal("44.00"))
     assert result.invoice.it is not None
     assert [s.vat_chargeability for s in result.invoice.it.vat_summaries] == [EsigibilitaIVA.D]
     assert result.unmapped[1:] == (f"{SUMMARY}[2]/EsigibilitaIVA",)
+
+
+def test_declared_amounts_that_break_the_cen_rules_are_derived_and_reported() -> None:
+    summary = parse_detailed(VARIANTS["inconsistent summary"])  # ImponibileImporto 102.00 for lines of 100.00
+    totals = parse_detailed(VARIANTS["inconsistent totals"])  # ImportoTotaleDocumento and ImportoPagamento 100.00
+
+    (group,) = summary.invoice.vat_breakdown
+    assert (group.taxable_amount, group.tax_amount) == (Decimal("100.00"), Decimal("22.00"))
+    assert summary.unmapped[1:] == (f"{SUMMARY}/ImponibileImporto", f"{SUMMARY}/Imposta")
+    assert (totals.invoice.totals.total_with_vat, totals.invoice.totals.amount_due) == (Decimal(122), Decimal(122))
+    assert totals.unmapped[1:] == (
+        f"{ROOT}/FatturaElettronicaBody/DatiGenerali/DatiGeneraliDocumento/ImportoTotaleDocumento",
+        f"{ROOT}/FatturaElettronicaBody/DatiPagamento/DettaglioPagamento/ImportoPagamento",
+    )
 
 
 def test_a_repeated_identical_summary_reports_nothing() -> None:
@@ -103,6 +119,7 @@ def test_values_the_model_cannot_hold_are_refused(name: str, data: bytes, messag
         ("T10:00:00</DataOraConsegna>", "</DataOraConsegna>", "is not an xs:dateTime"),
         ("<RegimeFiscale>RF19</RegimeFiscale>", "<RegimeFiscale>RF03</RegimeFiscale>", "it.tax_regime"),
         ("<TipoDocumento>TD01</TipoDocumento>", "", "BT-3 (type_code): Field required"),
+        ("<PrezzoUnitario>50.00</PrezzoUnitario>", "", "price_details.item_net_price"),
         ("<AliquotaIVA>22.00</AliquotaIVA><RiferimentoAmministrazione>", "<RiferimentoAmministrazione>", "BG-30"),
     ],
 )
@@ -161,7 +178,23 @@ def test_each_body_of_a_lotto_reports_only_its_own_content() -> None:
     first, second = parse_all(VARIANTS["lotto with Art73"])
 
     assert first.unmapped == (f"{ROOT}/FatturaElettronicaHeader/DatiTrasmissione",)
-    assert second.unmapped[1:] == (f"{ROOT}/FatturaElettronicaBody[2]/DatiGenerali/DatiGeneraliDocumento/Art73",)
+    assert second.unmapped == (
+        f"{ROOT}/FatturaElettronicaHeader/DatiTrasmissione",
+        f"{ROOT}/FatturaElettronicaBody[2]/DatiGenerali/DatiGeneraliDocumento/Art73",
+    )
+
+
+@hypothesis.given(st.integers(min_value=1, max_value=6))
+def test_a_lotto_of_identical_bodies_reads_as_the_single_body(count: int) -> None:
+    single = parse_detailed(document())
+    one_body = body()
+
+    results = parse_all(document(*[one_body] * count))
+
+    assert [r.invoice for r in results] == [single.invoice] * count
+    for index, result in enumerate(results, start=1):
+        step = "FatturaElettronicaBody" if count == 1 else f"FatturaElettronicaBody[{index}]"
+        assert result.unmapped == tuple(p.replace("FatturaElettronicaBody", step) for p in single.unmapped)
 
 
 def test_parse_all_of_one_invoice_is_parse_detailed() -> None:
@@ -172,15 +205,19 @@ def test_parse_all_of_one_invoice_is_parse_detailed() -> None:
 
 
 _SIGNED_HEAD: t.Final = bytes.fromhex("3082100006092a864886f70d010702a0821000")
+SIGNED: t.Final = [
+    _SIGNED_HEAD + b"\x00" * 64,
+    b"\n" + base64.encodebytes(_SIGNED_HEAD + b"\x00" * 90),
+    b"-----BEGIN PKCS7-----\nMIIB\n-----END PKCS7-----\n",
+]
 
 
-@pytest.mark.parametrize("data", [_SIGNED_HEAD + b"\x00" * 64, b"\n" + base64.encodebytes(_SIGNED_HEAD + b"\x00" * 90)])
-def test_signed_input_is_refused_with_the_way_out(data: bytes) -> None:
+@pytest.mark.parametrize("data", SIGNED, ids=["DER", "base64", "PEM"])
+def test_signed_input_is_refused_with_the_way_out_by_every_entry_point(data: bytes) -> None:
     assert is_signed(data)
-    with pytest.raises(UnsupportedDocumentError, match=r"signed \(CAdES, \.p7m\).*openssl cms -verify"):
-        parse(data)
-    with pytest.raises(UnsupportedDocumentError, match="signed"):
-        parse_all(data)
+    for entry in (parse, parse_all, detect, validate):
+        with pytest.raises(UnsupportedDocumentError, match=r"signed \(CAdES, \.p7m\).*openssl cms -verify"):
+            entry(data)
 
 
 @pytest.mark.parametrize("data", [FULL, b"\x30\x03\x02\x01\x00", b"MI!!not base64", b"MIIB" + b"A" * 90])
@@ -191,13 +228,17 @@ def test_other_input_is_not_taken_for_signed(data: bytes) -> None:
 # ---------------------------------------------------------------------------------------------------- extensions
 
 
-def test_without_extensions_drops_and_reports_them() -> None:
+def test_without_extensions_clears_what_extension_paths_lists() -> None:
     invoice = parse(FULL)
 
-    plain, dropped = without_extensions(invoice)
+    plain = without_extensions(invoice)
 
-    assert dropped == ("it", "lines[0].it", "lines[1].it")
-    assert plain.it is None
-    assert all(item.it is None for item in plain.lines)
+    assert extension_paths(invoice) == ("it", "lines[0].it", "lines[1].it")
+    assert extension_paths(plain) == ()
     assert plain.model_copy(update={"it": invoice.it, "lines": invoice.lines}) == invoice
-    assert without_extensions(plain) == (plain, ())
+    assert without_extensions(plain) is plain
+
+
+def test_the_writers_name_without_extensions() -> None:
+    with pytest.raises(ModelError, match=r"euinvoice\.model\.without_extensions\(\)"):
+        ubl.write(parse(FULL))

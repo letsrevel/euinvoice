@@ -1,8 +1,9 @@
-"""FatturaPA ``DatiBeniServizi`` and ``DatiPagamento`` → BG-25, BG-23, BG-16 and their ``.it`` data (#120).
+"""FatturaPA ``DatiBeniServizi`` → BG-25, BG-23 and their ``.it`` data (#120).
 
 App. 4.1 of the Regole tecniche v2.6 in reverse; row ids are those of the Rappresentazione tabellare. The VAT
 summaries are read first: a line carries no ``EsigibilitaIVA``, so its category B (split payment) vs S comes from the
-summary at its rate (App. 4.1 row 2.2.2.7, "Se BT-118 = B allora <EsigibilitaIVA> = S").
+summary at its rate (App. 4.1 row 2.2.2.7, "Se BT-118 = B allora <EsigibilitaIVA> = S"). The BG-23 are built last,
+from the summaries and the lines (:func:`breakdown`).
 """
 
 import dataclasses
@@ -13,18 +14,38 @@ from lxml import etree
 
 from euinvoice.errors import ParseError
 from euinvoice.model import InvoiceLine, VatBreakdown
+from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes._generated import UNECE_REC20_REC21_UNIT
-from euinvoice.model.it import ItalianPayment, ItalianVatSummary, Natura
+from euinvoice.model.it import ItalianVatSummary, Natura
 from euinvoice.syntax._marks import XML_SPACE
-from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY, PAYMENT_MEANS, POLICY_ISSUE
+from euinvoice.syntax._read_errors import build
+from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY, POLICY_ISSUE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
-__all__ = ["Summaries", "lines", "payment", "summaries"]
+__all__ = ["Summaries", "Summary", "breakdown", "extension", "lines", "summaries", "vat_point_date_code"]
 
 _CENT: t.Final = Decimal("0.01")
+_ZERO: t.Final = Decimal("0.00")
+_HUNDRED: t.Final = Decimal(100)
+_NO_EXEMPTION: t.Final = frozenset({"S", "B", "Z"})  # BR-S-10, BR-B-10, BR-Z-10: no BT-120 / BT-121
 _ONE_UNIT: t.Final = "C62"  # UN/ECE Rec 20 "one": BT-130 when UnitaMisura is absent or not a code (#132 item 5)
 _NO_PREFIX: t.Final = "Identificativo del prodotto"  # App. 4.1 row 2.2.1.3.1: CodiceTipo of a BT-155 without prefix
 _REFERENCES: t.Final = ("RiferimentoTesto", "RiferimentoNumero", "RiferimentoData")  # 2.2.1.16.2-4
+
+
+@dataclasses.dataclass(frozen=True)
+class Summary:
+    """One 2.2.2 ``DatiRiepilogo`` as read, before the BG-23 of its category and rate is built."""
+
+    element: etree._Element
+    rate: Decimal
+    nature: Natura | None
+    chargeability: str | None
+    legal: str | None
+    taxable: Decimal
+    tax: Decimal
+    category: str
+    reason_code: str | None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -32,68 +53,159 @@ class Summaries:
     """The 2.2.2 ``DatiRiepilogo`` of a body.
 
     Attributes:
-        breakdown: One BG-23 per ``DatiRiepilogo`` (App. 4.1 row 2.2.2).
+        read: Each summary as read, in document order.
         extension: The ``Invoice.it.vat_summaries`` entries, one per rate, Natura and split payment.
+        origins: The ``DatiRiepilogo`` each extension entry was read from.
         split: Per rate of the summaries without ``Natura``: whether each is split payment (``EsigibilitaIVA`` S).
     """
 
-    breakdown: tuple[VatBreakdown, ...]
+    read: tuple[Summary, ...]
     extension: tuple[ItalianVatSummary, ...]
+    origins: tuple[etree._Element, ...]
     split: t.Mapping[Decimal, frozenset[bool]]
 
 
 def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
-    """2.2.2 ``DatiRiepilogo`` → BG-23 (rows 2.2.2.1, .5, .6 → BT-119, BT-116, BT-117) and ``.it.vat_summaries``.
+    """Read 2.2.2 ``DatiRiepilogo`` (rows 2.2.2.1 to 2.2.2.8) and their ``.it.vat_summaries`` entries.
 
-    BT-118 and BT-121 come from ``Natura`` by App. 5.1, BT-120 is the ``Natura`` code (App. 5.1, column BT-120);
-    without ``Natura`` the category is B for ``EsigibilitaIVA`` S, else S. ``Natura``, ``EsigibilitaIVA`` and
-    ``RiferimentoNormativo`` go to the extension (rows 2.2.2.2, .7, .8). ``SpeseAccessorie`` (derived from the lines)
-    and ``Arrotondamento`` ("Mappatura non considerabile") are reported. Two summaries with the same rate, Natura and
-    split payment but different extension data (a D vs I split) both become BG-23; what the second says differently
-    (``EsigibilitaIVA``, ``RiferimentoNormativo``) is reported, as the extension holds one entry per key (#132 item
-    15).
+    The category is App. 5.1's for ``Natura``; without one it is B for ``EsigibilitaIVA`` S (row 2.2.2.7), else S.
+    ``Natura``, ``EsigibilitaIVA`` and ``RiferimentoNormativo`` go to the extension, keyed by rate, Natura and split
+    payment (#118). Two summaries of one key that differ (a D vs I split, two legal references) keep the first in
+    the extension, and what the second says differently is reported (#132 item 15). ``SpeseAccessorie`` (derived
+    from the lines) and ``Arrotondamento`` ("Mappatura non considerabile") are reported.
     """
-    breakdown: list[VatBreakdown] = []
+    read: list[Summary] = []
     entries: dict[tuple[Decimal, Natura | None, bool], ItalianVatSummary] = {}
+    origins: dict[tuple[Decimal, Natura | None, bool], etree._Element] = {}
     split: dict[Decimal, set[bool]] = {}
     for element in [cursor.use(e) for e in cursor.children(goods, "DatiRiepilogo")]:
-        rate = cursor.decimal(element, "AliquotaIVA", "2.2.2.1")
         nature = _nature(cursor, element, "2.2.2.2")
         chargeability = cursor.code(element, "EsigibilitaIVA")
         legal = cursor.text(element, "RiferimentoNormativo")
+        values = {"nature": nature, "vat_chargeability": chargeability, "legal_reference": legal}
+        entry = build(ItalianVatSummary, element, {"rate": cursor.decimal(element, "AliquotaIVA", "2.2.2.1"), **values})
         if nature is None:
             category, reason = ("B" if chargeability == "S" else "S"), None
-            if rate is not None:
-                split.setdefault(rate, set()).add(chargeability == "S")
+            split.setdefault(entry.rate, set()).add(chargeability == "S")
         else:
+            _zero_rate(cursor, element, nature, entry.rate)
             category, reason = NATURE_CATEGORY[nature]
-        breakdown.append(
-            cursor.model(
-                VatBreakdown,
-                element,
-                taxable_amount=cursor.decimal(element, "ImponibileImporto", "2.2.2.5"),
-                tax_amount=cursor.decimal(element, "Imposta", "2.2.2.6"),
-                category_code=category,
-                rate=rate,
-                exemption_reason=None if nature is None else nature.value,
-                exemption_reason_code=reason,
-            )
+        taxable = cursor.decimal(element, "ImponibileImporto", "2.2.2.5")
+        tax = cursor.decimal(element, "Imposta", "2.2.2.6")
+        read.append(
+            Summary(element, entry.rate, nature, chargeability, legal, taxable or _ZERO, tax or _ZERO, category, reason)
         )
         if nature is None and chargeability is None and legal is None:
             continue
-        entry = cursor.model(
-            ItalianVatSummary, element, rate=rate, nature=nature, vat_chargeability=chargeability, legal_reference=legal
-        )
         key = (entry.rate, entry.nature, chargeability == "S")
         if key not in entries:
             entries[key] = entry
-        else:  # the extension keeps the first entry of a key: report what this one says differently
-            kept = entries[key]
-            if chargeability is not None and kept.vat_chargeability != entry.vat_chargeability:
-                cursor.discard(cursor.children(element, "EsigibilitaIVA")[0])
-            if legal is not None and kept.legal_reference != entry.legal_reference:
-                cursor.discard(cursor.children(element, "RiferimentoNormativo")[0])
-    return Summaries(tuple(breakdown), tuple(entries.values()), {r: frozenset(s) for r, s in split.items()})
+            origins[key] = element
+            continue
+        kept = entries[key]  # the extension keeps the first entry of a key: report what this one says differently
+        if chargeability is not None and kept.vat_chargeability != entry.vat_chargeability:
+            cursor.discard(cursor.children(element, "EsigibilitaIVA")[0])
+        if legal is not None and kept.legal_reference != entry.legal_reference:
+            cursor.discard(cursor.children(element, "RiferimentoNormativo")[0])
+    split_modes = {r: frozenset(s) for r, s in split.items()}
+    return Summaries(tuple(read), tuple(entries.values()), tuple(origins.values()), split_modes)
+
+
+def breakdown(
+    cursor: Cursor, vat: Summaries, invoice_lines: tuple[InvoiceLine, ...], extra: t.Iterable[tuple[str, Decimal]] = ()
+) -> tuple[VatBreakdown, ...]:
+    """BG-23: one per VAT category and rate (BR-x-08 sum per category and rate), from that category's summaries.
+
+    App. 4.1 row 2.2.2 maps ``DatiRiepilogo`` to BG-23, but FatturaPA keeps one summary per rate and Natura (and may
+    split by EsigibilitaIVA), while EN 16931 has one BG-23 per category and rate: several summaries can make one
+    BG-23 (e.g. N2.2 and N4, both E at 0 %, App. 5.1). Their Natura and RiferimentoNormativo stay in
+    ``Invoice.it.vat_summaries``.
+
+    * BT-116 / BT-117 are the sums of the summaries' ``ImponibileImporto`` / ``Imposta`` (rows 2.2.2.5-6) when the
+      taxable amounts add up to the lines of that category and rate (BR-S-08 and its siblings; SdI 00422 checks the
+      same). Otherwise BT-116 is the lines' sum and BT-117 that times the rate rounded half up (D11), and the
+      summaries' amounts are reported.
+    * BT-120 is ``Natura`` and ``RiferimentoNormativo`` joined by a space (rows 2.2.2.2, 2.2.2.8: "vengono
+      concatenati"; the separator is #132's), the summaries of one BG-23 joined by ``"; "``; BT-121 is App. 5.1's
+      code when they share it. Neither is set for S and B (BR-S-10, BR-B-10) nor for Z (App. 5.1 row N1 has no
+      BT-120; BR-Z-10).
+    * ``extra`` adds an empty BG-23 for a category and rate that only a document level charge or allowance uses
+      (the stamp duty's Z, BR-Z-01).
+    * Summaries of a category and rate no line has (e.g. for a social-security fund, which is not mapped) make no
+      BG-23 and are reported whole; see :func:`extension` for their ``.it`` entries.
+    """
+    groups: dict[tuple[str, Decimal], list[Summary]] = {}
+    for summary in vat.read:
+        groups.setdefault((summary.category, summary.rate), []).append(summary)
+    extra_keys = set(extra)
+    for key in extra_keys:
+        groups.setdefault(key, [])
+    found: list[VatBreakdown] = []
+    for (category, rate), members in groups.items():
+        own = [
+            x for x in invoice_lines if (x.vat_information.category_code, x.vat_information.rate) == (category, rate)
+        ]
+        if not own and (category, rate) not in extra_keys:
+            for member in members:  # no line has this category and rate (e.g. a social-security fund's): reported
+                cursor.discard(member.element)
+            continue
+        lines_sum = sum((x.net_amount for x in own), _ZERO)
+        taxable = sum((m.taxable for m in members), _ZERO)
+        tax = sum((m.tax for m in members), _ZERO)
+        if taxable != lines_sum:
+            taxable, tax = lines_sum, quantize_amount(lines_sum * rate / _HUNDRED)
+            for member in members:
+                cursor.discard(cursor.children(member.element, "ImponibileImporto")[0])
+                cursor.discard(cursor.children(member.element, "Imposta")[0])
+        reason, code = _exemption(category, members)
+        values = {"taxable_amount": taxable, "tax_amount": tax, "category_code": category, "rate": rate}
+        at = members[0].element if members else cursor.root
+        found.append(build(VatBreakdown, at, {**values, "exemption_reason": reason, "exemption_reason_code": code}))
+    return tuple(found)
+
+
+def _exemption(category: str, members: list[Summary]) -> tuple[str | None, str | None]:
+    """BT-120 and BT-121 of the BG-23 made of ``members`` (see :func:`breakdown`)."""
+    if category in _NO_EXEMPTION or not members:
+        return None, None
+    texts: list[str] = []
+    for member in members:
+        text = str(member.nature) if member.legal is None else f"{member.nature} {member.legal}"
+        if text not in texts:
+            texts.append(text)
+    codes = {member.reason_code for member in members}
+    return "; ".join(texts), codes.pop() if len(codes) == 1 else None
+
+
+def extension(cursor: Cursor, vat: Summaries, invoice_lines: tuple[InvoiceLine, ...]) -> tuple[ItalianVatSummary, ...]:
+    """The ``.it.vat_summaries`` entries whose rate, Natura and split payment some line has.
+
+    An entry describes the ``DatiRiepilogo`` of lines (#118 keys it so); one no line matches has nothing to describe
+    in the model, so it is dropped and its summary's ``Natura``, ``EsigibilitaIVA`` and ``RiferimentoNormativo`` are
+    reported.
+    """
+    keys = {
+        (x.vat_information.rate, x.it.nature if x.it else None, x.vat_information.category_code == "B")
+        for x in invoice_lines
+    }
+    kept: list[ItalianVatSummary] = []
+    for entry, element in zip(vat.extension, vat.origins, strict=True):
+        if (entry.rate, entry.nature, entry.vat_chargeability == "S") in keys:
+            kept.append(entry)
+            continue
+        for name in ("Natura", "EsigibilitaIVA", "RiferimentoNormativo"):
+            for found in cursor.children(element, name):
+                cursor.discard(found)
+    return tuple(kept)
+
+
+def vat_point_date_code(vat: Summaries) -> str | None:
+    """BT-8 ``432`` when every summary that is not split payment has ``EsigibilitaIVA`` D, else ``None``.
+
+    Row 2.2.2.7: "Se BT-8 = 432 allora <EsigibilitaIVA> = D"; I comes from both 3 and 35 there, so it gives no BT-8.
+    """
+    modes = {summary.chargeability for summary in vat.read if summary.chargeability != "S"}
+    return "432" if modes == {"D"} else None
 
 
 def lines(cursor: Cursor, goods: etree._Element | None, vat: Summaries) -> tuple[InvoiceLine, ...]:
@@ -108,25 +220,29 @@ def _line(cursor: Cursor, element: etree._Element, vat: Summaries) -> InvoiceLin
     start = cursor.date(element, "DataInizioPeriodo", "2.2.1.7")  # → BT-134
     end = cursor.date(element, "DataFinePeriodo", "2.2.1.8")  # → BT-135
     attributes = [_attribute(cursor, adg) for adg in cursor.children(element, "AltriDatiGestionali")]  # → BG-32
-    quantity = cursor.decimal(element, "Quantita", "2.2.1.5")  # → BT-129; absent: 1 (#132 item 4)
-    return cursor.model(
-        InvoiceLine,
-        element,
-        identifier=cursor.code(element, "NumeroLinea"),  # 2.2.1.1 → BT-126
-        invoiced_quantity=Decimal(1) if quantity is None else quantity,
-        invoiced_quantity_unit_code=_unit(cursor, element),  # 2.2.1.6 → BT-130
-        buyer_accounting_reference=cursor.text(element, "RiferimentoAmministrazione"),  # 2.2.1.15 → BT-133
-        period=None if start is None and end is None else {"start_date": start, "end_date": end},
-        price_details=_price(cursor, element),
-        vat_information={"category_code": _category(cursor, element, nature, rate, vat), "rate": rate},
-        item={
+    # 2.2.1.5 Quantita → BT-129. Absent, it is 1: Allegato A 1.9.1 says Quantita "può non essere valorizzato nei casi
+    # in cui la prestazione non sia quantificabile", 00423 checks PrezzoTotale as (PrezzoUnitario ±
+    # ScontoMaggiorazione) * Quantita, and the official FPR03 body 2 has PrezzoUnitario = PrezzoTotale.
+    quantity = cursor.decimal(element, "Quantita", "2.2.1.5")
+    price, negative = _price(cursor, element)
+    count = Decimal(1) if quantity is None else quantity
+    values = {
+        "identifier": cursor.code(element, "NumeroLinea"),  # 2.2.1.1 → BT-126
+        "invoiced_quantity": -count if negative else count,
+        "invoiced_quantity_unit_code": _unit(cursor, element),  # 2.2.1.6 → BT-130
+        "buyer_accounting_reference": cursor.text(element, "RiferimentoAmministrazione"),  # 2.2.1.15 → BT-133
+        "period": None if start is None and end is None else {"start_date": start, "end_date": end},
+        "price_details": price,
+        "vat_information": {"category_code": _category(cursor, element, nature, rate, vat), "rate": rate},
+        "item": {
             "name": cursor.text(element, "Descrizione"),  # 2.2.1.4 → BT-153
             "sellers_identifier": _article(cursor, element),  # 2.2.1.3 → BT-155
             "attributes": tuple(a for a in attributes if a is not None),
         },
-        net_amount=_net_amount(cursor, element),
-        it=None if supply is None and nature is None else {"supply_type": supply, "nature": nature},
-    )
+        "net_amount": _net_amount(cursor, element),
+        "it": None if supply is None and nature is None else {"supply_type": supply, "nature": nature},
+    }
+    return build(InvoiceLine, element, values)
 
 
 def _nature(cursor: Cursor, parent: etree._Element, ident: str) -> Natura | None:
@@ -150,11 +266,29 @@ def _nature(cursor: Cursor, parent: etree._Element, ident: str) -> Natura | None
     return nature
 
 
+def _zero_rate(cursor: Cursor, element: etree._Element, nature: Natura, rate: Decimal | None) -> None:
+    """Refuse a ``Natura`` with a rate other than 0, which its EN category cannot carry (#132).
+
+    Every App. 5.1 category of a ``Natura`` (Z, E, G, K, AE) has rate 0 in EN 16931 (BR-Z-05, BR-E-05, BR-G-05,
+    BR-IC-05, BR-AE-05 and their -06/-07/-09 siblings). The SdI accepts a ``Natura`` with a rate only on the
+    integration documents TD16 to TD19 (check 00401), which have no EN mapping for it.
+    """
+    if rate is not None and rate != 0:
+        category = NATURE_CATEGORY[nature][0]
+        raise ParseError(
+            f"Natura {nature} (VAT category {category}, App. 5.1) with AliquotaIVA {format(rate, 'f')}: EN 16931 "
+            f"requires rate 0 for category {category} (BR-{'IC' if category == 'K' else category}-05), so the reader "
+            f"does not map it ({POLICY_ISSUE})",
+            location=cursor.path(element),
+        )
+
+
 def _category(
     cursor: Cursor, element: etree._Element, nature: Natura | None, rate: Decimal | None, vat: Summaries
 ) -> str | None:
     """BT-151: by ``Natura`` (App. 5.1), else S, or B when the summary at the line's rate is split payment."""
     if nature is not None:
+        _zero_rate(cursor, element, nature, rate)
         return NATURE_CATEGORY[nature][0]
     if rate is None:
         return None  # build() names the missing BT-152 / BT-151
@@ -178,20 +312,26 @@ def _category(
 def _unit(cursor: Cursor, element: etree._Element) -> str:
     """2.2.1.6 ``UnitaMisura`` → BT-130 if it is a UN/ECE Rec 20/21 code; else ``C62``, the text reported."""
     unit = cursor.one(element, "UnitaMisura")
-    if unit is not None and (unit.text or "") in UNECE_REC20_REC21_UNIT:
-        return unit.text or ""
+    code = "" if unit is None else (unit.text or "").strip(XML_SPACE)
+    if code in UNECE_REC20_REC21_UNIT:
+        return code
     cursor.discard(unit)
     return _ONE_UNIT
 
 
-def _price(cursor: Cursor, element: etree._Element) -> dict[str, object]:
-    """2.2.1.9 ``PrezzoUnitario`` and 2.2.1.10 ``ScontoMaggiorazione`` → BG-29.
+def _price(cursor: Cursor, element: etree._Element) -> tuple[dict[str, object], bool]:
+    """2.2.1.9 ``PrezzoUnitario`` and 2.2.1.10 ``ScontoMaggiorazione`` → BG-29, and whether the line is negative.
 
     App. 4.1 row 2.2.1.9 writes BT-148 when present, else BT-146; row 2.2.1.10 writes BT-147 as the ``Importo``, SC
     when positive, MG when negative. So one ``ScontoMaggiorazione`` reads as BT-148 = ``PrezzoUnitario``, BT-147 =
     ``Importo`` (or ``PrezzoUnitario * Percentuale / 100``, exact; a percentage next to an ``Importo`` is reported),
     negated for MG, and BT-146 = BT-148 - BT-147. Several are refused: cascade or sum is not settled (#130, #132 item
     12). Without one, BT-146 = ``PrezzoUnitario``.
+
+    A negative ``PrezzoUnitario`` (``Amount8DecimalType`` is signed, ``QuantitaType`` is not, XSD 1.2.3) is how
+    FatturaPA writes a discount or rebate line. BR-27 forbids a negative BT-146, but no CEN rule restricts the sign of
+    BT-129, so the prices are negated and the caller negates BT-129: the line net amount is unchanged, and a writer
+    can turn it back, as FatturaPA quantities are never negative.
     """
     unit_price = cursor.decimal(element, "PrezzoUnitario", "2.2.1.9")
     adjustments = cursor.children(element, "ScontoMaggiorazione")
@@ -201,8 +341,11 @@ def _price(cursor: Cursor, element: etree._Element) -> dict[str, object]:
             f"is not settled by the sources, so the reader does not apply them ({POLICY_ISSUE})",
             location=cursor.path(element),
         )
-    if not adjustments or unit_price is None:
-        return {"item_net_price": unit_price}
+    if unit_price is None:
+        return {"item_net_price": None}, False
+    sign = Decimal(-1) if unit_price < 0 else Decimal(1)
+    if not adjustments:
+        return {"item_net_price": sign * unit_price}, sign < 0
     adjustment = cursor.use(adjustments[0])
     kind = cursor.code(adjustment, "Tipo")
     percent = cursor.decimal(adjustment, "Percentuale", "2.2.1.10.2")
@@ -211,13 +354,18 @@ def _price(cursor: Cursor, element: etree._Element) -> dict[str, object]:
         raise ParseError(f"2.2.1.10.1 Tipo: {kind!r} is not SC or MG (XSD 1.2.3)", location=cursor.path(adjustment))
     if amount is None and percent is None:
         cursor.discard(adjustment)  # nothing to apply (SdI check 00438); reported
-        return {"item_net_price": unit_price}
+        return {"item_net_price": sign * unit_price}, sign < 0
     if amount is not None:
         cursor.discard(cursor.children(adjustment, "Percentuale")[0] if percent is not None else None)
     discount = amount if amount is not None else (unit_price * t.cast(Decimal, percent)).scaleb(-2)
     if kind == "MG":
         discount = -discount
-    return {"item_net_price": unit_price - discount, "item_price_discount": discount, "item_gross_price": unit_price}
+    price: dict[str, object] = {
+        "item_net_price": sign * (unit_price - discount),
+        "item_price_discount": sign * discount,
+        "item_gross_price": sign * unit_price,
+    }
+    return price, sign < 0
 
 
 def _net_amount(cursor: Cursor, element: etree._Element) -> Decimal | None:
@@ -259,39 +407,3 @@ def _attribute(cursor: Cursor, element: etree._Element) -> dict[str, str] | None
         "name": cursor.text(element, "TipoDato") or "",
         "value": value if references[0].tag == "RiferimentoTesto" else value.strip(XML_SPACE),
     }
-
-
-def payment(cursor: Cursor, body: etree._Element) -> dict[str, object]:
-    """2.4 ``DatiPagamento`` → BG-16, BG-10, BT-9, BT-115 and ``.it.payment`` (App. 4.1 rows 2.4.x).
-
-    The model holds one ``DatiPagamento`` with one ``DettaglioPagamento`` (``ItalianPayment``); further ones are
-    reported, and then ``ImportoPagamento`` (an instalment, not the amount due) is reported too.
-    """
-    blocks = cursor.children(body, "DatiPagamento")
-    if not blocks:
-        return {}
-    block = cursor.use(blocks[0])
-    details = cursor.children(block, "DettaglioPagamento")
-    detail = cursor.use(details[0]) if details else None
-    conditions = cursor.code(block, "CondizioniPagamento")  # 2.4.1 → .it.payment.conditions
-    method = cursor.code(detail, "ModalitaPagamento")  # 2.4.2.2 → .it.payment.method, BT-81 (App. 5.6)
-    extension = cursor.model(ItalianPayment, block, conditions=conditions, method=method)
-    iban = cursor.text(detail, "IBAN")  # 2.4.2.13 → BT-84
-    bic = cursor.text(detail, "BIC") if iban is not None else None  # 2.4.2.16 → BT-86
-    payee = cursor.text(detail, "Beneficiario")  # 2.4.2.1 → BT-59
-    single = len(blocks) == 1 and len(details) == 1
-    fields: dict[str, object] = {
-        "it_payment": extension,
-        "payment_due_date": cursor.date(detail, "DataScadenzaPagamento", "2.4.2.5"),  # → BT-9
-        "amount_due": cursor.decimal(detail, "ImportoPagamento", "2.4.2.6") if single else None,  # → BT-115
-        "payee": None if payee is None else {"name": payee},
-    }
-    if extension.method is not None:
-        fields["payment_instructions"] = {
-            "payment_means_type_code": PAYMENT_MEANS.get(extension.method, "1"),
-            "remittance_information": cursor.text(detail, "CodicePagamento"),  # 2.4.2.21 → BT-83
-            "credit_transfers": ()
-            if iban is None
-            else ({"payment_account_identifier": iban, "payment_service_provider_identifier": bic},),
-        }
-    return fields

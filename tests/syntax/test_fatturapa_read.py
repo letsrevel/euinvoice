@@ -33,7 +33,7 @@ from euinvoice.model.it import (
     TipoCessionePrestazione,
     TipoDocumento,
 )
-from euinvoice.syntax.fatturapa._read import DOMESTIC_SPECIFICATION, SPECIFICATION
+from euinvoice.syntax.fatturapa._read import SPECIFICATION
 from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY, TYPE_CODE
 
 D = Decimal
@@ -141,7 +141,7 @@ ROWS: t.Final[list[tuple[str, Callable[[t.Any], object], object]]] = [
     (
         "2.2.2.2 Natura -> BT-118, BT-120, BT-121 (App. 5.1)",
         lambda i: [(g.category_code, g.exemption_reason, g.exemption_reason_code) for g in i.vat_breakdown],
-        [("S", None, None), ("E", "N2.2", "VATEX-EU-132")],
+        [("S", None, None), ("E", "N2.2 Art. 7 DPR 633/72", "VATEX-EU-132")],
     ),
     (
         "2.2.2.5 ImponibileImporto -> BT-116",
@@ -156,7 +156,15 @@ ROWS: t.Final[list[tuple[str, Callable[[t.Any], object], object]]] = [
         "Art. 7 DPR 633/72",
     ),
     ("2.4.1 CondizioniPagamento -> it.payment", lambda i: i.it.payment.conditions, CondizioniPagamento.TP02),
-    ("2.4.2.1 Beneficiario -> BT-59", lambda i: i.payee.name, "Example Srl"),
+    ("2.4.1 + 2.4.2.4 CondizioniPagamento, GiorniTerminiPagamento -> BT-20", lambda i: i.payment_terms, "TP02 30"),
+    ("2.4.2.1 Beneficiario -> BT-59", lambda i: i.payee.name, "Payee Srl"),
+    ("2.4.2.8-9 Cognome/NomeQuietanzante -> BT-60", lambda i: i.payee.identifier.value, "Rossi Anna"),
+    (
+        "2.4.2.10 CFQuietanzante -> BT-61",
+        lambda i: i.payee.legal_registration_identifier.model_dump(),
+        {"value": "BBBBBB00B00B000B", "scheme_id": "0210"},
+    ),
+    ("2.1.2.5 CodiceCommessaConvenzione -> BT-10", lambda i: i.buyer_reference, "BR-1"),
     ("2.4.2.2 ModalitaPagamento -> it.payment.method", lambda i: i.it.payment.method, ModalitaPagamento.MP05),
     ("2.4.2.2 ModalitaPagamento -> BT-81", lambda i: i.payment_instructions.payment_means_type_code, "30"),
     ("2.4.2.5 DataScadenzaPagamento -> BT-9", lambda i: i.payment_due_date, datetime.date(2026, 2, 15)),
@@ -172,11 +180,8 @@ ROWS: t.Final[list[tuple[str, Callable[[t.Any], object], object]]] = [
         "BYLADEM1001",
     ),
     ("2.4.2.21 CodicePagamento -> BT-83", lambda i: i.payment_instructions.remittance_information, "RF-1"),
-    (
-        "BT-24 (Regole tecniche §4.1.3.1, Italian seller)",
-        lambda i: i.process_control.specification_identifier,
-        DOMESTIC_SPECIFICATION,
-    ),
+    ("BT-24: EN 16931 core (#132 item 7)", lambda i: i.process_control.specification_identifier, SPECIFICATION),
+    ("2.2.2.7 EsigibilitaIVA I -> no BT-8 (3 or 35)", lambda i: i.vat_point_date_code, None),
     ("BT-106 derived (BR-CO-10)", lambda i: i.totals.sum_of_line_net_amounts, D("100.00")),
     ("BT-109 derived (BR-CO-13)", lambda i: i.totals.total_without_vat, D("100.00")),
     ("BT-110 derived (BR-CO-14)", lambda i: i.totals.total_vat, D("19.80")),
@@ -214,7 +219,9 @@ def test_natura_gives_the_app_5_1_category_and_exemption_code(nature: Natura) ->
     category, code = NATURE_CATEGORY[nature]
     assert invoice.lines[0].vat_information.category_code == category
     (group,) = invoice.vat_breakdown
-    assert (group.category_code, group.exemption_reason_code, group.exemption_reason) == (category, code, nature)
+    # App. 5.1: BT-120 is the Natura code, except for N1 (Z), whose row has none (BR-Z-10 forbids it).
+    reason = None if category == "Z" else nature
+    assert (group.category_code, group.exemption_reason_code, group.exemption_reason) == (category, code, reason)
     assert invoice.lines[0].it is not None
     assert invoice.lines[0].it.nature is nature
 
@@ -247,7 +254,7 @@ def test_a_natural_person_name_is_nome_cognome() -> None:
     assert result.unmapped[1:] == (f"{anagrafica}/Nome", f"{anagrafica}/Cognome", f"{anagrafica}/Titolo")
 
 
-def test_a_foreign_seller_gets_the_cross_border_bt_24() -> None:
+def test_a_foreign_seller_reads_with_the_core_bt_24() -> None:
     data = VARIANTS["foreign seller"]
 
     invoice = parse(data)
@@ -331,3 +338,98 @@ def test_a_credit_note_reads_as_381() -> None:
     data = VARIANTS["credit note"]
 
     assert parse(data).type_code == "381"
+
+
+def test_deferred_vat_gives_bt_8_432() -> None:
+    # Row 2.2.2.7: "Se BT-8 = 432 allora <EsigibilitaIVA> = D".
+    assert parse(VARIANTS["deferred VAT"]).vat_point_date_code == "432"
+
+
+def test_mp05_without_iban_is_no_credit_transfer_code() -> None:
+    # BR-61 requires BT-84 for 30 and 58; App. 5.6 row 15 (Bookentry credit) also maps to MP05.
+    invoice = parse(VARIANTS["MP05 without IBAN"])
+
+    assert invoice.payment_instructions is not None
+    assert (invoice.payment_instructions.payment_means_type_code, invoice.payment_instructions.credit_transfers) == (
+        "15",
+        (),
+    )
+
+
+def test_two_natura_of_one_category_make_one_vat_breakdown() -> None:
+    invoice = parse(VARIANTS["two Natura in category E"])
+
+    (group,) = invoice.vat_breakdown
+    assert (group.category_code, group.rate, group.taxable_amount, group.tax_amount) == ("E", D(0), D(200), D(0))
+    assert (group.exemption_reason, group.exemption_reason_code) == ("N4 Art. 10; N2.2", "VATEX-EU-132")
+    assert invoice.it is not None
+    assert [(s.nature, s.legal_reference) for s in invoice.it.vat_summaries] == [
+        (Natura.N4, "Art. 10"),
+        (Natura.N2_2, None),
+    ]
+
+
+def test_a_negative_unit_price_reads_as_a_negative_quantity() -> None:
+    invoice = parse(VARIANTS["negative unit price"])
+
+    discount = invoice.lines[1]
+    assert (discount.invoiced_quantity, discount.price_details.item_net_price, discount.net_amount) == (
+        D("-1.00"),
+        D("10.00"),
+        D("-10.00"),
+    )
+    assert (invoice.vat_breakdown[0].taxable_amount, invoice.totals.total_with_vat) == (D("90.00"), D("109.80"))
+
+
+def test_a_negative_unit_price_with_an_adjustment_keeps_the_line_amount() -> None:
+    line = parse(VARIANTS["negative unit price with an adjustment"]).lines[0]
+    price = line.price_details
+
+    assert (line.invoiced_quantity, price.item_gross_price, price.item_price_discount, price.item_net_price) == (
+        D("-1.00"),
+        D("10.00"),
+        D("-1.00"),
+        D("11.00"),
+    )
+    assert line.invoiced_quantity * price.item_net_price == line.net_amount
+
+
+def test_stamp_duty_is_a_zero_charge_with_its_z_breakdown() -> None:
+    # Row 2.1.1.6 and BR-IT-DC-480: BT-105 SAE, BT-104 BOLLO, BT-99 0, category Z; BR-Z-01 needs a Z BG-23.
+    invoice = parse(VARIANTS["stamp duty"])
+
+    (charge,) = invoice.charges
+    assert (charge.reason_code, charge.reason, charge.amount, charge.vat_category_code) == ("SAE", "BOLLO", D(0), "Z")
+    assert [(g.category_code, g.taxable_amount) for g in invoice.vat_breakdown] == [("S", D(100)), ("Z", D(0))]
+    assert (invoice.totals.sum_of_charges, invoice.totals.total_without_vat) == (D(0), D(100))
+
+
+def test_stamp_duty_on_a_credit_note_is_a_zero_allowance() -> None:
+    # Row 2.1.1.6.1: "Per la Nota di credito: se BT-98 = 95 allora BolloVirtuale = SI".
+    result = parse_detailed(VARIANTS["stamp duty on a credit note"])
+
+    (allowance,) = result.invoice.allowances
+    assert (allowance.reason_code, allowance.amount, result.invoice.charges) == ("95", D(0), ())
+    assert result.unmapped[1:] == (
+        "/p:FatturaElettronica/FatturaElettronicaBody/DatiGenerali/DatiGeneraliDocumento/DatiBollo/ImportoBollo",
+    )
+
+
+def test_a_receipt_referring_to_a_line_still_gives_bt_15() -> None:
+    # Row 2.1.5.1 RiferimentoNumeroLinea is "Mappatura non considerabile"; row 2.1.5.2 has no "se unico" condition.
+    result = parse_detailed(VARIANTS["line-level receipt"])
+
+    assert result.invoice.receiving_advice_reference == "R-1"
+    assert result.unmapped[1:] == (
+        "/p:FatturaElettronica/FatturaElettronicaBody/DatiGenerali/DatiRicezione/RiferimentoNumeroLinea",
+    )
+
+
+def test_a_payee_that_is_the_seller_is_no_bg_10() -> None:
+    # BG-10 is for a payee other than the seller (UBL-SR-19..21, BR-17).
+    result = parse_detailed(VARIANTS["payee is the seller"])
+
+    assert result.invoice.payee is None
+    assert result.unmapped[1:] == (
+        "/p:FatturaElettronica/FatturaElettronicaBody/DatiPagamento/DettaglioPagamento/Beneficiario",
+    )

@@ -12,13 +12,12 @@ import typing as t
 from lxml import etree
 
 from euinvoice import _xml, calc, profiles
-from euinvoice.detection import detect_root, is_pdf
+from euinvoice.detection import detect_root, is_pdf, refuse_signed
 from euinvoice.errors import PreflightError, UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.report import ValidationReport
 from euinvoice.syntax import Syntax, cii, fatturapa, ubl
-from euinvoice.syntax.fatturapa._read_signed import is_signed
 from euinvoice.syntax.result import ParseResult
 
 __all__ = ["parse", "parse_all", "parse_detailed", "to_xml"]
@@ -144,7 +143,7 @@ def parse_detailed(data: bytes) -> ParseResult:
 
 
 def parse_all(data: bytes) -> tuple[ParseResult, ...]:
-    """Read every invoice of a document: :func:`parse_detailed` for one that holds several.
+    """Read every invoice of a document into ``ParseResult`` s, the detailed form of :func:`parse_detailed`.
 
     Only a FatturaPA batch file (a lotto, #120) holds several invoices: one per ``FatturaElettronicaBody``, sharing
     the header. Each result's ``unmapped`` lists the unmapped header content and that of its own body. UBL, CII and
@@ -178,11 +177,8 @@ def _root(data: bytes) -> etree._Element:
         from euinvoice import facturx
 
         data = facturx.extract(data).xml
-    elif isinstance(data, bytes) and is_signed(data):
-        raise UnsupportedDocumentError(
-            "input is a signed (CAdES, .p7m) document; euinvoice reads only the XML, so extract it first, e.g. "
-            "openssl cms -verify -noverify -inform DER -in file.xml.p7m -out file.xml (decode a base64 file first)"
-        )
+    else:
+        refuse_signed(data)
     return _xml.parse(data)
 
 

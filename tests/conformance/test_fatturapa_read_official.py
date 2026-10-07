@@ -5,13 +5,14 @@ Needs ``make artifacts``: the examples come from the pinned ZUGFeRD corpus (plan
 """
 
 import datetime
+import re
 import typing as t
 from decimal import Decimal
 
 import pytest
 from lxml import etree
 
-from _fatturapa import CASES, EXTRA_FAILING
+from _fatturapa import CASES, EXTRA_FAILING, Doc
 from _fatturapa_read import (
     FULL,
     REFUSED,
@@ -26,8 +27,11 @@ from _fatturapa_read import (
 )
 from euinvoice import _xml, parse, parse_all, validate
 from euinvoice.errors import ArtifactsNotAvailableError, ParseError, UnsupportedDocumentError
+from euinvoice.model import Invoice, without_extensions
 from euinvoice.model.it import EsigibilitaIVA, ModalitaPagamento, RegimeFiscale, TipoDocumento
+from euinvoice.profiles import EN16931
 from euinvoice.report import Severity
+from euinvoice.syntax import cii, ubl
 from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY
 from euinvoice.validation import artifacts, xsd
 
@@ -112,10 +116,15 @@ def test_fpr03_is_a_lotto_of_two_invoices() -> None:
     first, second = parse_all(data)
 
     assert [line.net_amount for line in first.invoice.lines] == [D("5.00"), D("20.00")]
-    # Body 1 declares ImponibileImporto 27.00 for lines adding up to 25.00 (SdI 00422): read as declared.
-    assert (first.invoice.vat_breakdown[0].taxable_amount, first.invoice.totals.sum_of_line_net_amounts) == (
-        D("27.00"),
-        D("25.00"),
+    # Body 1 declares ImponibileImporto 27.00 / Imposta 5.95 for lines adding up to 25.00 (SdI 00422): the BG-23 and
+    # the totals follow the lines (BR-S-08, BR-CO-15/16), and the declared amounts are reported.
+    (group,) = first.invoice.vat_breakdown
+    assert (group.taxable_amount, group.tax_amount, first.invoice.totals.amount_due) == (D(25), D("5.50"), D("30.50"))
+    body = f"{ROOT}/FatturaElettronicaBody[1]"
+    assert first.unmapped[-3:] == (
+        f"{body}/DatiBeniServizi/DatiRiepilogo/ImponibileImporto",
+        f"{body}/DatiBeniServizi/DatiRiepilogo/Imposta",
+        f"{body}/DatiPagamento/DettaglioPagamento/ImportoPagamento",
     )
     (line,) = second.invoice.lines
     assert (second.invoice.number, line.invoiced_quantity, line.net_amount) == ("456", D(1), D("2000.00"))
@@ -123,6 +132,47 @@ def test_fpr03_is_a_lotto_of_two_invoices() -> None:
     assert second.invoice.payment_instructions.payment_means_type_code == "59"  # MP19
     assert second.invoice.totals.amount_due == D("2440.00")
     assert not any("Body[1]" in path for path in second.unmapped)
+
+
+# (file, body) → (BT-1, BT-2, BT-8, BT-15, line BT-131s, BG-23 (BT-116, BT-117), BT-81, BT-9, BT-115)
+_JAN18: t.Final = datetime.date(2017, 1, 18)
+FPA_VALUES: t.Final = {
+    ("IT01234567890_FPA01.xml", 0): (
+        "123", _JAN18, None, "789", [D(5)], [(D(5), D("1.10"))], "10", datetime.date(2017, 2, 18), D("6.10")
+    ),
+    ("IT01234567890_FPA02.xml", 0): (
+        "123", _JAN18, "432", "789", [D(5), D(20)], [(D(25), D("5.50"))], "10", datetime.date(2017, 3, 30), D("30.50")
+    ),
+    ("IT01234567890_FPA03.xml", 0): (
+        "12", _JAN18, None, "789", [D(5), D(20)], [(D(25), D("5.50"))], "10", datetime.date(2017, 2, 18), D("30.50")
+    ),
+    ("IT01234567890_FPA03.xml", 1): (
+        "456", datetime.date(2017, 1, 20), None, "987", [D(2000)], [(D(2000), D(440))], "59",
+        datetime.date(2017, 2, 20), D("2440.00"),
+    ),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize(("name", "index"), FPA_VALUES, ids=[f"{n} body {i + 1}" for n, i in FPA_VALUES])
+def test_fpa_field_values(name: str, index: int) -> None:
+    result = parse_all(official(name))[index]
+    i = result.invoice
+
+    assert (
+        i.number,
+        i.issue_date,
+        i.vat_point_date_code,  # FPA02: EsigibilitaIVA D → 432 (row 2.2.2.7)
+        i.receiving_advice_reference,  # DatiRicezione/IdDocumento, its RiferimentoNumeroLinea reported (row 2.1.5)
+        [line.net_amount for line in i.lines],
+        [(g.taxable_amount, g.tax_amount) for g in i.vat_breakdown],
+        i.payment_instructions.payment_means_type_code if i.payment_instructions else None,
+        i.payment_due_date,
+        i.totals.amount_due,
+    ) == FPA_VALUES[name, index]
+    assert (i.buyer.name, i.payment_terms) == ("AMMINISTRAZIONE BETA", "TP01")
+    assert i.it is not None
+    assert i.it.payment is not None
+    assert i.it.payment.method in ("MP01", "MP19")
 
 
 @pytest.fixture(scope="module")
@@ -158,14 +208,21 @@ def test_the_full_document_passes_the_sdi_checks() -> None:
     assert [f for f in report.findings if f.severity is not Severity.INFORMATION] == []
 
 
-def _sdi_documents() -> list[tuple[str, bytes]]:
-    found = [(f"{code} passing {i}", doc.xml()) for code, case in CASES.items() for i, doc in enumerate(case.passing)]
-    found += [(f"{code} failing", case.failing.xml()) for code, case in CASES.items()]
-    return found + [(name, doc.xml()) for name, doc in EXTRA_FAILING.items()]
+def _sdi_documents() -> list[tuple[str, Doc]]:
+    found = [(f"{code} passing {i}", doc) for code, case in CASES.items() for i, doc in enumerate(case.passing)]
+    found += [(f"{code} failing", case.failing) for code, case in CASES.items()]
+    return found + list(EXTRA_FAILING.items())
 
 
-# The #121 documents the reader refuses, with the reason (#132 items 6 and 12, SdI 00400).
+# The #121 documents the reader refuses, with the reason (#132 items 6 and 12, SdI 00400; a Natura with a rate: the
+# integration documents of 00401 / 00430 and SdI-refused ones; 00429's summaries match no line, so no BG-23 is left).
+_NATURA_RATE: t.Final = "with AliquotaIVA 22.00: EN 16931 requires rate 0"
 REFUSED_SDI: t.Final = {
+    "00401 passing 0": _NATURA_RATE,
+    "00430 passing 0": _NATURA_RATE,
+    "00401 failing": _NATURA_RATE,
+    "00430 failing": _NATURA_RATE,
+    "00429 failing": "at least one entry is required (BR-CO-18)",
     "00423 passing 4": "2 ScontoMaggiorazione on one line",
     "00400 failing": "Natura is required for a line with AliquotaIVA 0",
     "00445 failing": "the generic code N2 has no VAT category",
@@ -173,11 +230,32 @@ REFUSED_SDI: t.Final = {
 }
 
 
-@pytest.mark.parametrize(("name", "data"), _sdi_documents(), ids=[name for name, _ in _sdi_documents()])
-def test_the_sdi_check_documents_read_or_are_refused_clearly(name: str, data: bytes) -> None:
-    # #121's documents are XSD-valid, some of them refused by the SdI: each reads, or is refused with a ParseError.
+@pytest.mark.parametrize(("name", "doc"), _sdi_documents(), ids=[name for name, _ in _sdi_documents()])
+def test_the_sdi_check_documents_read_or_are_refused_clearly(name: str, doc: Doc) -> None:
+    # #121's documents are XSD-valid, some of them refused by the SdI: each reads, one invoice per body, or is
+    # refused with a ParseError.
     if name in REFUSED_SDI:
-        with pytest.raises(ParseError, match=REFUSED_SDI[name]):
-            parse_all(data)
+        with pytest.raises(ParseError, match=re.escape(REFUSED_SDI[name])):
+            parse_all(doc.xml())
     else:
-        assert parse_all(data)
+        assert [r.invoice.number for r in parse_all(doc.xml())] == [b.number for b in doc.bodies]
+
+
+def _readable() -> dict[str, bytes]:
+    """Every readable document of the reader tests that the SdI would accept, and the official examples."""
+    documents = {name: data for name, data in synthetic().items() if not name.startswith("refused: ")}
+    documents.update(
+        {name: doc.xml() for name, doc in _sdi_documents() if "passing" in name and name not in REFUSED_SDI}
+    )
+    documents.update({name: official(name) for name in READABLE})
+    return documents
+
+
+@pytest.mark.parametrize("name", list(_readable()))
+@pytest.mark.parametrize("writer", [ubl.write, cii.write], ids=["ubl", "cii"])
+def test_a_read_invoice_is_valid_en_16931(name: str, writer: t.Callable[[Invoice], bytes]) -> None:
+    # The EN part of what the reader returns must pass the official CEN rules (and the XSD) in both syntaxes.
+    for result in parse_all(_readable()[name]):
+        report = validate(writer(without_extensions(result.invoice)), EN16931)
+
+        assert [f for f in report.findings if f.severity in (Severity.FATAL, Severity.ERROR)] == []

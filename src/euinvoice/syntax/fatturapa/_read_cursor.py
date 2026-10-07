@@ -8,21 +8,13 @@ local name alone. Every element and attribute the reader maps is marked, so :met
 
 import datetime
 import re
-import typing as t
 from decimal import Decimal
 
-import pydantic
 from lxml import etree
 
 from euinvoice.errors import ModelError, ParseError
 from euinvoice.model._base import to_decimal
-from euinvoice.syntax._marks import XML_SPACE, Marks
-from euinvoice.syntax._read_errors import build
-
-# xs:date with its optional time zone (XML Schema Part 2 §3.2.9); the year is four digits in every FatturaPA date.
-_DATE: t.Final = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(Z|[+-][0-9]{2}:[0-9]{2})?")
-# xs:dateTime (§3.2.7), only for DataOraConsegna (2.1.9.13): the date part is kept, the rest reported.
-_DATE_TIME: t.Final = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})T[0-9:.]+(?:Z|[+-][0-9]{2}:[0-9]{2})?")
+from euinvoice.syntax._marks import XML_SPACE, XSD_DATE, XSD_DATE_TIME, Marks
 
 
 class Cursor:
@@ -113,7 +105,7 @@ class Cursor:
             ParseError: The text is not a calendar date ``YYYY-MM-DD``, with an optional time zone.
         """
         element = self.one(parent, name)
-        return None if element is None else self._date(element, ident, _DATE, zone_only=True)
+        return None if element is None else self._date(element, ident, XSD_DATE, zone_only=True)
 
     def date_of_time(self, parent: etree._Element | None, name: str, ident: str) -> datetime.date | None:
         """The calendar date of the ``xs:dateTime`` child ``name``, marked; the time is reported as ``…/text()``.
@@ -122,7 +114,7 @@ class Cursor:
             ParseError: The text is not an ``xs:dateTime``.
         """
         element = self.one(parent, name)
-        return None if element is None else self._date(element, ident, _DATE_TIME, zone_only=False)
+        return None if element is None else self._date(element, ident, XSD_DATE_TIME, zone_only=False)
 
     def _date(self, element: etree._Element, ident: str, pattern: re.Pattern[str], *, zone_only: bool) -> datetime.date:
         text = (element.text or "").strip(XML_SPACE)
@@ -142,14 +134,6 @@ class Cursor:
     def path(self, element: etree._Element) -> str:
         """The XPath of ``element``."""
         return self._marks.path(element)
-
-    def model[M: pydantic.BaseModel](self, cls: type[M], element: etree._Element, /, **values: object) -> M:
-        """Build ``cls`` from ``values`` read at ``element`` (:func:`euinvoice.syntax._read_errors.build`).
-
-        Raises:
-            ParseError: The values do not form a valid ``cls``; located at ``element``, naming each BT/BG id.
-        """
-        return build(cls, element, values)
 
     def unmapped(self) -> tuple[str, ...]:
         """The XPaths of the header and of this body that no model field took, in document order.

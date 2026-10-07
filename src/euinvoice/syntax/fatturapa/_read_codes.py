@@ -9,7 +9,7 @@ import typing as t
 
 from euinvoice.model.it import ModalitaPagamento, Natura, TipoDocumento
 
-__all__ = ["NATURE_CATEGORY", "PAYMENT_MEANS", "POLICY_ISSUE", "TYPE_CODE"]
+__all__ = ["NATURE_CATEGORY", "PAYMENT_MEANS", "PAYMENT_MEANS_WITHOUT_ACCOUNT", "POLICY_ISSUE", "TYPE_CODE"]
 
 POLICY_ISSUE: t.Final = "https://github.com/letsrevel/euinvoice/issues/132"
 """The ``needs-human`` issue listing the reader's mapping-policy questions (#115 decision 5)."""
@@ -75,7 +75,7 @@ PAYMENT_MEANS: t.Final[t.Mapping[ModalitaPagamento, str]] = {
     ModalitaPagamento.MP02: "20",  # Cheque
     ModalitaPagamento.MP03: "21",  # Banker's draft
     ModalitaPagamento.MP04: "ZZZ",  # Mutually defined (the only row)
-    ModalitaPagamento.MP05: "30",  # Credit transfer
+    ModalitaPagamento.MP05: "30",  # Credit transfer, with an IBAN (BR-61; see PAYMENT_MEANS_WITHOUT_ACCOUNT)
     ModalitaPagamento.MP06: "60",  # Promissory note
     ModalitaPagamento.MP08: "48",  # Bank card
     ModalitaPagamento.MP12: "70",  # Bill drawn by the creditor on the debtor
@@ -88,3 +88,9 @@ PAYMENT_MEANS: t.Final[t.Mapping[ModalitaPagamento, str]] = {
     ModalitaPagamento.MP23: "9",  # National or regional clearing (the only row)
 }
 """``ModalitaPagamento`` → payment means type code BT-81 (see the comment above); codes not listed get ``"1"``."""
+
+PAYMENT_MEANS_WITHOUT_ACCOUNT: t.Final[t.Mapping[ModalitaPagamento, str]] = {
+    ModalitaPagamento.MP05: "15",  # Bookentry credit: the first App. 5.6 MP05 row that BR-61 does not tie to BT-84
+}
+"""BT-81 when the ``DettaglioPagamento`` has no IBAN: BR-61 (CEN ``EN16931-model.sch`` 1.3.16, fatal) requires the
+payment account BT-84 for codes 30 and 58, and IBAN (2.4.2.13) is optional, so MP05 without one cannot be 30."""

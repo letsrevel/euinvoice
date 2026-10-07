@@ -138,7 +138,8 @@ FULL: t.Final = document(
             "<Causale>First note</Causale><Causale>Second note</Causale>"
         ),
         general=(
-            "<DatiOrdineAcquisto><IdDocumento>PO-1</IdDocumento></DatiOrdineAcquisto>"
+            "<DatiOrdineAcquisto><IdDocumento>PO-1</IdDocumento><CodiceCommessaConvenzione>BR-1"
+            "</CodiceCommessaConvenzione></DatiOrdineAcquisto>"
             "<DatiContratto><IdDocumento>C-1</IdDocumento><CodiceCUP>CUP-1</CodiceCUP><CodiceCIG>CIG-1</CodiceCIG>"
             "</DatiContratto>"
             "<DatiConvenzione><IdDocumento>CV-1</IdDocumento></DatiConvenzione>"
@@ -169,9 +170,12 @@ FULL: t.Final = document(
             detail(
                 "MP05",
                 "119.80",
-                before="<Beneficiario>Example Srl</Beneficiario>",
-                middle="<DataScadenzaPagamento>2026-02-15</DataScadenzaPagamento>",
-                after="<IBAN>DE02120300000000202051</IBAN><BIC>BYLADEM1001</BIC><CodicePagamento>RF-1</CodicePagamento>",
+                before="<Beneficiario>Payee Srl</Beneficiario>",
+                middle="<GiorniTerminiPagamento>30</GiorniTerminiPagamento>"
+                "<DataScadenzaPagamento>2026-02-15</DataScadenzaPagamento>",
+                after="<CognomeQuietanzante>Rossi</CognomeQuietanzante><NomeQuietanzante>Anna</NomeQuietanzante>"
+                "<CFQuietanzante>BBBBBB00B00B000B</CFQuietanzante>"
+                "<IBAN>DE02120300000000202051</IBAN><BIC>BYLADEM1001</BIC><CodicePagamento>RF-1</CodicePagamento>",
             )
         ),
     ),
@@ -247,7 +251,7 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
         ),
         (
             f"{GENERAL}/DatiGeneraliDocumento/DatiRitenuta",
-            f"{GENERAL}/DatiGeneraliDocumento/DatiBollo",
+            f"{GENERAL}/DatiGeneraliDocumento/DatiBollo/ImportoBollo",  # BR-IT-DC-480: the EN charge is 0
             f"{GENERAL}/DatiGeneraliDocumento/Art73",
         ),
     ),
@@ -336,7 +340,7 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
         (f"{DETAIL}[1]/ImportoPagamento", f"{DETAIL}[2]"),
     ),
     (
-        "a second DatiPagamento, terms days and a BIC without IBAN",
+        "a second DatiPagamento and a BIC without IBAN",
         document(
             body(
                 after=payment(
@@ -346,7 +350,6 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
             )
         ),
         (
-            f"{ROOT}/FatturaElettronicaBody/DatiPagamento[1]/DettaglioPagamento/GiorniTerminiPagamento",
             f"{ROOT}/FatturaElettronicaBody/DatiPagamento[1]/DettaglioPagamento/ImportoPagamento",
             f"{ROOT}/FatturaElettronicaBody/DatiPagamento[1]/DettaglioPagamento/BIC",
             f"{ROOT}/FatturaElettronicaBody/DatiPagamento[2]",
@@ -364,10 +367,44 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
         document(body().replace("<Data>2026-01-15</Data>", "<Data>2026-01-15+01:00</Data>")),
         (f"{GENERAL}/DatiGeneraliDocumento/Data/text()",),
     ),
+    (
+        "a summary no line has (a social-security fund)",
+        document(
+            body(
+                document_extra="<DatiCassaPrevidenziale><TipoCassa>TC22</TipoCassa><AlCassa>4.00</AlCassa>"
+                "<ImportoContributoCassa>4.00</ImportoContributoCassa><AliquotaIVA>10.00</AliquotaIVA>"
+                "</DatiCassaPrevidenziale>",
+                summaries=summary() + summary("10.00", "4.00", "0.40"),
+            )
+        ),
+        (f"{GENERAL}/DatiGeneraliDocumento/DatiCassaPrevidenziale", f"{SUMMARY}[2]"),
+    ),
+    (
+        "a Natura summary no line has, in a category lines have",
+        document(
+            body(
+                lines=line(rate="0.00", natura="N2.2"),
+                summaries=summary("0.00", "100.00", "0.00", natura="N2.2")
+                + summary("0.00", "0.00", "0.00", natura="N4", legal="Art. 10"),
+            )
+        ),
+        (f"{SUMMARY}[2]/Natura", f"{SUMMARY}[2]/RiferimentoNormativo"),
+    ),
 ]
 """(name, document, the unmapped paths besides DatiTrasmissione): content with no model home is reported."""
 
 REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
+    (
+        "a Natura with a rate",
+        document(body(lines=line(natura="N6.1"), summaries=summary(natura="N6.1"))),
+        "Natura N6.1 (VAT category AE, App. 5.1) with AliquotaIVA 22.00: EN 16931 requires rate 0 for category AE "
+        "(BR-AE-05)",
+    ),
+    (
+        "a line Natura with a rate",
+        document(body(lines=line(natura="N4"), summaries=summary())),
+        "Natura N4 (VAT category E, App. 5.1) with AliquotaIVA 22.00",
+    ),
     (
         "PrezzoTotale with 3 decimals",
         document(body(lines=line(total="100.001"))),
@@ -399,24 +436,29 @@ REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
         ),
         "2 ScontoMaggiorazione on one line",
     ),
-    (
-        "negative unit price",
-        document(
-            body(
-                lines=line(quantity="1.00", unit="-10.00", total="-10.00"),
-                summaries=summary("22.00", "-10.00", "-2.20"),
-            )
-        ),
-        "must not be negative, got -10.00 (BR-27)",
-    ),
 ]
 """(name, XSD-valid document, message): values the model cannot hold without rounding or guessing (#132)."""
 
 
+_INTRA_EU: t.Final = frozenset({"N3.2", "N3.6", "N7"})  # category K (App. 5.1)
+_FR_BUYER: t.Final = "<IdFiscaleIVA><IdPaese>FR</IdPaese><IdCodice>00000000000</IdCodice></IdFiscaleIVA>"
+_DELIVERY: t.Final = (
+    "<DatiTrasporto><IndirizzoResa><Indirizzo>Rue Exemple 1</Indirizzo><CAP>75001</CAP><Comune>Paris</Comune>"
+    "<Nazione>FR</Nazione></IndirizzoResa><DataOraConsegna>2026-01-12T10:00:00</DataOraConsegna></DatiTrasporto>"
+)
+
+
 def natura_document(code: str) -> bytes:
-    """One 0 % line and its summary with ``Natura`` ``code``."""
+    """One 0 % line and its summary with ``Natura`` ``code``; for category K, an EU buyer with a VAT id and the
+    delivery data BR-IC-02, BR-IC-11 and BR-IC-12 require."""
+    intra = code in _INTRA_EU
     return document(
-        body(lines=line(rate="0.00", natura=code), summaries=summary("0.00", "100.00", "0.00", natura=code))
+        body(
+            general=_DELIVERY if intra else "",
+            lines=line(rate="0.00", natura=code),
+            summaries=summary("0.00", "100.00", "0.00", natura=code),
+        ),
+        buyer_ids=_FR_BUYER if intra else BUYER_CF,
     )
 
 
@@ -475,3 +517,61 @@ VARIANTS: t.Final[dict[str, bytes]] = {
     "instalments": document(body(after=payment(detail(amount="61.00"), detail(amount="61.00"), conditions="TP01"))),
 }
 """Single-purpose documents of the reader tests, by name."""
+
+VARIANTS.update(
+    {
+        "payee is the seller": document(body(after=payment(detail(before="<Beneficiario>Example Srl</Beneficiario>")))),
+        "MP05 without IBAN": payment_document("MP05"),
+        "two Natura in category E": document(
+            body(
+                lines=line(rate="0.00", natura="N4") + line(2, rate="0.00", natura="N2.2"),
+                summaries=summary("0.00", "100.00", "0.00", natura="N4", legal="Art. 10")
+                + summary("0.00", "100.00", "0.00", natura="N2.2"),
+            )
+        ),
+        "negative unit price": document(
+            body(
+                lines=line() + line(2, quantity="1.00", unit="-10.00", total="-10.00", description="Discount"),
+                summaries=summary("22.00", "90.00", "19.80"),
+                document_extra="<ImportoTotaleDocumento>109.80</ImportoTotaleDocumento>",
+            )
+        ),
+        "negative unit price with an adjustment": document(
+            body(
+                lines=line(
+                    quantity="1.00",
+                    unit="-10.00",
+                    total="-11.00",
+                    adjustments="<ScontoMaggiorazione><Tipo>SC</Tipo><Importo>1.00</Importo></ScontoMaggiorazione>",
+                )
+                + line(2),
+                summaries=summary("22.00", "89.00", "19.58"),
+            )
+        ),
+        "deferred VAT": document(body(summaries=summary(chargeability="D"))),
+        "inconsistent summary": document(body(summaries=summary("22.00", "102.00", "22.44"))),
+        "inconsistent totals": document(
+            body(
+                document_extra="<ImportoTotaleDocumento>100.00</ImportoTotaleDocumento>",
+                after=payment(detail(amount="100.00")),
+            )
+        ),
+        "stamp duty": document(
+            body(
+                document_extra="<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>0.00</ImportoBollo></DatiBollo>"
+            )
+        ),
+        "stamp duty on a credit note": document(
+            body(
+                tipo="TD04",
+                document_extra="<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>2.00</ImportoBollo></DatiBollo>",
+            )
+        ),
+        "line-level receipt": document(
+            body(
+                general="<DatiRicezione><RiferimentoNumeroLinea>1</RiferimentoNumeroLinea><IdDocumento>R-1</IdDocumento>"
+                "</DatiRicezione>"
+            )
+        ),
+    }
+)

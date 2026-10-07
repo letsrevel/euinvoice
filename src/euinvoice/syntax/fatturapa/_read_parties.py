@@ -14,6 +14,7 @@ from euinvoice.model import (
     SellerContact,
     SellerPostalAddress,
 )
+from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
 __all__ = ["CODICE_FISCALE", "buyer", "seller"]
@@ -31,18 +32,18 @@ def seller(cursor: Cursor, header: etree._Element) -> Seller:
     if contacts is not None:
         phone, email = cursor.text(contacts, "Telefono"), cursor.text(contacts, "Email")  # 1.2.5.1 BT-42, 1.2.5.3 BT-43
         if phone is not None or email is not None:
-            contact = cursor.model(SellerContact, contacts, telephone=phone, email=email)
-    return cursor.model(
-        Seller,
-        _required(party, header, "CedentePrestatore"),
-        name=_name(cursor, data),  # 1.2.1.3.1-3 → BT-27
-        identifiers=_eori(cursor, data),  # 1.2.1.3.5 → BT-29
-        legal_registration_identifier=_fiscal_code(cursor, data),  # 1.2.1.2 → BT-30
-        vat_identifier=_vat(cursor, data),  # 1.2.1.1 → BT-31
-        postal_address=_address(cursor, party, SellerPostalAddress),  # 1.2.2 → BG-5
-        contact=contact,
+            contact = build(SellerContact, contacts, {"telephone": phone, "email": email})
+    values = {
+        "name": _name(cursor, data),  # 1.2.1.3.1-3 → BT-27
+        "identifiers": _eori(cursor, data),  # 1.2.1.3.5 → BT-29
+        "legal_registration_identifier": _fiscal_code(cursor, data),  # 1.2.1.2 → BT-30
+        "vat_identifier": _vat(cursor, data),  # 1.2.1.1 → BT-31
+        "postal_address": _address(cursor, party, SellerPostalAddress),  # 1.2.2 → BG-5
+        "contact": contact,
         # 1.2.6 RiferimentoAmministrazione → BT-19 is a document term; read in _read.py.
-    )
+    }
+    # A missing party leaves the model's required fields empty; build() then names them (BR-06 …) at the header.
+    return build(Seller, header if party is None else party, values)
 
 
 def buyer(cursor: Cursor, header: etree._Element) -> Buyer:
@@ -50,20 +51,14 @@ def buyer(cursor: Cursor, header: etree._Element) -> Buyer:
     party = cursor.one(header, "CessionarioCommittente")
     data = cursor.one(party, "DatiAnagrafici")
     eori = _eori(cursor, data)
-    return cursor.model(
-        Buyer,
-        _required(party, header, "CessionarioCommittente"),
-        name=_name(cursor, data),  # 1.4.1.3.1-3 → BT-44
-        identifier=eori[0] if eori else None,  # 1.4.1.3.5 → BT-46
-        legal_registration_identifier=_fiscal_code(cursor, data),  # 1.4.1.2 → BT-47
-        vat_identifier=_vat(cursor, data),  # 1.4.1.1 → BT-48
-        postal_address=_address(cursor, party, BuyerPostalAddress),  # 1.4.2 → BG-8
-    )
-
-
-def _required(element: etree._Element | None, parent: etree._Element, name: str) -> etree._Element:
-    # A missing party leaves the model's required fields empty; build() then names them (BR-06/BR-07 …).
-    return parent if element is None else element
+    values = {
+        "name": _name(cursor, data),  # 1.4.1.3.1-3 → BT-44
+        "identifier": eori[0] if eori else None,  # 1.4.1.3.5 → BT-46
+        "legal_registration_identifier": _fiscal_code(cursor, data),  # 1.4.1.2 → BT-47
+        "vat_identifier": _vat(cursor, data),  # 1.4.1.1 → BT-48
+        "postal_address": _address(cursor, party, BuyerPostalAddress),  # 1.4.2 → BG-8
+    }
+    return build(Buyer, header if party is None else party, values)
 
 
 def _vat(cursor: Cursor, data: etree._Element | None) -> str | None:
@@ -91,7 +86,10 @@ def _name(cursor: Cursor, data: etree._Element | None) -> str | None:
     """``Anagrafica`` → the party name: ``Denominazione``, else ``Nome Cognome``.
 
     App. 4.1 folds ``Nome`` and ``Cognome`` into one BT; the model has no place for the split, so the name is
-    ``Nome Cognome`` and both elements are reported in ``unmapped`` (policy item 2 of #132).
+    ``Nome Cognome`` and both elements are reported in ``unmapped`` (policy item 2 of #132). App. 4.1 rows
+    1.2.1.3.1-3 / 1.4.1.3.1-3 also prefix the BT with ``Denominazione:`` or ``Nome#Cognome:``, the CIUS-IT marker of
+    which form a name takes (BR-IT-091, BR-IT-171); the reader keeps the plain name, as its BT-24 claims no CIUS-IT
+    (``_read``). ``EORI:`` stays: it is part of the BT-29 / BT-46 identifier's value, which carries no scheme.
     """
     registry = cursor.one(data, "Anagrafica")
     name = cursor.text(registry, "Denominazione")
@@ -111,13 +109,12 @@ def _address[A: SellerPostalAddress | BuyerPostalAddress](
     sede = cursor.one(party, "Sede")
     if sede is None:
         return None
-    return cursor.model(
-        cls,
-        sede,
-        address_line_1=cursor.text(sede, "Indirizzo"),  # BT-35 / BT-50
-        address_line_2=cursor.text(sede, "NumeroCivico"),  # BT-36 / BT-51
-        post_code=cursor.text(sede, "CAP"),  # BT-38 / BT-53
-        city=cursor.text(sede, "Comune"),  # BT-37 / BT-52
-        country_subdivision=cursor.text(sede, "Provincia"),  # BT-39 / BT-54
-        country_code=cursor.code(sede, "Nazione"),  # BT-40 / BT-55
-    )
+    values = {
+        "address_line_1": cursor.text(sede, "Indirizzo"),  # BT-35 / BT-50
+        "address_line_2": cursor.text(sede, "NumeroCivico"),  # BT-36 / BT-51
+        "post_code": cursor.text(sede, "CAP"),  # BT-38 / BT-53
+        "city": cursor.text(sede, "Comune"),  # BT-37 / BT-52
+        "country_subdivision": cursor.text(sede, "Provincia"),  # BT-39 / BT-54
+        "country_code": cursor.code(sede, "Nazione"),  # BT-40 / BT-55
+    }
+    return build(cls, sede, values)

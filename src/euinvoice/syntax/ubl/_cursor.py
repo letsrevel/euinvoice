@@ -9,7 +9,6 @@ the element (shared with the CII reader).
 """
 
 import datetime
-import re
 import typing as t
 
 from lxml import etree
@@ -19,7 +18,7 @@ from euinvoice.errors import ParseError
 from euinvoice.model import Identifier
 from euinvoice.model._base import EuInvoiceModel
 from euinvoice.syntax import _read_errors as read_errors
-from euinvoice.syntax._marks import XML_SPACE, Marks
+from euinvoice.syntax._marks import XML_SPACE, XSD_DATE, Marks
 
 __all__ = ["CAC", "CBC", "Cursor", "build", "type_code"]
 
@@ -27,9 +26,6 @@ CAC: t.Final = f"{{{_xml.UBL_CAC}}}"
 """Clark prefix of the UBL common aggregate components (``cac``)."""
 CBC: t.Final = f"{{{_xml.UBL_CBC}}}"
 """Clark prefix of the UBL common basic components (``cbc``)."""
-
-_DATE: t.Final = re.compile(r"([0-9]{4}-[0-9]{2}-[0-9]{2})(Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))?")
-"""``xs:date`` (XML Schema 1.1 Part 2, §3.3.9) with a four-digit year: the date, then an optional time zone."""
 
 _BOOLEANS: t.Final = {"true": True, "1": True, "false": False, "0": False}
 """The ``xs:boolean`` lexical space (XML Schema 1.1 Part 2, §3.3.2)."""
@@ -186,7 +182,7 @@ class Cursor:
             ParseError: The text is not an ``xs:date`` with a four-digit year, or not a calendar date.
         """
         text = (self.value(element) or "").strip(XML_SPACE)
-        match = _DATE.fullmatch(text)
+        match = XSD_DATE.fullmatch(text)
         if match:
             try:
                 value = datetime.date.fromisoformat(match.group(1))

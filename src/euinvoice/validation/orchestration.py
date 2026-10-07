@@ -41,7 +41,7 @@ import typing as t
 from lxml import etree
 
 from euinvoice import _xml, profiles
-from euinvoice.detection import Detection, detect_root
+from euinvoice.detection import Detection, detect_root, refuse_signed
 from euinvoice.errors import ArtifactsNotAvailableError, UnsupportedDocumentError
 from euinvoice.profiles._base import FACTURX_RULE_SET
 from euinvoice.profiles.facturx import _UNREGISTERED_LEVEL_IDENTIFIERS
@@ -116,13 +116,15 @@ def validate(data: bytes, profile: profiles.Profile | None = None) -> Validation
         TypeError: ``data`` is not ``bytes``.
         ParseError: The XML is malformed, has a DOCTYPE or exceeds the parser limits (D10).
         UnsupportedDocumentError: The root element is not a UBL 2.1 Invoice / CreditNote, a CII D16B
-            CrossIndustryInvoice or a FatturaPA 1.2 FatturaElettronica, or ``profile`` does not support the
-            document's syntax (no profile supports FatturaPA).
+            CrossIndustryInvoice or a FatturaPA 1.2 FatturaElettronica, ``profile`` does not support the
+            document's syntax (no profile supports FatturaPA), or ``data`` is a signed ``.p7m`` envelope
+            (:func:`euinvoice.detection.is_signed`; extract its XML first).
         ArtifactsNotAvailableError: An artifact the run needs is not in the cache (names the fetch
             command; XRechnung profiles also read ``xrechnung-validator-configuration``), ``saxonche`` is not
             installed, or the profile (or, auto-detected, the BT-24's level) needs the
             Factur-X / ZUGFeRD Schematron, which is not pinned yet (issue #42).
     """
+    refuse_signed(data)
     root = _xml.parse(data)
     detection = detect_root(root)
     syntax = detection.syntax

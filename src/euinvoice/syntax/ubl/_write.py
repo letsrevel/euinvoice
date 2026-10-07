@@ -21,7 +21,7 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.model import AdditionalSupportingDocument, Invoice, InvoiceNote, PaymentInstructions
-from euinvoice.model._base import set_extensions
+from euinvoice.model._base import extension_paths
 from euinvoice.model.codes import UNTDID_1001_CREDIT_NOTE_TYPE_UBL
 from euinvoice.syntax.ubl._build import (
     Context,
@@ -125,11 +125,12 @@ def write(invoice: Invoice) -> bytes:
 
 def _refuse_extensions(invoice: Invoice) -> None:
     """Refuse national extension data instead of dropping it silently (D3 as amended, plan §1)."""
-    if extensions := set_extensions(invoice):
+    if extensions := extension_paths(invoice):
         raise cannot_express(
             ", ".join(extensions),
             "national extension data (e.g. FatturaPA data in Invoice.it, D3) has no place in UBL 2.1; it is written "
-            "only in its national syntax. Set it to None to write the EN 16931 content alone",
+            "only in its national syntax. To write the EN 16931 content alone, pass the invoice through "
+            "euinvoice.model.without_extensions() first",
         )
 
 
