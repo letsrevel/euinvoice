@@ -39,6 +39,7 @@ python -m euinvoice artifacts fetch   # cache: $EUINVOICE_ARTIFACTS_DIR or ~/.ca
 - [Concepts](concepts.md): the model, business terms, profiles and syntaxes.
 - [Validation](validation.md): artifacts, `validate()` and findings.
 - [Factur-X / ZUGFeRD](facturx.md): hybrid PDF invoices.
+- [FatturaPA](fatturapa.md): Italy's SdI format, with `Invoice.it`.
 - [Mapping guide](mapping/index.md): from your billing model to `Invoice`, with a freelancer and a ticketing
   example.
 

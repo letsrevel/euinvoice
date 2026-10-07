@@ -2,7 +2,8 @@
 
 euinvoice validates with the **official** artifacts: the XSD of the syntax, then the Schematron rule sets of the
 profile (CEN EN 16931, Peppol BIS Billing 3.0, XRechnung). It does not reimplement the rules. When euinvoice's
-own checks and the official Schematron disagree, the Schematron is right.
+own checks and the official Schematron disagree, the Schematron is right. FatturaPA, which has no Schematron, is
+validated against its XSD and the offline SdI checks instead; see [FatturaPA](fatturapa.md#5-validate).
 
 ## 1. Install and fetch the artifacts
 

@@ -21,6 +21,7 @@ PAGES: t.Final = (
     QUICKSTART,
     "concepts.md",
     *CONTINUES_QUICKSTART,
+    "fatturapa.md",
     "mapping/freelancer.md",
     "mapping/ticketing.md",
 )

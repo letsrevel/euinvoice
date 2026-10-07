@@ -114,11 +114,31 @@ All notable changes to this project are documented here. The format follows
   - New `euinvoice.model.without_extensions(model)` (the model with every set extension hook cleared) and
     `euinvoice.model.extension_paths(model)` (the paths of the set hooks), so a read FatturaPA invoice can be written
     as UBL or CII on purpose. The UBL / CII refusal of a set extension now names `without_extensions()`.
+- FatturaPA documentation, CLI and README ([#122](https://github.com/letsrevel/euinvoice/issues/122)).
+  - New docs page `docs/fatturapa.md`: the v1 scope, building an invoice with `Invoice.it` / `InvoiceLine.it`,
+    writing with `Transmission`, `file_name` / `check_file`, reading with `parse` / `parse_all`, converting to UBL /
+    CII with `without_extensions`, what `validate()` checks and does not, the open policy issues (#130, #132, #133,
+    #136) and the compliance items outside the library (signing, delivery #114 / #124, SIAE ticketing and
+    corrispettivi telematici #125). Its examples run as doctests.
+  - CLI `convert --to fatturapa` writes FPR12, with the transmission header from `--transmitter` (IdTrasmittente:
+    country code and tax id), `--transmission-number` (ProgressivoInvio), `--recipient-code` (CodiceDestinatario,
+    default `0000000`) and `--pec` (PECDestinatario). A flag that does not apply to `--to`, a missing required one
+    or an invalid value is a usage error (exit 2), reported before `FILE` is read.
+  - CLI `convert --to ubl|cii --drop-extensions` converts an invoice read from FatturaPA without its `Invoice.it`
+    data and lists each dropped path on stderr. Without the flag the conversion is refused (exit 1) with a message
+    naming it.
+  - CLI `info` and `convert` refuse a FatturaPA lotto with a command-line message (exit 1); `validate` checks the
+    whole lotto.
+  - README: a FatturaPA row in the support matrix and its known limitations.
 
 ### Changed
 
 - `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
   `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
+- `convert --to` offers `fatturapa` too, and a `convert` refused by the FatturaPA checks says "FatturaPA pre-flight
+  and SdI checks" (#122).
+- The BT-120 format built from Natura and RiferimentoNormativo is defined once and shared by the FatturaPA reader
+  and writer; the output is unchanged ([#137](https://github.com/letsrevel/euinvoice/issues/137)).
 - A single-file artifact source whose `file` starts with a dot is refused, so the cache marker
   `.euinvoice-fingerprint` can never be a source's file ([#128](https://github.com/letsrevel/euinvoice/issues/128)).
 
