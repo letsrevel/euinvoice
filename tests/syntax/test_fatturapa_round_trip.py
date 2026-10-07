@@ -5,7 +5,8 @@
   original only by the documented normalizations of :data:`NORMALIZED`. Writing the read invoice again gives the same
   bytes, so the normalized form is a fixed point and nothing more is lost.
 * FPR12 → model → FPR12: every synthetic SdI-check document (tests/_fatturapa.py) that reads is written again; either
-  the writer refuses it (with an error, never by dropping content) or it reads back as the same invoice.
+  the writer refuses it (with an error, never by dropping content) or it reads back as the same invoice. The bodies
+  that write back are pinned in :data:`WRITTEN_BACK`.
 """
 
 import re
@@ -15,7 +16,7 @@ import pydantic
 import pytest
 from hypothesis import given, settings
 
-from _fatturapa import CASES, Doc
+from _fatturapa import CASES
 from _fatturapa_strategies import v1_invoices
 from _fatturapa_write import TRANSMISSION, samples
 from euinvoice import parse_all, to_xml
@@ -91,39 +92,76 @@ def test_random_v1_invoices_read_back(invoice: Invoice) -> None:
     _assert_round_trip(invoice)
 
 
-_DOCS: t.Final = [(f"{code}-{i}", doc) for code, case in CASES.items() for i, doc in enumerate(case.passing)]
+_DOCS: t.Final = {f"{code}-{i}": doc for code, case in CASES.items() for i, doc in enumerate(case.passing)}
+
+WRITTEN_BACK: t.Final = frozenset(
+    {
+        "00313-0/0",
+        "00400-0/0",
+        "00409-0/0",
+        "00409-0/1",
+        "00409-1/0",
+        "00409-1/1",
+        "00409-2/0",
+        "00409-2/1",
+        "00411-0/0",
+        "00417-0/0",
+        "00417-1/0",
+        "00418-0/0",
+        "00419-0/0",
+        "00420-0/0",
+        "00421-0/0",
+        "00421-1/0",
+        "00422-2/0",
+        "00423-1/0",
+        "00423-2/0",
+        "00423-3/0",
+        "00425-0/0",
+        "00427-0/0",
+        "00429-0/0",
+        "00437-0/0",
+        "00438-0/0",
+        "00444-0/0",
+        "00445-0/0",
+        "00471-0/0",
+        "00471-1/0",
+        "00476-0/0",
+        "00476-1/0",
+    }
+)
+"""The bodies (``<doc id>/<body index>``) of :data:`_DOCS` the reader accepts and the writer's v1 subset covers. The
+others carry cassa, a summary Arrotondamento, a TipoDocumento outside v1, FPA12 routing, … and are refused with an
+error. A change here is a coverage change."""
 
 
-@pytest.mark.parametrize("doc", [d for _, d in _DOCS], ids=[name for name, _ in _DOCS])
-def test_read_documents_write_back_or_are_refused(doc: Doc) -> None:
+def _written_back(name: str) -> set[str]:
+    """The bodies of ``_DOCS[name]`` that write back, each asserted to read back as the same invoice.
+
+    A document the reader refuses (#132) has none; a body the writer refuses (with an error, never by dropping content)
+    is not listed.
+    """
+    doc = _DOCS[name]
     try:
         results = parse_all(doc.xml())
     except ParseError:
-        return  # the reader refuses it (#132); nothing to write back
+        return set()
     transmission = TRANSMISSION.model_copy(update={"recipient_code": doc.recipient})
-    for result in results:
+    written: set[str] = set()
+    for index, result in enumerate(results):
         try:
             again = _write(result.invoice, transmission)
         except (PreflightError, ModelError):
-            continue  # content outside the writer's v1 subset: refused, never dropped
+            continue
         (back,) = parse_all(again)
         assert back.invoice == result.invoice
+        written.add(f"{name}/{index}")
+    return written
 
 
-def test_how_many_read_bodies_write_back() -> None:
-    written = 0
-    for _, doc in _DOCS:
-        try:
-            results = parse_all(doc.xml())
-        except ParseError:
-            continue
-        transmission = TRANSMISSION.model_copy(update={"recipient_code": doc.recipient})
-        for result in results:
-            try:
-                _write(result.invoice, transmission)
-            except (PreflightError, ModelError):
-                continue
-            written += 1
-    # 31 of the bodies the reader accepts are in the writer's v1 subset; the rest carry cassa, a summary Arrotondamento,
-    # a TipoDocumento outside v1, FPA12 routing, … and are refused with an error. A change here is a coverage change.
-    assert written == 31
+@pytest.mark.parametrize("name", list(_DOCS))
+def test_read_documents_write_back_or_are_refused(name: str) -> None:
+    assert _written_back(name) == {body for body in WRITTEN_BACK if body.startswith(f"{name}/")}
+
+
+def test_every_pinned_body_names_a_document() -> None:
+    assert {body.split("/")[0] for body in WRITTEN_BACK} <= _DOCS.keys()
