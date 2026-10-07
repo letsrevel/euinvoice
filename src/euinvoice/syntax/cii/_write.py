@@ -11,11 +11,13 @@ from lxml import etree
 
 from euinvoice import _xml
 from euinvoice.model import Invoice
+from euinvoice.model._base import set_extensions
 from euinvoice.syntax.cii._build import (
     OBJECT_TYPE_CODE,
     PROJECT_NAME,
     SUPPORTING_DOCUMENT_TYPE_CODE,
     TENDER_TYPE_CODE,
+    cannot_express,
     date_time,
     opt,
     sub,
@@ -42,7 +44,10 @@ def write(invoice: Invoice) -> bytes:
             BT-111 with BT-6 equal to BT-5 (CEN BR-53).
             An item price discount (BT-147) without gross price (BT-148) is written with the gross price
             BT-146 + BT-147, and raises only when that sum is negative (BR-28).
+            Also a set national extension (``it``, ``lines[i].it``), which only its national syntax carries (D3 as
+            amended); the message starts with its path.
     """
+    _refuse_extensions(invoice)
     root = etree.Element(f"{{{_xml.CII_RSM}}}CrossIndustryInvoice", nsmap=_xml.CII_NSMAP)
     _context(root, invoice)
     _document(root, invoice)
@@ -53,6 +58,16 @@ def write(invoice: Invoice) -> bytes:
     _delivery(transaction, invoice)
     settlement(transaction, invoice)
     return etree.tostring(root, xml_declaration=True, encoding="UTF-8")
+
+
+def _refuse_extensions(invoice: Invoice) -> None:
+    """Refuse national extension data instead of dropping it silently (D3 as amended, plan §1)."""
+    if extensions := set_extensions(invoice):
+        raise cannot_express(
+            ", ".join(extensions),
+            "national extension data (e.g. FatturaPA data in Invoice.it, D3) has no place in CII D16B; it is written "
+            "only in its national syntax. Set it to None to write the EN 16931 content alone",
+        )
 
 
 def _context(root: etree._Element, invoice: Invoice) -> None:

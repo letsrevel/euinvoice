@@ -5,6 +5,9 @@ hand, so it cannot drift from the model. Paths are dotted field names from the r
 repeated field (a tuple), e.g. ``lines[].item.name`` for BT-153. The root itself is ``BG-0`` with the
 empty path.
 
+Per-country extension hooks such as ``Invoice.it`` (marked with :func:`euinvoice.model._base.extension`) are
+skipped explicitly: they hold no EN 16931 business term (D3 as amended, ADR 0001).
+
 The completeness of the index against the official id list is a test
 (``tests/model/test_bt_index.py``).
 """
@@ -15,7 +18,7 @@ from collections.abc import Mapping
 
 import pydantic
 
-from euinvoice.model._base import EuInvoiceModel, bt_id
+from euinvoice.model._base import EuInvoiceModel, bt_id, extension_of
 from euinvoice.model.invoice import ROOT_ID, Invoice
 
 __all__ = ["BT_INDEX", "PATH_INDEX", "build_index", "id_of", "path_of"]
@@ -45,6 +48,8 @@ def _unwrap(annotation: t.Any) -> tuple[t.Any, bool]:
 
 def _walk(model: type[pydantic.BaseModel], prefix: str, index: dict[str, str]) -> None:
     for name, field in model.model_fields.items():
+        if extension_of(model, name) is not None:
+            continue  # national data, no BT (D3 as amended)
         inner, repeated = _unwrap(field.annotation)
         path = f"{prefix}{name}{'[]' if repeated else ''}"
         ident = bt_id(model, name)
