@@ -7,6 +7,10 @@ Every task in [§8](#8-work-breakdown) becomes one GitHub issue and one PR.
 **Status:** approved by the maintainer on 2026-10-05. Design decisions in §2 are locked. Change them
 only with an ADR in `docs/adr/` and a `needs-human` issue.
 
+**Amended by the maintainer on 2026-10-07 ([#115](https://github.com/letsrevel/euinvoice/issues/115)):**
+FatturaPA becomes a third syntax (M11), with matching changes to D3 and D8. ADR:
+[`docs/adr/0001-fatturapa-d3-d8.md`](docs/adr/0001-fatturapa-d3-d8.md).
+
 ---
 
 ## 1. Goal and scope
@@ -32,12 +36,14 @@ only with an ADR in `docs/adr/` and a `needs-human` issue.
 | Factur-X / ZUGFeRD: XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ✅ |
 | Factur-X / ZUGFeRD: BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ (EN 16931 subset; out-of-model content reported, never silently dropped) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
 | Factur-X / ZUGFeRD: MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | detect + extract only in v0.1.0: they carry no lines (and MINIMUM no VAT breakdown), which the canonical model requires (D1); `parse` raises `ParseError` ([#69](https://github.com/letsrevel/euinvoice/issues/69)) | ✅ (v0.1.0: ❌ until the Factur-X Schematron is pinned, [#42](https://github.com/letsrevel/euinvoice/issues/42)) |
+| FatturaPA 1.2.3, FPR12 only (Italy, SdI); TD01, TD04, TD24, TD17 (M11, after v0.1.0) | FatturaPA XML | ✅ one body per file, unsigned; no FPA12, no transmission | ✅ 1..n bodies (API shape for several bodies decided in #120, see 11.5); the rest in `ParseResult.unmapped` | ✅ XSD 1.2.3 + offline SdI checks (D8) |
 
 ### Non-goals for v0.1.0 (later waves, each a separate spec)
 
 - **Wave 2:** ebInterface (AT), other EN 16931 CIUSes (CIUS-RO, CIUS-HR, FR 2026 reform profiles,
   OIOUBL/DK, NLCIUS, …).
-- **Wave 3:** national non-EN 16931 syntaxes: FatturaPA (IT), KSeF FA(3) (PL), Facturae (ES).
+- **Wave 3:** national non-EN 16931 syntaxes: KSeF FA(3) (PL), Facturae (ES). FatturaPA (IT) moved
+  forward to M11 (maintainer, 2026-10-07, #115).
 - **Wave 4:** transports / clearance: Peppol access-point integrations (AS4 via providers), SDI, KSeF
   API, NAV, myDATA, VERI\*FACTU/TicketBAI, SAF-T.
 - Consumer integrations (Revel, the maintainer's invoice CLI). They consume this library later and
@@ -61,6 +67,13 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   validators must reject `float` inputs for amounts, quantities, prices and rates. Field names are
   readable snake_case (`seller.vat_identifier`), and every field carries its EN 16931 id in metadata
   (`json_schema_extra={"bt": "BT-31"}`). Error messages and docs cite BT/BG ids.
+  *Amended by the maintainer on 2026-10-07 (#115, ADR 0001):* data with no EN 16931 business term lives
+  only in optional, frozen per-country extension objects (`.it`), rooted at `Invoice.it` (also on the
+  draft). Whether line- and VAT-breakdown-level concepts nest on the line / BG-23 or are keyed from
+  `Invoice.it` is decided in #118 (BG-23 is derived by `calc.complete`). Each extension field cites its
+  national element id in its metadata under a per-syntax key instead of `bt`, e.g.
+  `json_schema_extra={"fatturapa": "2.1.1.1"}` (`TipoDocumento`). EN terms stay in the core model;
+  `bt_index` skips extensions, and a test asserts every extension field carries such an id.
 - **D4 · One document model.** Invoice and credit note share one model. The document type code
   (BT-3, UNTDID 1001: 380, 381, 384, 389, 751, …) decides the UBL root (`Invoice` vs `CreditNote`).
   There is no class hierarchy.
@@ -85,6 +98,24 @@ and a new CIUS is a new profile. Neither may require model rewrites.
   wins and we fix our code. We never suppress, filter or downgrade an official rule to make a test pass.
   Known upstream bugs (e.g. CEN issue #508, worked around by XRechnung's BR-TMP rules) are handled
   exactly as the upstream workaround does, documented and linked.
+  *Amended by the maintainer on 2026-10-07 (#115, ADR 0001):* FatturaPA has no official Schematron and
+  no public validator. Its oracle is the pinned **XSD 1.2.3** plus the offline-decidable SdI checks of
+  **Allegato A 1.9.1, Appendix 1**, which we encode ourselves as `Finding`s whose `rule_id` is the SdI
+  error code (e.g. `00421`) and whose message cites it. They are our reading of official prose, so each
+  cites its code and has a passing and a failing test. The finding severity is decided in #121. This
+  includes 00409 (duplicate invoice within the lotto), which is decidable from the file's bodies. Out of
+  scope, each with its reason, and documented as such:
+  - **tax register or SdI state** (#115 decision 2): identifiers and VAT groups (00300–00306,
+    00320–00327); `CodiceDestinatario` not existing or not active in SdI (00311, 00312); a duplicate of
+    an invoice sent earlier (00404); invalidated declaration of intent (00477); a `PECDestinatario` that
+    is one of SdI's own mailboxes (00330: the set of SdI mailboxes is SdI's data, Allegato A only shows
+    their form `sdixx@pec.fatturapa.it`);
+  - **file name** (00001, 00002): `validate()` receives bytes, not a file name, and 00002 needs SdI
+    state. The #119 file-name helper checks the 00001 syntax separately;
+  - **signature** (00100–00105, 00107): v1 is unsigned (#115 decision 1), and certificate checks need
+    CA state;
+  - **compressed file** (00106, empty or unreadable archive): `validate()` receives the XML, not the
+    ZIP a sender may transmit.
 - **D9 · Validation results are data, not exceptions.** `validate()` returns a `ValidationReport`
   (list of `Finding(rule_id, severity: fatal|error|warning|information, location (XPath), message, source
   rule set)`, `.ok` = no fatal/error). Exceptions are only for misuse (bad input type, malformed XML,
@@ -123,6 +154,10 @@ standards**. Do not reproduce their text. Use these free, authoritative equivale
 | UN/CEFACT CII XSD (D16B for EN 16931 CII) | unece.org (CEFACT XML schemas); the Factur-X package ships its own CII XSD, so use the one each profile mandates | UNECE terms | D16B (+ whatever Factur-X mandates; verify) |
 | Code lists | Derived from the pinned CEN Schematron code-list files (`EN16931-UBL-codes.sch`, `EN16931-CII-codes.sch`); cross-check with the EC "EN 16931 code lists" publication | n/a | same as CEN pin |
 | Schematron → XSLT compiler (only for rule sets shipped as `.sch` only, e.g. Peppol) | SchXslt (github.com/schxslt/schxslt), run on Saxon | MIT | latest 1.x release |
+| FatturaPA XSD (one schema for FPA12 and FPR12; namespace `http://ivaservizi.agenziaentrate.gov.it/docs/xsd/fatture/v1.2`, root `FatturaElettronica`; imports xmldsig by absolute http URL, resolved to a local copy per D10) | Agenzia Entrate (AE) file `https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3` (preferred), linked from the AE page for the 1.9.1 specs, agenziaentrate.gov.it/portale/specifiche-tecniche-versione-1.9.1-%C2%A0-utilizzabili-dal-15-maggio-2026-; byte-identical copy at fatturapa.gov.it `/export/documenti/fatturapa/v1.4/Schema_VFPR12_v1.2.3.xsd` | fatturapa.gov.it reserves all rights; fetch only, never committed or redistributed, AE copies preferred (maintainer, 2026-10-07, #115) | 1.2.3 (valid from 2025-04-01), sha256 `152944f6eef9f5d69ef6e955ee173b32142b00a8c1c5222fc97dfab5910e8a8c` |
+| SdI checks and error codes (**Allegato A**, Specifiche tecniche, Appendix 1; prose). This is the check list we follow for FPR12 (D8). The fatturapa.gov.it "Elenco dei controlli" PDF v2.0 (31/01/2025, `/export/documenti/fatturapa/v1.4/Elenco-Controlli-versione-2.0.pdf`) is a different list: it also has the IPA checks 00398/00399 for public-administration buyers and lacks 00313, 00325, 00326, 00327 and 00330. It is not used | AE file `https://www.agenziaentrate.gov.it/portale/documents/d/guest/allegato-a-specifiche-tecniche-vers-1-9-1`, linked from the same 1.9.1 page | as above: fetch only | 1.9.1 (31/03/2026, usable from 15/05/2026) |
+| FatturaPA example invoices (corpus for 11.5/11.6): `IT01234567890_FPR01.xml`, `_FPR02.xml`, `_FPR03.xml` (and `_FPA01`–`_FPA03`), linked from the fatturapa.gov.it "Formato FatturaPA" page | fatturapa.gov.it `/export/documenti/fatturapa/v1.2/IT01234567890_FPR0{1,2,3}.xml` | as above: fetch only | as published; FPR02 is known-invalid against XSD 1.2.3 (`ContattiTrasmittente` not expected); FPR03 has 2 bodies. Not pinned separately (#117): the conformance tests use the copies in the pinned `zugferd-corpus` (`fatturaPA/official/valid/`), content-identical to the fatturapa.gov.it files apart from line endings (FPA02 byte-identical; verified 2026-10-07) |
+| Official EN 16931 ↔ FatturaPA mapping: SdI rules for European invoices, "Regole tecniche relative alla gestione delle fatture di cui all'art. 3, comma 1, d.lgs. 148/2018" (App. 4.1 FatturaPA ↔ semantic model; App. 5 code tables: Natura, Ritenuta, Cassa previdenziale, TipoDocumento, RegimeFiscale, ModalitaPagamento). Written for UBL/CII to public administration; applies to FPR12 by analogy (same XSD) | fatturapa.gov.it `/export/documenti/Specifiche-Tecniche-Fatturazione-Europea-v2.6.pdf` | as above: fetch only | 2.6 (15/05/2025) |
 
 **Facts verified during scoping (2026-10-05):** with `saxonche` 13.0.0 on macOS arm64, the compiled CEN
 `EN16931-UBL-validation.xslt` compiles in about 0.14 s and validates `ubl-tc434-example1.xml` in about
@@ -134,6 +169,8 @@ standards**. Do not reproduce their text. Use these free, authoritative equivale
 **Mapping-table rule:** every BT/BG in the model must cite, in a code comment or the mapping table
 `docs/reference/bt-mapping.md`, its UBL XPath (from Peppol BIS docs) and its CII XPath (from the
 XRechnung spec). Where the two sources disagree, the CEN Schematron's syntax-binding rules decide.
+For FatturaPA, mapped BTs cite App. 4.1 of the Regole tecniche v2.6, and `Invoice.it` fields cite
+their FatturaPA element id (D3).
 
 ---
 
@@ -164,12 +201,17 @@ src/euinvoice/
                      #   BG-32 item attributes
     documents.py     # BG-24 additional supporting documents (incl. embedded binary objects BT-125)
     bt_index.py      # registry: every BT/BG id → model path; drives coverage tests and error messages
+    it/              # M11: Invoice.it extension (EXT-IT concepts with no BT, D3); fields cite FatturaPA
+                     #   element ids; code enums (TD, RF, Natura, MP, TP) checked against XSD 1.2.3
   calc/              # D11: build/derive totals + VAT breakdown; check() → findings with BR-CO ids
   report.py          # ValidationReport, Finding, Severity (pure data; used by calc and validate)
   syntax/
-    __init__.py      # Syntax enum {UBL, CII}; dispatch
+    __init__.py      # Syntax enum {UBL, CII}; dispatch (FatturaPA joins with 11.5/11.6)
     ubl.py           # write(invoice, profile) -> bytes ; read(root) -> Invoice   (Invoice + CreditNote)
     cii.py           # write / read for rsm:CrossIndustryInvoice
+    fatturapa/       # M11: FPR12 write (one body; transmission header from writer options) / read
+                     #   (1..n bodies); pure SdI file-name, 5 MB and ASCII/Latin-1 helpers. No signing and no
+                     #   transmission: delivery stays outside the core (#114)
   profiles/
     __init__.py      # Profile protocol + registry, lookup by BT-24 value
     en16931.py
@@ -180,9 +222,10 @@ src/euinvoice/
   validation/        # was validate/ (and detect.py) until #93: the functions shadow no module
     __init__.py      # validate(xml_bytes, profile=None) -> ValidationReport
     manifest.toml    # D7 pinned artifact sources
-    artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip + SchXslt precompile
+    artifacts.py     # cache dir resolution, fetch + sha256 verify + unzip (or single file) + SchXslt precompile
     xsd.py           # lxml XMLSchema per syntax/profile
     schematron.py    # saxonche runner, per-process compiled-executable cache, SVRL → Finding
+    sdi.py           # M11: offline SdI checks for FatturaPA (Allegato A 1.9.1), rule_id = SdI code (D8)
   facturx/
     __init__.py      # embed(pdf, xml|invoice, profile) -> bytes ; extract(pdf) -> (xml, profile)
     xmp.py           # Factur-X/ZUGFeRD XMP extension schema + PDF/A extension schema description
@@ -214,6 +257,7 @@ returns the `Invoice` and exposes `parse_detailed()` for the full result.
 
 **Round-trip invariant (the core quality bar):** for every valid upstream example X in the corpus,
 `validate(write(read(X)))` has no fatal or error findings, and `read(write(read(X))) == read(X)`.
+For FatturaPA, the 11.5 AC replaces it: FPR12 → model → FPR12 is lossless for the v1 subset, per body.
 
 ---
 
@@ -273,9 +317,9 @@ The notation is **ID · title** → *depends on* → acceptance criteria. Each i
 parallel. Each touches a disjoint set of files.
 
 ### M0 · Repository bootstrap
-- **0.1 · GitHub hygiene.** *deps: none.* Labels: `m0`…`m10`, `area:model`, `area:ubl`, `area:cii`,
-  `area:validate`, `area:profiles`, `area:pdf`, `area:api`, `area:docs`, `needs-human`, `artifacts`,
-  `dependencies`, `security`. Branch protection on `main`: PR required, required checks = `Lint & type
+- **0.1 · GitHub hygiene.** *deps: none.* Labels: `m0`…`m11`, `area:model`, `area:ubl`, `area:cii`,
+  `area:validate`, `area:profiles`, `area:pdf`, `area:api`, `area:docs`, `area:fatturapa`, `needs-human`,
+  `artifacts`, `dependencies`, `security`. Branch protection on `main`: PR required, required checks = `Lint & type
   checks`, `Tests (py3.12)`, `Tests (py3.13)`, `Tests (py3.14)`, `Build sdist + wheel`, `Conformance
   (official artifacts)`; squash-merge only; delete branch on merge. Repo description + topics.
   *AC:* `gh api` shows the protection; a test PR cannot merge red.
@@ -377,7 +421,9 @@ parallel. Each touches a disjoint set of files.
 - **9.3 · Property-based conformance.** *deps: 2.2, 5.2.* Hypothesis-generated invoices validate against
   EN 16931 core, Peppol and XRechnung (with their mandatory fields generated), in both syntaxes.
 - **9.4 · BT coverage gate.** *deps: 3.2, 4.2.* A test fails if any BT lacks a write and a read test per
-  syntax. It generates `docs/reference/bt-coverage.md`.
+  syntax. It generates `docs/reference/bt-coverage.md`. For FatturaPA (M11) the gate covers only the
+  BTs that App. 4.1 of the Regole tecniche v2.6 maps; the BTs with no FatturaPA home are reported (writer
+  pre-flight findings, `ParseResult.unmapped`), not round-tripped.
 
 ### M10 · Docs + release prep
 - **10.1 · Docs site.** *deps: 8.2.* mkdocs-material in `docs/`, published to GitHub Pages by a
@@ -388,8 +434,55 @@ parallel. Each touches a disjoint set of files.
   example (per-line VAT rates, VAT-inclusive prices converted to net, credit note referencing the invoice
   BT-25); reference (API, bt-mapping, bt-coverage, artifact licences).
 - **10.2 · README polish + CHANGELOG `[0.1.0]`.** *deps: 10.1.*
-- **10.3 · Release PR `release/v0.1.0`.** *deps: everything.* Bump with `uv version`, promote the CHANGELOG,
+- **10.3 · Release PR `release/v0.1.0`.** *deps: everything in M0–M10.* Bump with `uv version`, promote the CHANGELOG,
   open the PR, **and stop. Do not merge** (human-gated: PyPI trusted-publisher setup + final review).
+
+### M11 · FatturaPA (Italy)
+Added by the maintainer on 2026-10-07 (#115, option 1). v1 scope: FPR12 only; TD01, TD04, TD24, TD17;
+write and read; a single body per file on write, 1..n bodies on read; no signing, no transmission. Mapping
+policies (decimals on read, BG-20/21 on write, VAT categories O/L/M, default TD for BT-3 380, withholding
+vs BR-CO-16, splitting first and last names) are settled during design and raised as `needs-human` where
+the §3 sources do not settle them.
+- **11.1 · Plan amendment** ([#116](https://github.com/letsrevel/euinvoice/issues/116)). *deps: none.*
+  D3, D8, §1, §3, §4 and this milestone. *AC:* `uv run mkdocs build --strict`; the plan is internally
+  consistent.
+- **11.2 · Pin the FatturaPA artifacts** ([#117](https://github.com/letsrevel/euinvoice/issues/117)).
+  *deps: none.* Single-file (non-zip) sources in the manifest, sha256-verified, same cache layout; the
+  XSD 1.2.3 from the AE copy; the xmldsig import resolved locally with no network (D10); the
+  fatturapa.gov.it example invoices (§3) come from the pinned `zugferd-corpus` copies, not a separate pin. *AC:*
+  `make artifacts` fetches them, `make conformance` is green, and a test proves validation never touches
+  the network.
+- **11.3 · `Invoice.it` extension model** ([#118](https://github.com/letsrevel/euinvoice/issues/118)).
+  *deps: 11.1.* The v1 subset of the EXT-IT concepts per D3; transmission data (IdTrasmittente,
+  ProgressivoInvio, CodiceDestinatario fallback, PEC) are writer options, not model data. UBL/CII writers
+  report a set `.it`, never drop it silently. *AC:* the `bt_index` test exempts extensions explicitly;
+  model tests.
+- **11.4 · FPR12 writer** ([#119](https://github.com/letsrevel/euinvoice/issues/119)). *deps: 11.2, 11.3.*
+  Per App. 4–5 of the Regole tecniche v2.6 and the XSD element order; pre-flight findings for what FPR12
+  cannot express. *AC:* every test document passes XSD 1.2.3; round trips with 11.5.
+- **11.5 · FatturaPA reader** ([#120](https://github.com/letsrevel/euinvoice/issues/120)). *deps: 11.3
+  (11.4 for round trips).* Reads 1..n bodies and fills `Invoice.it`; the rest goes to
+  `ParseResult.unmapped`. *Open API decision for #120:* `parse()` / `ParseResult.invoice` are singular,
+  so for example `parse()` raises `UnsupportedDocumentError` on a lotto with several bodies and a
+  FatturaPA entry point returns the list. *AC:* the
+  official examples (except the known-invalid FPR02) parse; FPR12 → model → FPR12 is lossless for the
+  v1 subset.
+- **11.6 · Validation and detection** ([#121](https://github.com/letsrevel/euinvoice/issues/121)).
+  *deps: 11.2 (11.4 for test documents).* `detect()` recognizes FatturaPA; `validate()` runs XSD 1.2.3,
+  then the offline SdI checks per D8 (excluded codes listed with reasons). FatturaPA has no BT-24, so
+  profile resolution (D5) works differently; how is decided in #121. *AC:* a passing and a failing
+  test per check; `make conformance` green.
+- **11.7 · Docs, CLI and conformance corpus** ([#122](https://github.com/letsrevel/euinvoice/issues/122)).
+  *deps: 11.4, 11.5, 11.6.* Docs page (scope, `Invoice.it`, writer options, what the validator does and
+  does not check, out-of-scope compliance items), CLI `convert --to fatturapa` and `validate`, README
+  matrix, CHANGELOG. *AC:* doctests; `mkdocs build --strict`.
+
+**Deferred** (maintainer, 2026-10-07, #115): the Italian UBL profile, Peppol BIS Italia / CIUS-IT + EXT-IT
+([#123](https://github.com/letsrevel/euinvoice/issues/123)); a Fatture in Cloud adapter in a delivery
+package ([#124](https://github.com/letsrevel/euinvoice/issues/124)); FPA12 and signing; writing batch
+files (lotti, several bodies per file). Transmission to SdI stays in
+[#114](https://github.com/letsrevel/euinvoice/issues/114), and compliance outside the library (ticket-sales
+regime, delivery channel) in [#125](https://github.com/letsrevel/euinvoice/issues/125).
 
 ### Waves (dependency-respecting parallel schedule)
 1. 0.1 · 1.1 · 1.3 · 1.4
@@ -420,7 +513,7 @@ This is for the orchestrating agent. It is also mirrored in CLAUDE.md.
 1. **Setup.** Read CLAUDE.md, this plan and README. Run `zsh -ic gitsign` once in the main checkout
    (worktrees share `.git/config`, so every commit is SSH-signed). Verify `make check && make test` pass on
    `main`.
-2. **Issues.** Create GitHub milestones `M0`…`M10` and one issue per §8 item. Use the title `[Mx.y] <title>`
+2. **Issues.** Create GitHub milestones `M0`…`M11` and one issue per §8 item. Use the title `[Mx.y] <title>`
    and paste the item verbatim into the body, plus a "Blocked by #n" line per dependency, the AC as a
    checklist, and a link to this plan section. Apply labels. Then create a tracking issue
    **"v0.1.0 build-out"** with a task list of all issues.
@@ -443,6 +536,9 @@ This is for the orchestrating agent. It is also mirrored in CLAUDE.md.
 5. **Finish.** Open the 10.3 release PR (unmerged). Post a final summary on the tracking issue (what
    shipped, the BT coverage numbers, open `needs-human` items, upstream pins used), then notify the
    maintainer (push notification if available).
+
+**M11 (after v0.1.0 shipped)** runs under this same protocol: milestone M11, issues #116–#122, tracked on
+the dashboard issue #36. It ends when 11.7 merges. Any release is a separate, human-gated PR.
 
 **Never:** push to `main` directly, merge a red PR, merge the release PR, publish to PyPI, add a
 runtime dependency without `needs-human`, commit upstream artifacts or corpora, commit personal or

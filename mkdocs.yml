@@ -77,3 +77,5 @@ nav:
       - BT mapping: reference/bt-mapping.md
       - BT coverage: reference/bt-coverage.md
       - Artifact licences: reference/artifacts.md
+  - Design decisions:
+      - "ADR 0001: FatturaPA (D3, D8)": adr/0001-fatturapa-d3-d8.md
