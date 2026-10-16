@@ -126,11 +126,12 @@ def test_newer_release_exits_1_and_names_the_version(capsys: pytest.CaptureFixtu
 
 def test_release_from_a_branch_is_found_regardless_of_list_order(capsys: pytest.CaptureFixture[str]) -> None:
     # e.g. a later release listed after the pinned one: order does not matter, published_at does.
-    responses = {**CURRENT, CEN: [*CURRENT[CEN], rel("validation-1.3.17", "2026-11-01T00:00:00Z")]}
+    # validation-1.3.17 is ignored by cen-ubl and cen-cii; test with 1.3.18 instead.
+    responses = {**CURRENT, CEN: [*CURRENT[CEN], rel("validation-1.3.18", "2026-12-01T00:00:00Z")]}
     code, out = run(responses, capsys)
     assert code == 1
-    assert "DRIFT      cen-ubl: pinned 1.3.16, upstream has validation-1.3.17" in out
-    assert "DRIFT      cen-cii: pinned 1.3.16, upstream has validation-1.3.17" in out
+    assert "DRIFT      cen-ubl: pinned 1.3.16, upstream has validation-1.3.18" in out
+    assert "DRIFT      cen-cii: pinned 1.3.16, upstream has validation-1.3.18" in out
 
 
 def test_newer_prerelease_is_reported_distinctly(capsys: pytest.CaptureFixture[str]) -> None:
@@ -332,6 +333,59 @@ def test_get_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cu._OPENER, "open", open_)
     with pytest.raises(cu.UpstreamError, match="Name or service not known"):
         cu.get(PEPPOL_SCH)
+
+
+def test_ignored_tag_is_not_reported() -> None:
+    # A release matching ignore_tags is not reported as DRIFT, even if published after the pin.
+    ignore_check = cu.Check(
+        "releases",
+        api=cu.GITHUB_API,
+        repo="ConnectingEurope/eInvoicing-EN16931",
+        tag_prefix="validation-",
+        ignore_tags=("validation-1.3.17",),
+    )
+    source = Source("test", "1.3.16", "", "", "", ("*",))
+    responses = {
+        f"{GH}/ConnectingEurope/eInvoicing-EN16931/releases?per_page=100": [
+            rel("validation-1.3.17", "2026-11-01T00:00:00Z"),
+            rel("validation-1.3.16", "2026-04-13T12:58:43Z"),
+        ]
+    }
+    findings = cu.findings(source, ignore_check, fake(responses))
+    assert findings == []
+
+
+def test_non_ignored_newer_tag_still_reported() -> None:
+    # A newer tag not in ignore_tags is still reported even if other tags are ignored.
+    ignore_check = cu.Check(
+        "releases",
+        api=cu.GITHUB_API,
+        repo="ConnectingEurope/eInvoicing-EN16931",
+        tag_prefix="validation-",
+        ignore_tags=("validation-1.3.17",),
+    )
+    source = Source("test", "1.3.16", "", "", "", ("*",))
+    responses = {
+        f"{GH}/ConnectingEurope/eInvoicing-EN16931/releases?per_page=100": [
+            rel("validation-1.3.18", "2026-12-01T00:00:00Z"),
+            rel("validation-1.3.17", "2026-11-01T00:00:00Z"),
+            rel("validation-1.3.16", "2026-04-13T12:58:43Z"),
+        ]
+    }
+    findings = cu.findings(source, ignore_check, fake(responses))
+    assert len(findings) == 1
+    assert findings[0][0] == "DRIFT"
+    assert "validation-1.3.18" in findings[0][1]
+
+
+def test_cen_sources_ignore_validation_1_3_17() -> None:
+    # Verify that cen-ubl and cen-cii have ignore_tags=("validation-1.3.17",).
+    for source_name in ("cen-ubl", "cen-cii"):
+        checks = cu.CHECKS[source_name]
+        assert len(checks) == 1
+        check = checks[0]
+        assert check.strategy == "releases"
+        assert check.ignore_tags == ("validation-1.3.17",)
 
 
 def test_opener_refuses_redirects() -> None:

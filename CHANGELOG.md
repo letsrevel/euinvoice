@@ -145,6 +145,11 @@ All notable changes to this project are documented here. The format follows
   `ZUGFeRDv2/fail/XRechnung 722825203.XML`, which fails BR-DE-18 as the official Schematron says; its expected
   findings are recorded in `tests/conformance/expected_invalid.toml`
   ([#143](https://github.com/letsrevel/euinvoice/issues/143)).
+- The nightly drift check (`scripts/check_upstream.py`) deliberately holds the `cen-ubl` and `cen-cii` pins at
+  validation-1.3.16 via an `ignore_tags` field on the `Check` dataclass; 1.3.17 rejects valid Greek EL VAT ids
+  and the ecosystem (XRechnung 2.6.0, Peppol BIS) is built on 1.3.16. The hold is tracked in
+  [#147](https://github.com/letsrevel/euinvoice/issues/147) for review once adoption improves
+  ([#142](https://github.com/letsrevel/euinvoice/issues/142)).
 
 ## [0.1.0] - 2026-10-06
 
