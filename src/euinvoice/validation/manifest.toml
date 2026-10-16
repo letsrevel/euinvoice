@@ -107,15 +107,15 @@ note = """OASIS UBL 2.1 OS package (58 MB); only xsd/ (common + maindoc, incl. U
 UBL-CreditNote-2.1.xsd) is extracted."""
 
 [sources.zugferd-corpus]
-version = "d891458e9822"
+version = "82e886fb2136"
 # ponytail: GitHub-generated archive of a commit; checksum stability is not guaranteed by GitHub.
-url = "https://github.com/ZUGFeRD/corpus/archive/d891458e9822e34271a5438497bf924e89955979.zip"
-sha256 = "d5359c24404c9b076b631ddce01f2f96ea717683b0240e464c90129ef830c833"
+url = "https://github.com/ZUGFeRD/corpus/archive/82e886fb21369e3e83c1e97170a4ff406deceee7.zip"
+sha256 = "9704acb34c7b5066031cd39f41c62447f96ace6afa9b227f9a87653b64be2b4b"
 license = "Apache-2.0"
 members = ["*"]
 strip_components = 1
-note = """ZUGFeRD / Factur-X sample corpus at master commit d891458e9822e34271a5438497bf924e89955979 \
-(2026-08-11): ZUGFeRDv1/, ZUGFeRDv2/, XML-Rechnung/, PEPPOL/, fatturaPA/, incoming/, other/, unstructured/. Contains no XSD or Schematron."""
+note = """ZUGFeRD / Factur-X sample corpus at master commit 82e886fb21369e3e83c1e97170a4ff406deceee7 \
+(2026-10-13): ZUGFeRDv1/, ZUGFeRDv2/, XML-Rechnung/, PEPPOL/, fatturaPA/, incoming/, other/, unstructured/. Contains no XSD or Schematron."""
 
 [sources.schxslt]
 version = "1.10.1"
