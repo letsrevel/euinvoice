@@ -92,5 +92,5 @@ PAYMENT_MEANS: t.Final[t.Mapping[ModalitaPagamento, str]] = {
 PAYMENT_MEANS_WITHOUT_ACCOUNT: t.Final[t.Mapping[ModalitaPagamento, str]] = {
     ModalitaPagamento.MP05: "15",  # Bookentry credit: the first App. 5.6 MP05 row that BR-61 does not tie to BT-84
 }
-"""BT-81 when the ``DettaglioPagamento`` has no IBAN: BR-61 (CEN ``EN16931-model.sch`` 1.3.16, fatal) requires the
+"""BT-81 when the ``DettaglioPagamento`` has no IBAN: BR-61 (CEN ``EN16931-model.sch`` 1.3.17, fatal) requires the
 payment account BT-84 for codes 30 and 58, and IBAN (2.4.2.13) is optional, so MP05 without one cannot be 30."""

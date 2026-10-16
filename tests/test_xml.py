@@ -187,7 +187,7 @@ def test_oversized_text_node_is_rejected() -> None:
         _xml.parse(b"<a>" + b"x" * 10_000_001 + b"</a>")
 
 
-# --- namespace constants (verified against the CEN validation-1.3.16 Schematron <ns> decls) -----
+# --- namespace constants (verified against the CEN validation-1.3.17 Schematron <ns> decls) -----
 
 
 def test_namespace_maps() -> None:

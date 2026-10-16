@@ -14,7 +14,7 @@ from euinvoice.model.bt_index import PATH_INDEX, _unwrap, build_index
 # Every EN 16931 business group and business term with its name, as listed in the XRechnung 3.0.2
 # specification, chapter 11 "Detailbeschreibung" (xeinkauf.de, 302-XRechnung-2024-06-20.pdf): 32 groups
 # BG-1..BG-32 and 164 terms BT-1..BT-165. BT-4 does not exist in EN 16931: no source has it (XRechnung
-# spec, Peppol BIS 3.0.21 structure/syntax/ubl-invoice.xml, KoSIT xrechnung-visualization, CEN 1.3.16
+# spec, Peppol BIS 3.0.21 structure/syntax/ubl-invoice.xml, KoSIT xrechnung-visualization, CEN 1.3.17
 # Schematron). Cross-checked: every id cited by the CEN Schematron is in this list, and the Peppol and
 # KoSIT bindings cover all of them. BG-0 (the root) is a library convention, see bt-mapping.md.
 EN16931_IDS: t.Final[dict[str, str]] = {

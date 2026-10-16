@@ -9,7 +9,7 @@ __all__ = ["EN16931"]
 EN16931: t.Final = Profile(
     id="en16931",
     title="EN 16931 (core)",
-    # BT-24 as used by every core example of CEN validation-1.3.16: 15 UBL ``examples/*.xml``
+    # BT-24 as used by every core example of CEN validation-1.3.17: 15 UBL ``examples/*.xml``
     # (``cbc:CustomizationID``) and 12 CII ``examples/*.xml``
     # (``ram:GuidelineSpecifiedDocumentContextParameter/ram:ID``). The CEN Schematron fixes no value:
     # BR-01 (fatal, ``EN16931-model.sch``) only requires BT-24 to be non-empty.

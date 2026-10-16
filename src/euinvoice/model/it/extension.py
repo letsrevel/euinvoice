@@ -11,7 +11,7 @@ Where the data hangs:
 * Document level: :class:`ItalianExtension` on ``Invoice.it`` / ``InvoiceDraft.it``.
 * Line level: :class:`ItalianLineExtension` on ``InvoiceLine.it`` / ``LineDraft.it``. Lines are input data, one
   FatturaPA ``DettaglioLinee`` (2.2.1) per INVOICE LINE (BG-25) (App. 4.1). Keying them from the root would need
-  a unique line id, and no CEN rule makes BT-126 unique (BR-21 only requires it, ``EN16931-model.sch`` 1.3.16).
+  a unique line id, and no CEN rule makes BT-126 unique (BR-21 only requires it, ``EN16931-model.sch`` 1.3.17).
 * VAT summary level: :attr:`ItalianExtension.vat_summaries`, keyed by rate, ``Natura`` and split payment (see
   :class:`ItalianVatSummary`). BG-23 is derived by
   :func:`euinvoice.calc.complete` and cannot carry it: one BG-23 per VAT category and rate (BR-CO-17) can stand

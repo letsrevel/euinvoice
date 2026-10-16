@@ -37,8 +37,9 @@ a ``flag`` (a conformance test checks it), so KoSIT's ``@role`` fallbacks never 
 **When.** :func:`verdict` returns ``None`` unless the profile is XRECHNUNG, XRECHNUNG_EXTENSION or
 XRECHNUNG_CVD, a scenario matches, and that scenario's ``validateWithSchematron`` steps are the rule sets
 ``validate()`` ran, compared by stylesheet file stem (``EN16931-UBL-validation``, ``XRechnung-CII-validation``,
-...). The pinned configuration names the same CEN 1.3.16 and XRechnung Schematron 2.6.0 releases as the
-``cen-*`` and ``xrechnung-schematron`` pins (its ``scenarios.xml`` description). With an explicit profile,
+...). The pinned configuration names CEN 1.3.16 and XRechnung Schematron 2.6.0 (its ``scenarios.xml`` description):
+the ``xrechnung-schematron`` pin matches, the ``cen-*`` pins are one release
+ahead (1.3.17, see the CHANGELOG). With an explicit profile,
 KoSIT's choice of scenario still follows the document: XRECHNUNG on an Extension document gets the Extension
 scenario (same rule sets), while XRECHNUNG on a plain EN 16931 document matches a CEN-only scenario and gets
 ``None``, because that verdict would not be about the XRechnung rules that ran.

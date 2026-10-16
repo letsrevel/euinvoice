@@ -71,7 +71,7 @@ class TestCodes:
         with pytest.raises(pydantic.ValidationError, match="BR-CL-22"):
             _vat(exemption_reason_code="VATEX-EU-NOPE")
 
-    @pytest.mark.parametrize("country", ["AN", "SS", "DE"])
+    @pytest.mark.parametrize("country", ["SS", "DE"])
     def test_countries_accept_the_union_of_the_ubl_and_cii_lists(self, country: str) -> None:
         assert SellerPostalAddress(country_code=country).country_code == country
 

@@ -1,4 +1,4 @@
-"""``calc.check``: one negative test per CEN rule and per UBL/CII asymmetry (validation-1.3.16).
+"""``calc.check``: one negative test per CEN rule and per UBL/CII asymmetry (validation-1.3.17).
 
 Outcomes are written as the rule id for a fatal finding and ``~RULE@BINDING`` for a portability
 warning (only BINDING rejects RULE).
@@ -230,10 +230,10 @@ def test_difference_of_exactly_one_on_standard_rate(invoice: Invoice) -> None:
 @pytest.mark.parametrize(
     ("category", "prefix", "tax", "expected"),
     [
-        ("L", "BR-AF", "8.00", {"~BR-CO-17@UBL", "~BR-AF-09@UBL"}),  # 7.00 + 1: CII BR-AF-09 is true()
+        ("L", "BR-IG", "8.00", {"~BR-CO-17@UBL", "~BR-IG-09@UBL"}),  # 7.00 + 1: CII BR-IG-09 is true()
         # CII never runs BR-CO-17 on an L or M breakdown ($VATAF/$VATAG shadow $VAT_breakdown)
-        ("L", "BR-AF", "12.00", {"~BR-CO-17@UBL", "~BR-AF-09@UBL"}),
-        ("M", "BR-AG", "12.00", {"~BR-CO-17@UBL", "~BR-AG-09@UBL"}),
+        ("L", "BR-IG", "12.00", {"~BR-CO-17@UBL", "~BR-IG-09@UBL"}),
+        ("M", "BR-IP", "12.00", {"~BR-CO-17@UBL", "~BR-IP-09@UBL"}),
     ],
 )
 def test_igic_and_ipsi_tax_amount(category: str, prefix: str, tax: str, expected: set[str]) -> None:
@@ -430,10 +430,10 @@ REASONS = {c: calc.ExemptionReason(text="Exemption text") for c in ("E", "AE", "
 WRONG_RATES = [
     ("S", "BR-S", None),
     ("S", "BR-S", "0"),
-    ("L", "BR-AF", "-1"),
-    ("L", "BR-AF", None),
-    ("M", "BR-AG", "-1"),
-    ("M", "BR-AG", None),
+    ("L", "BR-IG", "-1"),
+    ("L", "BR-IG", None),
+    ("M", "BR-IP", "-1"),
+    ("M", "BR-IP", None),
     ("Z", "BR-Z", "5"),
     ("E", "BR-E", "5"),
     ("AE", "BR-AE", None),
@@ -473,15 +473,15 @@ def test_allowance_and_charge_rate_rules(category: str, prefix: str, rate: str |
 
 
 def test_igic_rate_zero_is_rejected_by_cii_only() -> None:
-    """BR-AF-05/06/07: UBL ``(cbc:Percent) >= 0``, CII ``RateApplicablePercent > 0``."""
+    """BR-IG-05/06/07: UBL ``(cbc:Percent) >= 0``, CII ``RateApplicablePercent > 0``."""
     invoice = complete_with_reasons(
         line("1", "100", "L", "0"), allowances=(allowance("1.00", "L", "0"),), charges=(charge("2.00", "L", "0"),)
     )
 
     assert located(invoice) == {
-        ("~BR-AF-05@CII", "lines[0].vat_information.rate"),
-        ("~BR-AF-06@CII", "allowances[0].vat_rate"),
-        ("~BR-AF-07@CII", "charges[0].vat_rate"),
+        ("~BR-IG-05@CII", "lines[0].vat_information.rate"),
+        ("~BR-IG-06@CII", "allowances[0].vat_rate"),
+        ("~BR-IG-07@CII", "charges[0].vat_rate"),
     }
 
 
@@ -505,7 +505,7 @@ def test_standard_rated_taxable_equal_to_document_level_amounts_passes_ubl_only(
 
 @pytest.mark.parametrize("category", ["L", "M"])
 def test_igic_ipsi_breakdown_at_an_unused_rate_passes(category: str) -> None:
-    """UBL BR-AF-08 / BR-AG-08 have no "the rate occurs on an item" condition, CII sums nothing to 0."""
+    """UBL BR-IG-08 / BR-IP-08 have no "the rate occurs on an item" condition, CII sums nothing to 0."""
     invoice = calc.complete(draft(line("1", "100", category, "7")))
 
     assert calc.check(with_breakdown(invoice, (*invoice.vat_breakdown, breakdown(category, "3")))) == ()

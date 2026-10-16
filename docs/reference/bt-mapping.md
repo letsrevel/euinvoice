@@ -15,11 +15,11 @@ None of them is committed (D7).
 
 | Abbrev. | Source | Used for |
 |---|---|---|
-| **CEN** | CEN validation artifacts `validation-1.3.16`: `schematron/abstract/EN16931-model.sch`, `UBL/EN16931-UBL-{model,syntax}.sch`, `CII/EN16931-CII-{model,syntax}.sch`, `codelist/EN16931-{UBL,CII}-codes.sch` (fetched by `make artifacts`) | mandatory terms (BR-01…BR-65, BR-CO-04, BR-CO-18), code lists (BR-CL-*), syntax restrictions (UBL-SR-*, CII-SR-*) |
+| **CEN** | CEN validation artifacts `validation-1.3.17`: `schematron/abstract/EN16931-model.sch`, `UBL/EN16931-UBL-{model,syntax}.sch`, `CII/EN16931-CII-{model,syntax}.sch`, `codelist/EN16931-{UBL,CII}-codes.sch` (fetched by `make artifacts`) | mandatory terms (BR-01…BR-65, BR-CO-04, BR-CO-18), code lists (BR-CL-*), syntax restrictions (UBL-SR-*, CII-SR-*) |
 | **XR** | XRechnung 3.0.2 specification, chapter 11 "Detailbeschreibung" (xeinkauf.de, `302-XRechnung-2024-06-20.pdf`) | the id inventory, names, data types, the semantic tree (which group holds which term) and the cardinality of every term |
 | **KoSIT viz** | `itplr-kosit/xrechnung-visualization` `v2026-08-31`, `src/xsl/ubl-invoice-xr.xsl` and `src/xsl/cii-xr.xsl` (Apache-2.0): one `xsl:template mode="BT-n" match="<XPath>"` per term | UBL and CII XPaths |
 | **Peppol** | Peppol BIS Billing 3.0.21 syntax binding, `structure/syntax/ubl-invoice.xml` and `ubl-creditnote.xml` from the same commit `806866bd` as the pinned `peppol-bis` artifact, but **not part of it** (the manifest extracts only `rules/`); read from GitHub for reference | UBL XPaths for BT-22, BT-23, BT-24, BG-1, BG-16, cross-check of the others |
-| **CEN examples** | `cen-cii/1.3.16/examples/CII_example*.xml` | CII XPaths of BT-7, BT-149, BT-150, which the KoSIT viz does not bind |
+| **CEN examples** | `cen-cii/1.3.17/examples/CII_example*.xml` | CII XPaths of BT-7, BT-149, BT-150, which the KoSIT viz does not bind |
 
 ### How cardinalities were decided
 
@@ -360,7 +360,7 @@ syntax's writer reports the gap.
   are not written in UBL": a `""` note without BT-21 is not written, and with BT-21 it reads back without BT-22). This is what the pinned sources allow: the UBL 2.1
   `IdentifierType` extends `xsd:normalizedString` (`common/CCTS_CCT_SchemaModule-2.1.xsd`) and the CII D16B
   `udt:IDType` / `udt:TextType` extend `xsd:token` / `xsd:string` (`..._UnqualifiedDataType_100pD16B.xsd`), all of
-  which admit the empty string, the CEN 1.3.16 Schematron tests no optional term for non-emptiness (e.g. ZUGFeRD corpus
+  which admit the empty string, the CEN 1.3.17 Schematron tests no optional term for non-emptiness (e.g. ZUGFeRD corpus
   `UBL/EN16931_Elektron.ubl.xml`, with an empty `cac:OrderReference/cbc:ID`, passes XSD and CEN), and XRechnung 2.6.0
   exempts exactly that element from PEPPOL-EN16931-R008 in UBL (`ubl/XRechnung-UBL-validation.sch`,
   `self::cbc:ID[parent::cac:OrderReference]`). The CIUS rules that forbid empty elements report it instead:
@@ -389,7 +389,7 @@ terms. A model → syntax → model round trip then gains that value.
 * **BT-110 = 0.00 when absent without VAT, in UBL (#87).** UBL needs BT-110 (see "UBL gap · no BT-110 with VAT").
   When it is absent, BT-112 = BT-109 and Σ BT-117 = 0, the UBL writer writes `cbc:TaxAmount` 0.00 in BT-5: both
   identities that define BT-110 give 0, BR-CO-15 (BT-112 = BT-109 + BT-110) and BR-CO-14 (BT-110 = Σ BT-117;
-  CEN 1.3.16 `UBL/EN16931-UBL-model.sch:73-74`). CII may leave it out then (`CII/EN16931-CII-model.sch:92-115`,
+  CEN 1.3.17 `UBL/EN16931-UBL-model.sch:73-74`). CII may leave it out then (`CII/EN16931-CII-model.sch:92-115`,
   the BT-112 = BT-109 disjunct; its BR-CO-14 fires only on a present `ram:TaxTotalAmount`, `$Tax_Total`). The
   upstream twins write it the same way: CEN `ubl-tc434-example7.xml:89` has `cbc:TaxAmount` 0.00 where
   `CII_example7.xml` has none, and KoSIT `01.05_minimal_test_ubl.xml` has 0 where `01.05_minimal_test_uncefact.xml`

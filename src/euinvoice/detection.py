@@ -53,7 +53,7 @@ _ROOTS: t.Final[t.Mapping[str, tuple[Syntax, Root]]] = {
     f"{{{_xml.FATTURAPA}}}FatturaElettronica": (Syntax.FATTURAPA, "FatturaElettronica"),
 }
 
-# BT-24 locations, relative to the root: the BR-01 params of the CEN 1.3.16 EN16931-UBL-model.sch
+# BT-24 locations, relative to the root: the BR-01 params of the CEN 1.3.17 EN16931-UBL-model.sch
 # (``cbc:CustomizationID``, at most once per the UBL 2.1 maindoc XSDs) and EN16931-CII-model.sch.
 _UBL_BT24: t.Final = f"{{{_xml.UBL_CBC}}}CustomizationID"
 _CII_BT24: t.Final = (

@@ -164,7 +164,7 @@ def repeated(root: etree._Element, path: str) -> etree._Element:
 @pytest.mark.parametrize(
     ("document", "expected"),
     [
-        # BR-01 (fatal, CEN 1.3.16 EN16931-UBL-model.sch): BT-24 required.
+        # BR-01 (fatal, CEN 1.3.17 EN16931-UBL-model.sch): BT-24 required.
         (lambda: without(ubl_example1(), f"{CBC}CustomizationID"), [("BR-01", "cen-ubl")]),
         # BR-01 plus CII-SR-009 / CII-SR-010 (fatal, EN16931-CII-syntax.sch): exactly one parameter and ID.
         (
@@ -244,7 +244,7 @@ def test_every_xrechnung_testsuite_instance_validates_under_its_detected_profile
     assert {f.source for f in report.findings} <= {"cen-ubl", "cen-cii", "xrechnung-schematron"}
 
 
-# Upgrades: CEN 1.3.16 flags these rules ``warning``, so the raw-flag report is ok, while KoSIT's
+# Upgrades: CEN 1.3.17 flags these rules ``warning``, so the raw-flag report is ok, while KoSIT's
 # scenarios.xml sets them to <customLevel level="error"> and rejects the document (report.kosit is not accepted):
 # CII-SR-452 / CII-SR-453 (EN16931-CII-syntax.sch, "Only one SpecifiedTradePaymentTerms [Description] should be
 # present") in the XRechnung CII scenario; UBL-CR-646 (EN16931-UBL-syntax.sch, "should not include the InvoiceLine

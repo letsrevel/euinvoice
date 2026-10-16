@@ -14,7 +14,7 @@ class VatCategory(enum.StrEnum):
 
     Equals :data:`UNTDID_5305_VAT_CATEGORY` (BR-CL-17 / BR-CL-18). The meanings are the names the
     CEN rules use for each code: the ``BR-<x>-01`` asserts of ``schematron/UBL/EN16931-UBL-model.sch``
-    (validation-1.3.16) test ``cbc:ID = '<code>'`` and name the category in their message.
+    (validation-1.3.17) test ``cbc:ID = '<code>'`` and name the category in their message.
     """
 
     STANDARD_RATED = "S"
@@ -32,9 +32,9 @@ class VatCategory(enum.StrEnum):
     NOT_SUBJECT_TO_VAT = "O"
     """"Not subject to VAT" (BR-O-01)."""
     IGIC = "L"
-    """"IGIC" (BR-AF-01)."""
+    """"IGIC" (BR-IG-01)."""
     IPSI = "M"
-    """"IPSI" (BR-AG-01)."""
+    """"IPSI" (BR-IP-01)."""
     SPLIT_PAYMENT = "B"
     """"Split payment", domestic Italian invoices only (BR-B-01)."""
 

@@ -1,7 +1,7 @@
 """The KoSIT verdict (issue #49) against the pinned KoSIT configuration, testsuite and rule sets (``make conformance``).
 
 Pinned: ``xrechnung-validator-configuration`` 2026-08-31 (``scenarios.xml``), ``xrechnung-testsuite`` 2026-08-31,
-CEN 1.3.16 and XRechnung Schematron 2.6.0.
+CEN 1.3.17 (KoSIT's configuration itself names 1.3.16) and XRechnung Schematron 2.6.0.
 """
 
 import copy
@@ -83,7 +83,7 @@ def synthetic(syntax: Syntax, **changes: str) -> bytes:
 
 @pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 def test_cen_fatal_rule_kosit_downgrades_is_not_ok_but_accepted(syntax: Syntax) -> None:
-    # BR-CL-23 (fatal, CEN 1.3.16): BT-130 must be a UN/ECE Rec 20/21 code; QQQ is not in the rule's list.
+    # BR-CL-23 (fatal, CEN 1.3.17): BT-130 must be a UN/ECE Rec 20/21 code; QQQ is not in the rule's list.
     # Every XRechnung scenario sets <customLevel level="warning">BR-CL-23</customLevel>.
     data = synthetic(syntax).replace(b'unitCode="C62"', b'unitCode="QQQ"')
 
@@ -99,7 +99,7 @@ def test_cen_fatal_rule_kosit_downgrades_is_not_ok_but_accepted(syntax: Syntax) 
 
 
 def with_sub_invoice_line() -> bytes:
-    # UBL-CR-646 (warning, CEN 1.3.16 EN16931-UBL-syntax.sch): no cac:SubInvoiceLine. cac:SubInvoiceLine follows
+    # UBL-CR-646 (warning, CEN 1.3.17 EN16931-UBL-syntax.sch): no cac:SubInvoiceLine. cac:SubInvoiceLine follows
     # cac:Price in the UBL 2.1 InvoiceLineType sequence.
     root = _xml.parse(synthetic(Syntax.UBL))
     line = root.find(f"{CAC}InvoiceLine")
@@ -113,7 +113,7 @@ def with_sub_invoice_line() -> bytes:
 
 
 def with_repeated_payment_terms() -> bytes:
-    # CII-SR-452 / CII-SR-453 (warning, CEN 1.3.16 EN16931-CII-syntax.sch lines 529-530): one payment terms.
+    # CII-SR-452 / CII-SR-453 (warning, CEN 1.3.17 EN16931-CII-syntax.sch lines 529-530): one payment terms.
     root = _xml.parse(synthetic(Syntax.CII, payment_terms="Payable within 30 days."))
     terms = root.find(f".//{RAM}SpecifiedTradePaymentTerms")
     assert terms is not None

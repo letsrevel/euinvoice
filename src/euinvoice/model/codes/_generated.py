@@ -2,14 +2,14 @@
 # DO NOT EDIT. Regenerate with `make codelists` (after `make artifacts`).
 #
 # Sources (IMPLEMENTATION_PLAN.md D7, src/euinvoice/validation/manifest.toml):
-#   cen-ubl 1.3.16 schematron/codelist/EN16931-UBL-codes.sch
-#     sha256 8b40ee8a553be0603b90688e6a0f77ae40871fabfa9d67e4afb1a6a1ccbb4b11
-#   cen-ubl 1.3.16 schematron/UBL/EN16931-UBL-model.sch
-#     sha256 908ba03ba0ebdeb940c777b831aab591f822eb1c81ceb09b690f633fae6909c9
-#   cen-cii 1.3.16 schematron/codelist/EN16931-CII-codes.sch
-#     sha256 c260c325dbccbbfdace9b049180aa4c708e45d84e03469a86bdf399b07a7b799
-#   cen-cii 1.3.16 schematron/CII/EN16931-CII-model.sch
-#     sha256 4fd7b27479aa31d464f977a6abb3ba9d29263c17f7ec49e54e0a77b02d2a751b
+#   cen-ubl 1.3.17 schematron/codelist/EN16931-UBL-codes.sch
+#     sha256 933c2ec261f7fc219aa0c7fa9f0b67c7fe156600b6fbb9a0eb045f583d173bd9
+#   cen-ubl 1.3.17 schematron/UBL/EN16931-UBL-model.sch
+#     sha256 895b0e412bf16d13ca22530844937ca9d93511ca587c2d12dbef4a6b2f37b0ff
+#   cen-cii 1.3.17 schematron/codelist/EN16931-CII-codes.sch
+#     sha256 e9c574ac66e083822b14f7e948a2ce188a817ee05412a0c02f3471ae5cf23958
+#   cen-cii 1.3.17 schematron/CII/EN16931-CII-model.sch
+#     sha256 864f96dff4819b39e0bdbda76c5396c78aee26d0f12676bb0b689df3230965ed
 """EN 16931 code lists (BR-CL-* rules), generated from the pinned CEN Schematron.
 
 Every constant holds the codes its BR-CL rules accept, sorted. All rules but BR-CL-24 (MIME) and
@@ -57,7 +57,7 @@ ISO_4217_CURRENCY: t.Final[frozenset[str]] = frozenset({
     "MOP", "MRU", "MUR", "MVR", "MWK", "MXN", "MXV", "MYR", "MZN", "NAD", "NGN", "NIO", "NOK",
     "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR", "PLN", "PYG", "QAR", "RON", "RSD",
     "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD", "SHP", "SLE", "SOS", "SRD", "SSP",
-    "STD", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS",
+    "STN", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP", "TRY", "TTD", "TWD", "TZS",
     "UAH", "UGX", "USD", "USN", "UYI", "UYU", "UYW", "UZS", "VED", "VES", "VND", "VUV", "WST",
     "XAF", "XAG", "XAU", "XBA", "XBB", "XBC", "XBD", "XCD", "XCG", "XDR", "XOF", "XPD", "XPF",
     "XPT", "XSU", "XTS", "XUA", "XXX", "YER", "ZAR", "ZMW", "ZWG",
@@ -140,9 +140,9 @@ UNTDID_1153_REFERENCE_QUALIFIER: t.Final[frozenset[str]] = frozenset({
     "VR", "VS", "VT", "VV", "WE", "WM", "WN", "WR", "WS", "WY", "XA", "XC", "XP", "ZZZ",
 })
 
-# Note subject codes, CII (ram:SubjectCode): a restriction of UNTDID 4451. A strict superset of
-# UNTDID_4451_NOTE_SUBJECT_UBL. The syntax-neutral model accepts this superset; the per-syntax
-# Schematron decides (D8). BR-CL-08 (cii).
+# Note subject codes, CII (ram:SubjectCode): a restriction of UNTDID 4451. Equal to
+# UNTDID_4451_NOTE_SUBJECT_UBL since CEN 1.3.17 (it was a strict superset in 1.3.16). The
+# syntax-neutral model accepts this list; the per-syntax Schematron decides (D8). BR-CL-08 (cii).
 UNTDID_4451_TEXT_SUBJECT: t.Final[frozenset[str]] = frozenset({
     "AAA", "AAB", "AAC", "AAD", "AAE", "AAF", "AAG", "AAI", "AAJ", "AAK", "AAL", "AAM", "AAN",
     "AAO", "AAP", "AAQ", "AAR", "AAS", "AAT", "AAU", "AAV", "AAW", "AAX", "AAY", "AAZ", "ABA",
@@ -180,8 +180,8 @@ UNTDID_4451_TEXT_SUBJECT: t.Final[frozenset[str]] = frozenset({
 # Note subject codes, UBL: a restriction of UNTDID 4451, bound in the UBL model file, not the codes
 # file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), not
 # normalize-spaced, as a substring of the list. A note without '#', or whose '#...#' segment is not
-# exactly 3 characters long, is not checked at all. A strict subset of UNTDID_4451_TEXT_SUBJECT
-# (CII). BR-CL-08 (ubl).
+# exactly 3 characters long, is not checked at all. Equal to UNTDID_4451_TEXT_SUBJECT (CII) since
+# CEN 1.3.17 (a strict subset in 1.3.16). BR-CL-08 (ubl).
 UNTDID_4451_NOTE_SUBJECT_UBL: t.Final[frozenset[str]] = frozenset({
     "AAA", "AAB", "AAC", "AAD", "AAE", "AAF", "AAG", "AAI", "AAJ", "AAK", "AAL", "AAM", "AAN",
     "AAO", "AAP", "AAQ", "AAR", "AAS", "AAT", "AAU", "AAV", "AAW", "AAX", "AAY", "AAZ", "ABA",
@@ -204,15 +204,16 @@ UNTDID_4451_NOTE_SUBJECT_UBL: t.Final[frozenset[str]] = frozenset({
     "ALC", "ALD", "ALE", "ALF", "ALG", "ALH", "ALI", "ALJ", "ALK", "ALL", "ALM", "ALN", "ALO",
     "ALP", "ALQ", "ARR", "ARS", "AUT", "AUU", "AUV", "AUW", "AUX", "AUY", "AUZ", "AVA", "AVB",
     "AVC", "AVD", "AVE", "AVF", "BAG", "BAH", "BAI", "BAJ", "BAK", "BAL", "BAM", "BAN", "BAO",
-    "BAP", "BAQ", "BAR", "BAS", "BLC", "BLD", "BLE", "BLF", "BLG", "BLH", "BLI", "BLJ", "BLK",
-    "BLL", "BLM", "BLN", "BLO", "BLP", "BLQ", "BLR", "BLS", "BLT", "BLU", "BLV", "BLW", "BLX",
-    "BLY", "BLZ", "BMA", "BMB", "BMC", "BMD", "BME", "CCI", "CEX", "CHG", "CIP", "CLP", "CLR",
-    "COI", "CUR", "CUS", "DAR", "DCL", "DEL", "DIN", "DOC", "DUT", "EUR", "FBC", "GBL", "GEN",
-    "GS7", "HAN", "HAZ", "ICN", "IIN", "IMI", "IND", "INS", "INV", "IRP", "ITR", "ITS", "LAN",
-    "LIN", "LOI", "MCO", "MDH", "MKS", "ORI", "OSI", "PAC", "PAI", "PAY", "PKG", "PKT", "PMD",
-    "PMT", "PRD", "PRF", "PRI", "PUR", "QIN", "QQD", "QUT", "RAH", "REG", "RET", "REV", "RQR",
-    "SAF", "SIC", "SIN", "SLR", "SPA", "SPG", "SPH", "SPP", "SPT", "SRN", "SSR", "SUR", "TCA",
-    "TDT", "TRA", "TRR", "TXD", "WHI", "ZZZ",
+    "BAP", "BAQ", "BAR", "BAS", "BAT", "BAU", "BAV", "BAW", "BAX", "BAY", "BAZ", "BBA", "BBB",
+    "BLC", "BLD", "BLE", "BLF", "BLG", "BLH", "BLI", "BLJ", "BLK", "BLL", "BLM", "BLN", "BLO",
+    "BLP", "BLQ", "BLR", "BLS", "BLT", "BLU", "BLV", "BLW", "BLX", "BLY", "BLZ", "BMA", "BMB",
+    "BMC", "BMD", "BME", "BMF", "BMG", "BMH", "CCI", "CCJ", "CCK", "CCL", "CCM", "CCN", "CCO",
+    "CEX", "CHG", "CIP", "CLP", "CLR", "COI", "CUR", "CUS", "DAR", "DCL", "DEL", "DIN", "DOC",
+    "DUT", "EUR", "FBC", "GBL", "GEN", "GS7", "HAN", "HAZ", "ICN", "IIN", "IMI", "IND", "INS",
+    "INV", "IRP", "ITR", "ITS", "LAN", "LIN", "LOI", "MCO", "MDH", "MKS", "ORI", "OSI", "PAC",
+    "PAI", "PAY", "PKG", "PKT", "PMD", "PMT", "PRD", "PRF", "PRI", "PUR", "QIN", "QQD", "QUT",
+    "RAH", "REG", "RET", "REV", "RQR", "SAF", "SIC", "SIN", "SLR", "SPA", "SPG", "SPH", "SPP",
+    "SPT", "SRN", "SSR", "SUR", "TCA", "TDT", "TRA", "TRR", "TXD", "WHI", "ZZZ",
 })
 
 # ISO 6523 ICD identifier scheme codes (party, legal registration, item standard and delivery
@@ -239,7 +240,7 @@ ISO_6523_ICD: t.Final[frozenset[str]] = frozenset({
     "0210", "0211", "0212", "0213", "0214", "0215", "0216", "0217", "0218", "0219", "0220", "0221",
     "0222", "0223", "0224", "0225", "0226", "0227", "0228", "0229", "0230", "0231", "0232", "0233",
     "0234", "0235", "0236", "0237", "0238", "0239", "0240", "0241", "0242", "0243", "0244", "0245",
-    "0246", "0247", "0248",
+    "0246", "0247", "0248", "0249", "0250", "0251",
 })
 
 # Scheme codes UBL BR-CL-10 accepts besides ISO 6523 ICD, only in cac:PartyIdentification under
@@ -265,9 +266,10 @@ UNTDID_7143_ITEM_CLASSIFICATION: t.Final[frozenset[str]] = frozenset({
     "TSP", "TSQ", "TSR", "TSS", "TST", "TSU", "UA", "UP", "VN", "VP", "VS", "VX", "ZZZ",
 })
 
-# ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file. The
-# syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.
-# BR-CL-14, BR-CL-15 (ubl).
+# ISO 3166-1 alpha-2 country codes, UBL file. Equal to the CII file since CEN 1.3.17 (it differed by
+# SS and AN in 1.3.16); kept split so a future divergence stops the generator. The syntax-neutral
+# model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived. BR-CL-14, BR-CL-15
+# (ubl).
 ISO_3166_1_COUNTRY_UBL: t.Final[frozenset[str]] = frozenset({
     "1A", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX",
     "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR",
@@ -287,24 +289,25 @@ ISO_3166_1_COUNTRY_UBL: t.Final[frozenset[str]] = frozenset({
     "VI", "VN", "VU", "WF", "WS", "XI", "YE", "YT", "ZA", "ZM", "ZW",
 })
 
-# ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file. The
-# syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.
-# BR-CL-14, BR-CL-15 (cii).
+# ISO 3166-1 alpha-2 country codes, CII file. Equal to the UBL file since CEN 1.3.17 (it differed by
+# SS and AN in 1.3.16); kept split so a future divergence stops the generator. The syntax-neutral
+# model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived. BR-CL-14, BR-CL-15
+# (cii).
 ISO_3166_1_COUNTRY_CII: t.Final[frozenset[str]] = frozenset({
-    "1A", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AN", "AO", "AQ", "AR", "AS", "AT", "AU", "AW",
-    "AX", "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ",
-    "BR", "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL",
-    "CM", "CN", "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ",
-    "EC", "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD",
-    "GE", "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY",
-    "HK", "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT",
-    "JE", "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA",
-    "LB", "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG",
-    "MH", "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY",
-    "MZ", "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE",
-    "PF", "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS",
-    "RU", "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO",
-    "SR", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN",
+    "1A", "AD", "AE", "AF", "AG", "AI", "AL", "AM", "AO", "AQ", "AR", "AS", "AT", "AU", "AW", "AX",
+    "AZ", "BA", "BB", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BL", "BM", "BN", "BO", "BQ", "BR",
+    "BS", "BT", "BV", "BW", "BY", "BZ", "CA", "CC", "CD", "CF", "CG", "CH", "CI", "CK", "CL", "CM",
+    "CN", "CO", "CR", "CU", "CV", "CW", "CX", "CY", "CZ", "DE", "DJ", "DK", "DM", "DO", "DZ", "EC",
+    "EE", "EG", "EH", "ER", "ES", "ET", "FI", "FJ", "FK", "FM", "FO", "FR", "GA", "GB", "GD", "GE",
+    "GF", "GG", "GH", "GI", "GL", "GM", "GN", "GP", "GQ", "GR", "GS", "GT", "GU", "GW", "GY", "HK",
+    "HM", "HN", "HR", "HT", "HU", "ID", "IE", "IL", "IM", "IN", "IO", "IQ", "IR", "IS", "IT", "JE",
+    "JM", "JO", "JP", "KE", "KG", "KH", "KI", "KM", "KN", "KP", "KR", "KW", "KY", "KZ", "LA", "LB",
+    "LC", "LI", "LK", "LR", "LS", "LT", "LU", "LV", "LY", "MA", "MC", "MD", "ME", "MF", "MG", "MH",
+    "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ",
+    "NA", "NC", "NE", "NF", "NG", "NI", "NL", "NO", "NP", "NR", "NU", "NZ", "OM", "PA", "PE", "PF",
+    "PG", "PH", "PK", "PL", "PM", "PN", "PR", "PS", "PT", "PW", "PY", "QA", "RE", "RO", "RS", "RU",
+    "RW", "SA", "SB", "SC", "SD", "SE", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SR",
+    "SS", "ST", "SV", "SX", "SY", "SZ", "TC", "TD", "TF", "TG", "TH", "TJ", "TK", "TL", "TM", "TN",
     "TO", "TR", "TT", "TV", "TW", "TZ", "UA", "UG", "UM", "US", "UY", "UZ", "VA", "VC", "VE", "VG",
     "VI", "VN", "VU", "WF", "WS", "XI", "YE", "YT", "ZA", "ZM", "ZW",
 })
@@ -350,25 +353,29 @@ UNTDID_7161_CHARGE_REASON: t.Final[frozenset[str]] = frozenset({
 # CEF VATEX VAT exemption reason codes. BR-CL-22 (ubl, cii). The rule upper-cases the value first:
 # match `code.strip().upper()`.
 VATEX_EXEMPTION_REASON: t.Final[frozenset[str]] = frozenset({
-    "VATEX-EU-132", "VATEX-EU-132-1A", "VATEX-EU-132-1B", "VATEX-EU-132-1C", "VATEX-EU-132-1D",
-    "VATEX-EU-132-1E", "VATEX-EU-132-1F", "VATEX-EU-132-1G", "VATEX-EU-132-1H", "VATEX-EU-132-1I",
-    "VATEX-EU-132-1J", "VATEX-EU-132-1K", "VATEX-EU-132-1L", "VATEX-EU-132-1M", "VATEX-EU-132-1N",
-    "VATEX-EU-132-1O", "VATEX-EU-132-1P", "VATEX-EU-132-1Q", "VATEX-EU-135-1", "VATEX-EU-143",
-    "VATEX-EU-143-1A", "VATEX-EU-143-1B", "VATEX-EU-143-1C", "VATEX-EU-143-1D", "VATEX-EU-143-1E",
-    "VATEX-EU-143-1F", "VATEX-EU-143-1FA", "VATEX-EU-143-1G", "VATEX-EU-143-1H", "VATEX-EU-143-1I",
-    "VATEX-EU-143-1J", "VATEX-EU-143-1K", "VATEX-EU-143-1L", "VATEX-EU-144", "VATEX-EU-146-1E",
-    "VATEX-EU-148", "VATEX-EU-148-A", "VATEX-EU-148-B", "VATEX-EU-148-C", "VATEX-EU-148-D",
-    "VATEX-EU-148-E", "VATEX-EU-148-F", "VATEX-EU-148-G", "VATEX-EU-151", "VATEX-EU-151-1A",
-    "VATEX-EU-151-1AA", "VATEX-EU-151-1B", "VATEX-EU-151-1C", "VATEX-EU-151-1D", "VATEX-EU-151-1E",
-    "VATEX-EU-153", "VATEX-EU-159", "VATEX-EU-309", "VATEX-EU-79-C", "VATEX-EU-AE", "VATEX-EU-D",
-    "VATEX-EU-F", "VATEX-EU-G", "VATEX-EU-I", "VATEX-EU-IC", "VATEX-EU-J", "VATEX-EU-O",
-    "VATEX-FR-298SEXDECIESA", "VATEX-FR-AE", "VATEX-FR-CGI261-1", "VATEX-FR-CGI261-2",
-    "VATEX-FR-CGI261-3", "VATEX-FR-CGI261-4", "VATEX-FR-CGI261-5", "VATEX-FR-CGI261-7",
-    "VATEX-FR-CGI261-8", "VATEX-FR-CGI261A", "VATEX-FR-CGI261B", "VATEX-FR-CGI261C-1",
-    "VATEX-FR-CGI261C-2", "VATEX-FR-CGI261C-3", "VATEX-FR-CGI261D-1", "VATEX-FR-CGI261D-1BIS",
-    "VATEX-FR-CGI261D-2", "VATEX-FR-CGI261D-3", "VATEX-FR-CGI261D-4", "VATEX-FR-CGI261E-1",
-    "VATEX-FR-CGI261E-2", "VATEX-FR-CGI275", "VATEX-FR-CGI277A", "VATEX-FR-CGI295",
-    "VATEX-FR-CNWVAT", "VATEX-FR-FRANCHISE",
+    "VATEX-ES-IGIC11", "VATEX-ES-IGIC12", "VATEX-ES-IGIC13", "VATEX-ES-IGIC1TR", "VATEX-ES-IGIC25",
+    "VATEX-ES-IGIC47", "VATEX-ES-IGIC90", "VATEX-ES-IPSI7", "VATEX-ES-IPSI8", "VATEX-ES-IVA140BIS",
+    "VATEX-ES-IVA20", "VATEX-ES-IVA21", "VATEX-ES-IVA22", "VATEX-ES-IVA23/24", "VATEX-ES-IVA25",
+    "VATEX-ES-N1", "VATEX-ES-N2", "VATEX-ES-OTROS", "VATEX-EU-132", "VATEX-EU-132-1A",
+    "VATEX-EU-132-1B", "VATEX-EU-132-1C", "VATEX-EU-132-1D", "VATEX-EU-132-1E", "VATEX-EU-132-1F",
+    "VATEX-EU-132-1G", "VATEX-EU-132-1H", "VATEX-EU-132-1I", "VATEX-EU-132-1J", "VATEX-EU-132-1K",
+    "VATEX-EU-132-1L", "VATEX-EU-132-1M", "VATEX-EU-132-1N", "VATEX-EU-132-1O", "VATEX-EU-132-1P",
+    "VATEX-EU-132-1Q", "VATEX-EU-135-1", "VATEX-EU-143", "VATEX-EU-143-1A", "VATEX-EU-143-1B",
+    "VATEX-EU-143-1C", "VATEX-EU-143-1D", "VATEX-EU-143-1E", "VATEX-EU-143-1F", "VATEX-EU-143-1FA",
+    "VATEX-EU-143-1G", "VATEX-EU-143-1H", "VATEX-EU-143-1I", "VATEX-EU-143-1J", "VATEX-EU-143-1K",
+    "VATEX-EU-143-1L", "VATEX-EU-144", "VATEX-EU-146-1E", "VATEX-EU-148", "VATEX-EU-148-A",
+    "VATEX-EU-148-B", "VATEX-EU-148-C", "VATEX-EU-148-D", "VATEX-EU-148-E", "VATEX-EU-148-F",
+    "VATEX-EU-148-G", "VATEX-EU-151", "VATEX-EU-151-1A", "VATEX-EU-151-1AA", "VATEX-EU-151-1B",
+    "VATEX-EU-151-1C", "VATEX-EU-151-1D", "VATEX-EU-151-1E", "VATEX-EU-153", "VATEX-EU-159",
+    "VATEX-EU-309", "VATEX-EU-79-C", "VATEX-EU-AE", "VATEX-EU-D", "VATEX-EU-F", "VATEX-EU-G",
+    "VATEX-EU-I", "VATEX-EU-IC", "VATEX-EU-J", "VATEX-EU-O", "VATEX-FR-298SEXDECIESA",
+    "VATEX-FR-AE", "VATEX-FR-CGI261-1", "VATEX-FR-CGI261-2", "VATEX-FR-CGI261-3",
+    "VATEX-FR-CGI261-4", "VATEX-FR-CGI261-5", "VATEX-FR-CGI261-7", "VATEX-FR-CGI261-8",
+    "VATEX-FR-CGI261A", "VATEX-FR-CGI261B", "VATEX-FR-CGI261C-1", "VATEX-FR-CGI261C-2",
+    "VATEX-FR-CGI261C-3", "VATEX-FR-CGI261D-1", "VATEX-FR-CGI261D-1BIS", "VATEX-FR-CGI261D-2",
+    "VATEX-FR-CGI261D-3", "VATEX-FR-CGI261D-4", "VATEX-FR-CGI261E-1", "VATEX-FR-CGI261E-2",
+    "VATEX-FR-CGI275", "VATEX-FR-CGI277A", "VATEX-FR-CGI295", "VATEX-FR-CNWVAT",
+    "VATEX-FR-FRANCHISE",
 })
 
 # UN/ECE Recommendation 20 unit codes with Rec 21 extension. BR-CL-23 (ubl, cii).
@@ -550,10 +557,10 @@ CEF_EAS: t.Final[frozenset[str]] = frozenset({
     "0002", "0007", "0009", "0037", "0060", "0088", "0096", "0097", "0106", "0130", "0135", "0142",
     "0147", "0151", "0154", "0158", "0170", "0177", "0183", "0184", "0188", "0190", "0191", "0192",
     "0193", "0194", "0195", "0196", "0198", "0199", "0200", "0201", "0202", "0203", "0204", "0205",
-    "0208", "0209", "0210", "0211", "0212", "0213", "0215", "0216", "0217", "0218", "0219", "0220",
-    "0221", "0225", "0230", "0235", "0240", "0242", "0244", "0245", "0246", "0248", "9910", "9913",
-    "9914", "9915", "9918", "9919", "9920", "9922", "9923", "9924", "9925", "9926", "9927", "9928",
-    "9929", "9930", "9931", "9932", "9933", "9934", "9935", "9936", "9937", "9938", "9939", "9940",
-    "9941", "9942", "9943", "9944", "9945", "9946", "9947", "9948", "9949", "9950", "9951", "9952",
-    "9953", "9957", "9959", "AN", "AQ", "AS", "AU", "EM",
+    "0208", "0209", "0210", "0211", "0212", "0213", "0215", "0216", "0217", "0218", "0221", "0225",
+    "0230", "0235", "0240", "0242", "0244", "0245", "0246", "0248", "9910", "9913", "9914", "9915",
+    "9918", "9919", "9920", "9922", "9923", "9924", "9925", "9926", "9927", "9928", "9929", "9930",
+    "9931", "9932", "9933", "9934", "9935", "9936", "9937", "9938", "9939", "9940", "9941", "9942",
+    "9943", "9944", "9945", "9946", "9947", "9948", "9949", "9950", "9951", "9952", "9953", "9957",
+    "9959", "9960", "AN", "AQ", "AS", "AU", "EM",
 })

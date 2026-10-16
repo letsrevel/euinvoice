@@ -47,20 +47,22 @@ def test_ubl_document_type_lists_split_the_cii_list_and_share_only_81() -> None:
     assert invoice & credit_note == {"81"}
 
 
-def test_country_lists_differ_between_syntaxes_exactly_as_documented() -> None:
+def test_country_lists_are_equal_since_cen_1_3_17() -> None:
+    # CEN 1.3.16 differed by SS (UBL only) and AN (CII only); 1.3.17 harmonised them (#509).
     ubl, cii = codes.ISO_3166_1_COUNTRY_UBL, codes.ISO_3166_1_COUNTRY_CII
 
-    assert ubl - cii == {"SS"}
-    assert cii - ubl == {"AN"}
+    assert ubl == cii
+    assert "SS" in ubl
+    assert "AN" not in ubl
 
 
 def test_model_country_list_is_the_union_of_both_syntaxes() -> None:
     assert codes.ISO_3166_1_COUNTRY == codes.ISO_3166_1_COUNTRY_UBL | codes.ISO_3166_1_COUNTRY_CII
-    assert {"SS", "AN", "DE"} <= codes.ISO_3166_1_COUNTRY
+    assert {"SS", "DE"} <= codes.ISO_3166_1_COUNTRY
 
 
 def test_vatex_codes_are_upper_case_so_callers_match_upper_cased_values() -> None:
-    # BR-CL-22 tests normalize-space(upper-case(.)) against the list (CEN 1.3.16, UBL and CII).
+    # BR-CL-22 tests normalize-space(upper-case(.)) against the list (CEN 1.3.17, UBL and CII).
     assert all(code == code.upper() for code in codes.VATEX_EXEMPTION_REASON)
     assert " vatex-eu-79-c ".strip().upper() in codes.VATEX_EXEMPTION_REASON
 
@@ -86,10 +88,10 @@ def test_lists_contain_well_known_codes(name: str, samples: set[str]) -> None:
     assert samples <= t.cast(frozenset[str], getattr(codes, name))
 
 
-def test_note_subject_ubl_list_is_a_strict_subset_of_the_cii_list() -> None:
-    # CEN 1.3.16: UBL BR-CL-08 (schematron/UBL/EN16931-UBL-model.sch) has 383 UNTDID 4451 codes, CII
-    # BR-CL-08 (schematron/codelist/EN16931-CII-codes.sch) 401. The model accepts the CII superset (D8).
+def test_note_subject_lists_are_equal_since_cen_1_3_17() -> None:
+    # CEN 1.3.16: UBL BR-CL-08 (schematron/UBL/EN16931-UBL-model.sch) had 383 UNTDID 4451 codes, CII
+    # BR-CL-08 (schematron/codelist/EN16931-CII-codes.sch) 401. 1.3.17 gives both 401 (#510).
     ubl, cii = codes.UNTDID_4451_NOTE_SUBJECT_UBL, codes.UNTDID_4451_TEXT_SUBJECT
 
-    assert (len(ubl), len(cii)) == (383, 401)
-    assert ubl < cii
+    assert (len(ubl), len(cii)) == (401, 401)
+    assert ubl == cii

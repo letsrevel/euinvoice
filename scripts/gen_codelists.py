@@ -183,9 +183,9 @@ TABLE: tuple[CodeList, ...] = (
     ),
     CodeList(
         "UNTDID_4451_TEXT_SUBJECT",
-        "Note subject codes, CII (ram:SubjectCode): a restriction of UNTDID 4451. A strict superset of "
-        "UNTDID_4451_NOTE_SUBJECT_UBL. The syntax-neutral model accepts this superset; the per-syntax "
-        "Schematron decides (D8).",
+        "Note subject codes, CII (ram:SubjectCode): a restriction of UNTDID 4451. Equal to "
+        "UNTDID_4451_NOTE_SUBJECT_UBL since CEN 1.3.17 (it was a strict superset in 1.3.16). The "
+        "syntax-neutral model accepts this list; the per-syntax Schematron decides (D8).",
         (Ref("cii", "BR-CL-08"),),
     ),
     CodeList(
@@ -193,8 +193,8 @@ TABLE: tuple[CodeList, ...] = (
         "Note subject codes, UBL: a restriction of UNTDID 4451, bound in the UBL model file, not the "
         "codes file. It checks the code between the first two '#' of cbc:Note ('#AAI#text'), not "
         "normalize-spaced, as a substring of the list. A note without '#', or whose '#...#' segment is "
-        "not exactly 3 characters long, is not checked at all. A strict subset of "
-        "UNTDID_4451_TEXT_SUBJECT (CII).",
+        "not exactly 3 characters long, is not checked at all. Equal to "
+        "UNTDID_4451_TEXT_SUBJECT (CII) since CEN 1.3.17 (a strict subset in 1.3.16).",
         (Ref("ubl", "BR-CL-08"),),
     ),
     CodeList(
@@ -212,14 +212,16 @@ TABLE: tuple[CodeList, ...] = (
     CodeList("UNTDID_7143_ITEM_CLASSIFICATION", "UNTDID 7143 item classification scheme codes.", _both("BR-CL-13")),
     CodeList(
         "ISO_3166_1_COUNTRY_UBL",
-        "ISO 3166-1 alpha-2 country codes, UBL file. It has SS and lacks AN, unlike the CII file. The "
-        "syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
+        "ISO 3166-1 alpha-2 country codes, UBL file. Equal to the CII file since CEN 1.3.17 (it differed by "
+        "SS and AN in 1.3.16); kept split so a future divergence stops the generator. The syntax-neutral "
+        "model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
         (Ref("ubl", "BR-CL-14"), Ref("ubl", "BR-CL-15")),
     ),
     CodeList(
         "ISO_3166_1_COUNTRY_CII",
-        "ISO 3166-1 alpha-2 country codes, CII file. It has AN and lacks SS, unlike the UBL file. The "
-        "syntax-neutral model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
+        "ISO 3166-1 alpha-2 country codes, CII file. Equal to the UBL file since CEN 1.3.17 (it differed by "
+        "SS and AN in 1.3.16); kept split so a future divergence stops the generator. The syntax-neutral "
+        "model accepts the union, ISO_3166_1_COUNTRY in euinvoice.model.codes.derived.",
         (Ref("cii", "BR-CL-14"), Ref("cii", "BR-CL-15")),
     ),
     CodeList("UNTDID_4461_PAYMENT_MEANS", "UNTDID 4461 payment means codes.", _both("BR-CL-16")),

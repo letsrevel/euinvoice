@@ -145,6 +145,24 @@ All notable changes to this project are documented here. The format follows
   `ZUGFeRDv2/fail/XRechnung 722825203.XML`, which fails BR-DE-18 as the official Schematron says; its expected
   findings are recorded in `tests/conformance/expected_invalid.toml`
   ([#143](https://github.com/letsrevel/euinvoice/issues/143)).
+- Pinned CEN EN 16931 validation artifacts `cen-ubl` and `cen-cii` bumped from `validation-1.3.16` to
+  `validation-1.3.17` (2026-10-12) ([#142](https://github.com/letsrevel/euinvoice/issues/142)). Upstream changes
+  that reach this library:
+  - The IGIC and IPSI rules were renamed: BR-AF-xx is now BR-IG-xx (category `L`) and BR-AG-xx is BR-IP-xx (`M`).
+    `calc.check` reports the new ids. The UBL binding uses these names; the CII binding of 1.3.17 has them swapped
+    (a CEN bug, [eInvoicing-EN16931#533](https://github.com/ConnectingEurope/eInvoicing-EN16931/issues/533)).
+  - Code lists: ISO 4217 `STN` replaces `STD`; ICD `0249`-`0251` and EAS `9960` are added (`0219`/`0220` leave the
+    EAS list); the VATEX list gains the Spanish `VATEX-ES-*` codes; UNTDID 4451 gains 18 codes. The UBL and CII
+    ISO 3166-1 lists are now equal (`SS` in both, `AN` in neither), as are the UBL and CII note subject lists.
+    `AN` is no longer accepted as a country code. `ISO_3166_1_COUNTRY_UBL`/`_CII` and
+    `UNTDID_4451_NOTE_SUBJECT_UBL` stay, now equal to their counterparts.
+  - Rule fixes upstream: UBL-SR-25 requires exactly one `cac:PartyName` in a `cac:DeliveryParty`; BR-CO-09 (UBL)
+    no longer accepts a single letter; CII-SR-475/476 get the right context; CII-SR-035-038 and 221 are re-anchored;
+    CII-SR-464 says "should"; CII BR-CO-10/11/12/14, BR-DEC-13/15 and BR-S-09 cast to `xs:decimal`; new rules
+    UBL-SR-57-59, CII-DT-105/106 and CII-SR-495-497; CII-SR-471 is removed.
+  - `xrechnung-schematron` 2.6.0 and the KoSIT configuration of 2026-08-31 still name CEN 1.3.16. The Peppol and
+    XRechnung profiles run the CEN 1.3.17 rules together with their own rule sets; the official
+    `xrechnung-testsuite` and Peppol examples give the same results.
 
 ## [0.1.0] - 2026-10-06
 

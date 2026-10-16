@@ -19,7 +19,7 @@ def dec(value: str) -> Decimal:
 
 
 def test_cen_rounding_issue_example_reproduces_its_totals() -> None:
-    """``examples/CII-BR-CO-10-RoundingIssue.xml`` (CEN validation-1.3.16, en16931-cii), rebuilt by hand.
+    """``examples/CII-BR-CO-10-RoundingIssue.xml`` (CEN validation-1.3.17, en16931-cii), rebuilt by hand.
 
     Four lines (quantity, net price, category, rate): (1, 720.81, S, 19.00), (1, 0.01, Z, 0),
     (-1, 720.81, S, 19.00), (-1, 0.01, Z, 0). The file's line totals are 720.81, 0.01, -720.81, -0.01;

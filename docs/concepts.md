@@ -39,7 +39,7 @@ Decimal('1.10')
 [`InvoiceDraft`](reference/api.md#euinvoice.model.InvoiceDraft) is the invoice without the amounts that can be
 derived: BT-131 per line, the DOCUMENT TOTALS (BG-22) and the VAT BREAKDOWN (BG-23).
 [`calc.complete`](reference/api.md#euinvoice.calc.complete) derives them per the CEN rules (pinned
-`validation-1.3.16`):
+`validation-1.3.17`):
 
 | Derived | Rule |
 |---|---|
@@ -79,8 +79,8 @@ below are the ones those rules use ([`model.codes.VatCategory`](reference/api.md
 | `K` | Intra-community supply | 0 (BR-IC-05) | required (BR-IC-10) |
 | `G` | Export outside the EU | 0 (BR-G-05) | required (BR-G-10) |
 | `O` | Not subject to VAT | absent (BR-O-05) | required (BR-O-10) |
-| `L` | IGIC | zero or greater (BR-AF-05; the CII binding tests greater than zero) | not allowed (BR-AF-10) |
-| `M` | IPSI | zero or greater (BR-AG-05) | not allowed (BR-AG-10) |
+| `L` | IGIC | zero or greater (BR-IG-05; the CII binding tests greater than zero) | not allowed (BR-IG-10) |
+| `M` | IPSI | zero or greater (BR-IP-05) | not allowed (BR-IP-10) |
 
 The tenth code, `B` (split payment), is for domestic Italian invoices only (BR-B-01).
 

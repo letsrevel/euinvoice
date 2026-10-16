@@ -1,4 +1,4 @@
-"""``calc.check``: the period rules BR-29, BR-CO-19 (BG-14) and BR-30, BR-CO-20 (BG-26), CEN 1.3.16."""
+"""``calc.check``: the period rules BR-29, BR-CO-19 (BG-14) and BR-30, BR-CO-20 (BG-26), CEN 1.3.17."""
 
 import datetime
 

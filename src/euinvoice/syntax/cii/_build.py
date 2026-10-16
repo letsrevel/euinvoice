@@ -47,9 +47,10 @@ VAT_POINT_DATE_CODES_FROM_CII: t.Final[t.Mapping[str, str]] = {
 """UNTDID 2475 (CII ``ram:DueDateTypeCode``) → UNTDID 2005 (model, BT-8), inverse of :data:`VAT_POINT_DATE_CODES`."""
 
 VAT_SCHEME: t.Final = "VA"
-"""``@schemeID`` of a VAT identifier (BT-31, BT-48, BT-63): BR-56 and BR-AF-02 select ``ram:ID[@schemeID='VA']``."""
+"""``@schemeID`` of a VAT identifier (BT-31, BT-48, BT-63): BR-56, BR-IG-02 and BR-IP-02 select
+``ram:ID[@schemeID='VA']``."""
 FISCAL_SCHEME: t.Final = "FC"
-"""``@schemeID`` of the Seller tax registration identifier (BT-32), selected as ``'FC'`` by BR-AF-02 etc."""
+"""``@schemeID`` of the Seller tax registration identifier (BT-32), selected as ``'FC'`` by BR-IG-02, BR-IP-02 etc."""
 TENDER_TYPE_CODE: t.Final = "50"
 """``ram:TypeCode`` of the ``ram:AdditionalReferencedDocument`` holding BT-17 (CII-DT-018, CII-SR-457)."""
 OBJECT_TYPE_CODE: t.Final = "130"

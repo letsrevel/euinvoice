@@ -1,7 +1,7 @@
 """The per-VAT-category rules of :func:`check`: ``BR-<x>-01``, ``-05`` … ``-10``, BR-O-11 … 14, BR-B-02.
 
 Each rule is evaluated as the UBL binding (``schematron/UBL/EN16931-UBL-model.sch``) and as the CII
-binding (``schematron/CII/EN16931-CII-model.sch``) test it, CEN validation-1.3.16; see the asymmetry
+binding (``schematron/CII/EN16931-CII-model.sch``) test it, CEN validation-1.3.17; see the asymmetry
 table in :mod:`euinvoice.calc`.
 """
 
@@ -61,7 +61,7 @@ class CategoryRules:
         per_rate: S, L, M: ``-01`` asks for "at least one" breakdown and ``-08`` sums per rate.
             Otherwise ``-01`` asks for "exactly one" and ``-08`` sums the whole category.
         zero_tax: ``-09`` requires BT-117 = 0 (both bindings); otherwise ``-09`` is the ±1 test.
-        cii_tax_test: Whether CII tests ``-09`` at all (``true()`` for BR-AF-09 and BR-AG-09).
+        cii_tax_test: Whether CII tests ``-09`` at all (``true()`` for BR-IG-09 and BR-IP-09).
         needs_reason: ``-10`` requires BT-120 or BT-121; otherwise it forbids both.
     """
 
@@ -87,16 +87,16 @@ CATEGORY_RULES: t.Final[dict[str, CategoryRules]] = {
     ),
     VatCategory.EXPORT_OUTSIDE_EU: CategoryRules("BR-G", "Export outside the EU", _Z, _Z, False, True, True, True),
     VatCategory.NOT_SUBJECT_TO_VAT: CategoryRules("BR-O", "Not subject to VAT", _A, _A, False, True, True, True),
-    # BR-AF-05/06/07: UBL "(cbc:Percent) >= 0", CII "ram:RateApplicablePercent > 0"; BR-AF-09: CII true()
-    VatCategory.IGIC: CategoryRules("BR-AF", "IGIC", _N, _P, True, False, False, False),
-    VatCategory.IPSI: CategoryRules("BR-AG", "IPSI", _N, _N, True, False, False, False),
+    # BR-IG-05/06/07: UBL "(cbc:Percent) >= 0", CII "ram:RateApplicablePercent > 0"; BR-IG-09: CII true()
+    VatCategory.IGIC: CategoryRules("BR-IG", "IGIC", _N, _P, True, False, False, False),
+    VatCategory.IPSI: CategoryRules("BR-IP", "IPSI", _N, _N, True, False, False, False),
 }
 """The rules of each VAT category code. ``B`` (split payment) has none of these; its rules BR-B-01 (a
 domestic Italian invoice, out of calc's scope) and BR-B-02 (no mixing with ``S``) are document rules."""
 
 
 def vat_in_tolerance(tax: Decimal, taxable: Decimal, rate: Decimal, *, strict: bool) -> bool:
-    """The ±1 test of BR-CO-17 and BR-S/AF/AG-09: BT-117 against round(|BT-116| * BT-119 / 100, 2).
+    """The ±1 test of BR-CO-17 and BR-S/IG/IP-09: BT-117 against round(|BT-116| * BT-119 / 100, 2).
 
     The product is non-negative, so half-up rounding equals XPath ``round()`` here.
 
@@ -166,7 +166,7 @@ def _items(
 def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Verdict]:
     """``-08``: the taxable amount of a breakdown.
 
-    CII: S/AF/AG and O exact; Z/E/AE/IC/G within 1. UBL: Z/E/AE/IC/G/O exact; AF/AG within 1 (their
+    CII: S/IG/IP and O exact; Z/E/AE/IC/G within 1. UBL: Z/E/AE/IC/G/O exact; IG/IP within 1 (their
     ``exists(//cac:InvoiceLine)`` guard always holds). UBL BR-S-08 reads, by XPath precedence,
     ``(occurs and within 1 of the full sum) or (an allowance or charge has the rate and within 1 of
     charges - allowances)``: its second disjunct is the credit-note branch, whose line sum is empty on
@@ -200,7 +200,7 @@ def _taxable(invoice: Invoice, index: int, group: VatBreakdown, rules: CategoryR
 
 
 def _tax(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[Verdict]:
-    """``-09``: 0 for Z/E/AE/IC/G/O (both bindings); the strict ±1 test for S/AF/AG (CII: S only)."""
+    """``-09``: 0 for Z/E/AE/IC/G/O (both bindings); the strict ±1 test for S/IG/IP (CII: S only)."""
     category, rate, tax = group.category_code, group.rate, group.tax_amount
     if rules.zero_tax:
         ubl = cii = tax == 0
@@ -233,8 +233,8 @@ def _reason(index: int, group: VatBreakdown, rules: CategoryRules) -> Iterator[V
 def _presence(invoice: Invoice) -> Iterator[Verdict]:
     """``-01`` with ``n`` = lines, ``a`` = document allowances and charges, ``b`` = breakdowns of the category.
 
-    UBL S/AF/AG: ``(n + a > 0) = (b > 0)``. UBL Z/E/AE/IC/G/O: ``b = 1 or n + a + b = 0`` (its
-    ``//cac:TaxCategory`` also matches the breakdown itself). CII S/AF/AG: ``(n = 0 or n + b >= 2) and
+    UBL S/IG/IP: ``(n + a > 0) = (b > 0)``. UBL Z/E/AE/IC/G/O: ``b = 1 or n + a + b = 0`` (its
+    ``//cac:TaxCategory`` also matches the breakdown itself). CII S/IG/IP: ``(n = 0 or n + b >= 2) and
     (a = 0 or a + b >= 2)``. CII Z/E/AE/IC/G: ``n + a + b = 0 or (b = 1 and n + a > 0)``. CII O:
     ``b = 0 or (b = 1 and n + a > 0)``.
     """

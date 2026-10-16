@@ -30,7 +30,7 @@ from lxml import etree
 from euinvoice.errors import ParseError
 
 # Namespace URIs, verified against the ``<ns>`` declarations of the CEN validation artifacts
-# release ``validation-1.3.16`` (EN16931-UBL-validation.sch, EN16931-CII-validation.sch) and the
+# release ``validation-1.3.17`` (EN16931-UBL-validation.sch, EN16931-CII-validation.sch) and the
 # official examples shipped with it (ubl-tc434-example1.xml, ubl-tc434-creditnote1.xml, CII_example1.xml).
 
 UBL_INVOICE: t.Final = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
@@ -61,7 +61,7 @@ SVRL: t.Final = "http://purl.oclc.org/dsdl/svrl"
 """Schematron Validation Report Language (ISO/IEC 19757-3 Annex D), the output of every compiled rule set.
 
 Verified as the ``svrl`` namespace of the pinned CEN ``EN16931-UBL-validation.xslt`` /
-``EN16931-CII-validation.xslt`` (1.3.16), the SchXslt-compiled Peppol 3.0.21 stylesheets and the
+``EN16931-CII-validation.xslt`` (1.3.17), the SchXslt-compiled Peppol 3.0.21 stylesheets and the
 XRechnung 2.6.0 ``XRechnung-*-validation.xsl``.
 """
 SCHEMATRON: t.Final = "http://purl.oclc.org/dsdl/schematron"

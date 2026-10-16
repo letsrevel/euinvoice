@@ -5,7 +5,7 @@ its business terms carry different BT ids; the classes share field names, so cod
 ``city`` or ``country_code`` works with any of them.
 
 Cardinalities are those of ``docs/reference/bt-mapping.md``: a term is required only where a
-``fatal`` CEN rule (validation-1.3.16) demands it, and each such field cites its rule.
+``fatal`` CEN rule (validation-1.3.17) demands it, and each such field cites its rule.
 """
 
 import typing as t

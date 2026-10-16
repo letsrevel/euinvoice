@@ -199,15 +199,15 @@ CASES: dict[str, Callable[[], Invoice]] = {
     "BR-S-05": lambda: single("S", "0"),
     "BR-Z-05": lambda: single("Z", "5"),
     "BR-O-05": lambda: single("O", "0"),
-    "BR-AF-05 rate 0": lambda: single(
+    "BR-IG-05 rate 0": lambda: single(
         "L", "0", allowances=(allowance("1.00", "L", "0"),), charges=(charge("2.00", "L", "0"),)
     ),
-    "BR-AF-09 by 1": lambda: (lambda i: with_breakdown(i, (group(0, i, tax_amount="8.00"),)))(single("L", "7")),
-    "BR-AF-09 by 5": lambda: (lambda i: with_breakdown(i, (group(0, i, tax_amount="12.00"),)))(single("L", "7")),
+    "BR-IG-09 by 1": lambda: (lambda i: with_breakdown(i, (group(0, i, tax_amount="8.00"),)))(single("L", "7")),
+    "BR-IG-09 by 5": lambda: (lambda i: with_breakdown(i, (group(0, i, tax_amount="12.00"),)))(single("L", "7")),
     "BR-48 on IGIC": lambda: (lambda i: with_breakdown(i, (group(0, i, rate=None, tax_amount="0.00"),)))(
         single("L", "7")
     ),
-    "BR-AG-08 unused rate": lambda: extra(bd("M", "3"), invoice=single("M", "7")),
+    "BR-IP-08 unused rate": lambda: extra(bd("M", "3"), invoice=single("M", "7")),
     "BR-29": lambda: invoicing_period(FEB, JAN),
     "BR-29 one day": lambda: invoicing_period(JAN, JAN),
     "BR-CO-19": lambda: invoicing_period(None, None),
@@ -223,7 +223,7 @@ RULE_SETS: dict[Syntax, tuple[Callable[[Invoice], bytes], schematron.RuleSet]] =
     Syntax.CII: (cii.write, schematron.CEN_CII),
     Syntax.UBL: (ubl.write, schematron.CEN_UBL),
 }
-IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-79]|CO-20|29|30|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|AF|AG)-(01|0[5-9]|1[0-4]))")
+IN_SCOPE: t.Final = re.compile(r"BR-(CO-1[0-79]|CO-20|29|30|4[5-8]|53|B-02|(S|Z|E|AE|IC|G|O|IG|IP)-(01|0[5-9]|1[0-4]))")
 """The official rules ``calc.check`` covers (BR-x-02..04 are about party identifiers, not amounts)."""
 BOTH_REFUSE: t.Final[dict[str, dict[Syntax, set[str]]]] = {
     # BT-111 = BT-110 = 23.50: CII BR-53 and BR-CO-15, UBL BR-CO-15 (no BR-CO-14, the two amounts are equal)
@@ -234,16 +234,27 @@ CLEAN: t.Final = {
     "clean",
     "BR-CO-15 BT-110 absent, no VAT",
     "BR-CO-17 within 1",
-    "BR-AG-08 unused rate",
+    "BR-IP-08 unused rate",
     "BR-29 one day",
     "BR-30 one day",
     "BT-8 without BG-14",
 }
 
 
+CII_IGIC_IPSI_SWAPPED: t.Final = {"BR-IG-05 rate 0"}
+"""Cases where CEN 1.3.17's CII binding reports IGIC (``L``) under BR-IP-* and IPSI (``M``) under BR-IG-*, the
+other way round from its UBL binding and from its own rule texts (upstream
+ConnectingEurope/eInvoicing-EN16931#533, open). ``calc.check`` uses the UBL names, which the rule texts
+confirm. The case stays an expected failure until CEN fixes the CII names; strict, so the fix is noticed."""
+
+
 @pytest.mark.parametrize("syntax", [Syntax.UBL, Syntax.CII])
 @pytest.mark.parametrize("name", list(CASES))
-def test_check_agrees_with_the_official_cen_schematron(name: str, syntax: Syntax) -> None:
+def test_check_agrees_with_the_official_cen_schematron(
+    name: str, syntax: Syntax, request: pytest.FixtureRequest
+) -> None:
+    if syntax is Syntax.CII and name in CII_IGIC_IPSI_SWAPPED:
+        request.applymarker(pytest.mark.xfail(strict=True, reason="CEN 1.3.17 CII swaps BR-IG/BR-IP (CEN#533)"))
     invoice = CASES[name]()
     serialize, rule_set = RULE_SETS[syntax]
     findings = calc.check(invoice)

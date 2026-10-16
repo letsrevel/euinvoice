@@ -5,7 +5,7 @@ meant to pass the official rules of its :class:`Target`: the VAT categories, rat
 follow the CEN category rules, and the parties carry what the categories and the target profile require.
 :func:`invoices` draws a draft, completes it with :func:`euinvoice.calc.complete` and returns the invoice.
 
-Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16931-model.sch`` and
+Each requirement encoded here, with its source (CEN ``validation-1.3.17`` ``EN16931-model.sch`` and
 ``EN16931-UBL-codes.sch``; Peppol BIS ``3.0.21`` ``PEPPOL-EN16931-UBL.sch``; XRechnung Schematron ``2.6.0``):
 
 * VAT categories S, Z, E, AE, K, G, O with the rates of BR-<x>-05/06/07 (S above zero; Z, E, AE, K, G zero;
@@ -17,7 +17,7 @@ Each requirement encoded here, with its source (CEN ``validation-1.3.16`` ``EN16
   identifier BT-29 (BR-CO-26).
 * K: an actual delivery date BT-72 (BR-IC-11) and a deliver-to country code BT-80 (BR-IC-12).
 * BT-20 always present, so EN 16931-1 BR-CO-25 (BT-9 or BT-20 when the amount due is positive) holds whatever
-  the amount due; BR-CO-25 is not implemented in the pinned CEN 1.3.16 Schematron. BT-9 is optional, and
+  the amount due; BR-CO-25 is not implemented in the pinned CEN 1.3.17 Schematron. BT-9 is optional, and
   absent from a credit note without BG-16: UBL has no place for it there (the UBL writer raises,
   ``ubl/_write.py``).
 * Allowances and charges carry a reason or a reason code (BR-33, BR-38, BR-42, BR-44); codes ``95``

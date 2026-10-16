@@ -17,7 +17,7 @@
 # fx:ConformanceLevel selects. Factur-X levels whose Schematron is not pinned (#42) run the EN 16931 core rules.
 # validate() reports the raw official flags; KoSIT customLevel overrides apply only to report.kosit (#49).
 #
-# Reasons quote the pinned versions (cen 1.3.16, peppol-bis 3.0.21, xrechnung-schematron 2.6.0, KoSIT testsuite and
+# Reasons quote the pinned versions (cen 1.3.17, peppol-bis 3.0.21, xrechnung-schematron 2.6.0, KoSIT testsuite and
 # validator configuration 2026-08-31, ZUGFeRD corpus 82e886fb2136): on a pin bump, grep them and update.
 
 # --------------------------------------------------------------------------------------------------------------
@@ -412,7 +412,7 @@ file = "ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
 outcome = "reads"
 rules = []
 upstream = ["CII-DT-031"]
-reason = "Level BASIC (EN 16931 core rules, #42). The upstream XML puts a currencyID where CII-DT-031 forbids it ('currencyID should not be present', fatal, cen-cii 1.3.16 EN16931-CII-syntax.sch); the writer does not, so the round trip is valid. Its BT-24 uses colons instead of '#compliant#urn:' (needs-human #69)."
+reason = "Level BASIC (EN 16931 core rules, #42). The upstream XML puts a currencyID where CII-DT-031 forbids it ('currencyID should not be present', fatal, cen-cii 1.3.17 EN16931-CII-syntax.sch); the writer does not, so the round trip is valid. Its BT-24 uses colons instead of '#compliant#urn:' (needs-human #69)."
 link = "https://github.com/ZUGFeRD/corpus/blob/82e886fb21369e3e83c1e97170a4ff406deceee7/ZUGFeRDv2/correct/FNFE-factur-x-examples/Avoir_FR_type381_BASIC.pdf"
 
 [[sample]]

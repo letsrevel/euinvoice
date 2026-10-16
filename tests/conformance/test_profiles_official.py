@@ -10,7 +10,7 @@ from euinvoice.validation import artifacts
 pytestmark = pytest.mark.conformance
 
 # BT-24 locations: UBL ``cbc:CustomizationID``, CII ``ram:GuidelineSpecifiedDocumentContextParameter/ram:ID``
-# (the BR-01 params of the CEN 1.3.16 ``EN16931-UBL-model.sch`` / ``EN16931-CII-model.sch``).
+# (the BR-01 params of the CEN 1.3.17 ``EN16931-UBL-model.sch`` / ``EN16931-CII-model.sch``).
 _UBL_BT24 = f"{{{_xml.UBL_CBC}}}CustomizationID"
 _CII_BT24 = (
     f"{{{_xml.CII_RSM}}}ExchangedDocumentContext/{{{_xml.CII_RAM}}}GuidelineSpecifiedDocumentContextParameter"

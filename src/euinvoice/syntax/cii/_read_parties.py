@@ -103,8 +103,8 @@ def _electronic_address(reader: Reader, party: etree._Element) -> Identifier | N
 def _tax_registrations(reader: Reader, party: etree._Element, schemes: tuple[str, ...]) -> dict[str, str]:
     """``ram:SpecifiedTaxRegistration/ram:ID`` by ``@schemeID``: ``VA`` (BT-31, BT-48, BT-63), ``FC`` (BT-32).
 
-    The first registration of each of ``schemes`` is mapped; any other stays unmapped (BR-56 and BR-AF-02 select
-    ``ram:ID[@schemeID='VA']`` and ``'FC'``).
+    The first registration of each of ``schemes`` is mapped; any other stays unmapped (BR-56, BR-IG-02 and
+    BR-IP-02 select ``ram:ID[@schemeID='VA']`` and ``'FC'``).
     """
     found: dict[str, str] = {}
     for registration in reader.children(party, "SpecifiedTaxRegistration"):

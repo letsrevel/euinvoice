@@ -7,7 +7,7 @@ term), Document reference, Binary object (content, mime code, filename).
 
 Which business term may or must carry a scheme, and which code list each code is checked against, is
 decided where the type is used (``invoice.py``, ``parties.py``, …) with the validators built here.
-Every check mirrors a ``fatal`` rule of the pinned CEN Schematron (validation-1.3.16) that holds in
+Every check mirrors a ``fatal`` rule of the pinned CEN Schematron (validation-1.3.17) that holds in
 both syntaxes, and each error message names that rule.
 
 Code values are normalised when stored: upstream compares codes with XPath ``normalize-space`` (and

@@ -211,7 +211,7 @@ def _group(index: int, group: VatBreakdown) -> Iterator[Verdict]:
 def check(invoice: Invoice, *, syntax: Syntax | None = None) -> tuple[Finding, ...]:
     """Report where a complete invoice breaks the CEN calculation, VAT and period rules.
 
-    Checked (CEN validation-1.3.16, every rule ``fatal`` in both bindings): BR-CO-10 … BR-CO-17,
+    Checked (CEN validation-1.3.17, every rule ``fatal`` in both bindings): BR-CO-10 … BR-CO-17,
     BR-48, BR-53; the period rules BR-29, BR-30, BR-CO-19 and BR-CO-20; per VAT category code S, Z,
     E, AE, K, G, O, L and M the rules ``BR-<x>-01`` (breakdown present), ``-05``/``-06``/``-07``
     (line, allowance and charge VAT rates), ``-08`` (taxable amount), ``-09`` (tax amount) and

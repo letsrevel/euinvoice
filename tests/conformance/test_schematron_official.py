@@ -58,7 +58,7 @@ def test_dropping_the_invoice_number_yields_exactly_br02_fatal() -> None:
 
     findings = schematron.run(schematron.CEN_UBL, root)
 
-    # BR-02 in EN16931-UBL-validation.xslt (CEN 1.3.16): assert normalize-space(cbc:ID) != '', flag fatal.
+    # BR-02 in EN16931-UBL-validation.xslt (CEN 1.3.17): assert normalize-space(cbc:ID) != '', flag fatal.
     assert [(f.rule_id, f.severity, f.source) for f in findings] == [("BR-02", Severity.FATAL, "cen-ubl")]
     assert findings[0].message == "[BR-02]-An Invoice shall have an Invoice number (BT-1)."
     assert findings[0].location is not None

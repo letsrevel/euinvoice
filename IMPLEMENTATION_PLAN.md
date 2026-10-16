@@ -153,7 +153,7 @@ standards**. Do not reproduce their text. Use these free, authoritative equivale
 
 | What | Source | Licence | Pin (verify latest at implementation time) |
 |---|---|---|---|
-| CEN validation artifacts (UBL + CII Schematron, compiled XSLT, code lists, official examples) | github.com/ConnectingEurope/eInvoicing-EN16931, release assets `en16931-ubl-<v>.zip`, `en16931-cii-<v>.zip` | EUPL-1.2 | `validation-1.3.16` (2026-04-13) |
+| CEN validation artifacts (UBL + CII Schematron, compiled XSLT, code lists, official examples) | github.com/ConnectingEurope/eInvoicing-EN16931, release assets `en16931-ubl-<v>.zip`, `en16931-cii-<v>.zip` | EUPL-1.2 | `validation-1.3.17` (2026-10-12) |
 | Peppol BIS Billing 3.0 rules + examples + **UBL syntax binding docs** (BT ↔ XPath) | github.com/OpenPEPPOL/peppol-bis-invoice-3 (`rules/sch/*.sch`, `rules/examples`, `rules/unit-*`), docs.peppol.eu/poacc/billing/3.0/ | no licence file → fetch only | tag `v3.0.20` (2026-03-16); XRechnung 2.6.0 already references 3.0.21, so check for newer tags/commits |
 | XRechnung Schematron (UBL + CII, compiled XSL) | github.com/itplr-kosit/xrechnung-schematron, release asset `xrechnung-3.0.2-schematron-2.6.0.zip` | Apache-2.0 | `v2.6.0` (2026-08-31) |
 | XRechnung test suite (valid/invalid instances, UBL + CII) | github.com/itplr-kosit/xrechnung-testsuite | Apache-2.0 | `v2026-08-31` |

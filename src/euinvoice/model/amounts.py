@@ -5,7 +5,7 @@ infinities (D3, see :func:`euinvoice.model._base.to_decimal`), and never round o
 they are fixed-point strings (``format(v, "f")``) that reload exactly, and their JSON schema says so.
 
 Which business terms are limited to two decimals was read from the pinned CEN validation artifacts
-``validation-1.3.16``:
+``validation-1.3.17``:
 
 * ``schematron/abstract/EN16931-model.sch`` (UBL and CII alike) limits these amounts to at most two
   fraction digits (all ``flag="fatal"``): BR-DEC-01/02 (BT-92/93), BR-DEC-05/06 (BT-99/100), BR-DEC-09..18

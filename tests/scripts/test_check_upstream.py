@@ -35,7 +35,7 @@ def rel(tag: str, published: str, *, prerelease: bool = False, draft: bool = Fal
 
 # What every upstream answers when all pins in the packaged manifest are current.
 CURRENT: dict[str, t.Any] = {
-    CEN: [rel("validation-1.3.16", "2026-04-13T12:58:43Z"), rel("validation-1.3.15", "2025-10-20T14:36:27Z")],
+    CEN: [rel("validation-1.3.17", "2026-10-12T12:28:45Z"), rel("validation-1.3.17", "2026-04-13T12:58:43Z")],
     XR_SCH: [rel("v2.6.0", "2026-08-31T10:00:00Z")],
     f"{GH}/itplr-kosit/xrechnung-testsuite/releases?per_page=100": [rel("v2026-08-31", "2026-08-31T10:00:00Z")],
     f"{GH}/itplr-kosit/validator-configuration-xrechnung/releases?per_page=100": [
@@ -126,18 +126,18 @@ def test_newer_release_exits_1_and_names_the_version(capsys: pytest.CaptureFixtu
 
 def test_release_from_a_branch_is_found_regardless_of_list_order(capsys: pytest.CaptureFixture[str]) -> None:
     # e.g. a later release listed after the pinned one: order does not matter, published_at does.
-    responses = {**CURRENT, CEN: [*CURRENT[CEN], rel("validation-1.3.17", "2026-11-01T00:00:00Z")]}
+    responses = {**CURRENT, CEN: [*CURRENT[CEN], rel("validation-1.3.18", "2026-11-01T00:00:00Z")]}
     code, out = run(responses, capsys)
     assert code == 1
-    assert "DRIFT      cen-ubl: pinned 1.3.16, upstream has validation-1.3.17" in out
-    assert "DRIFT      cen-cii: pinned 1.3.16, upstream has validation-1.3.17" in out
+    assert "DRIFT      cen-ubl: pinned 1.3.17, upstream has validation-1.3.18" in out
+    assert "DRIFT      cen-cii: pinned 1.3.17, upstream has validation-1.3.18" in out
 
 
 def test_newer_prerelease_is_reported_distinctly(capsys: pytest.CaptureFixture[str]) -> None:
     newer = rel("validation-1.4.0-rc1", "2026-11-01T00:00:00Z", prerelease=True)
     code, out = run({**CURRENT, CEN: [newer, *CURRENT[CEN]]}, capsys)
     assert code == 1
-    assert "PRERELEASE cen-ubl: pinned 1.3.16, upstream has validation-1.4.0-rc1" in out
+    assert "PRERELEASE cen-ubl: pinned 1.3.17, upstream has validation-1.4.0-rc1" in out
     assert "DRIFT" not in out
 
 

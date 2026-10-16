@@ -165,7 +165,7 @@ def complete(
     Whole-unit VAT: the CEN example ``huf_example_cii.xml`` states the VAT of 69180.00 at 27 % as
     18679 (whole forints), not 18678.60. :func:`complete` always rounds to cents (D11).
 
-    Derivations (CEN ``validation-1.3.16``, ``EN16931-model.sch``):
+    Derivations (CEN ``validation-1.3.17``, ``EN16931-model.sch``):
 
     * BT-131 per line: :func:`line_net_amount`.
     * BT-106 = Σ BT-131 (BR-CO-10); BT-107 = Σ BT-92 and BT-108 = Σ BT-99, left out when there are no

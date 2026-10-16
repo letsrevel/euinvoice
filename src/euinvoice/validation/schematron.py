@@ -76,7 +76,7 @@ class RuleSet:
     stylesheet: str
 
 
-# Paths verified against the pinned cache entries (manifest.toml): CEN validation-1.3.16 release zips,
+# Paths verified against the pinned cache entries (manifest.toml): CEN validation-1.3.17 release zips,
 # Peppol BIS 3.0.21 (``precompile`` entries, compiled by SchXslt 1.10.1), XRechnung Schematron 2.6.0.
 CEN_UBL: t.Final = RuleSet("cen-ubl", "xslt/EN16931-UBL-validation.xslt")
 """EN 16931 core rules (BR-*, BR-CO-*, UBL-*) for UBL 2.1 Invoice and CreditNote."""
