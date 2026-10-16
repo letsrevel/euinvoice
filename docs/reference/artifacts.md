@@ -21,7 +21,7 @@ manifest for the upstream repository.
 | `xrechnung-testsuite` | 2026-08-31 | Apache-2.0 | <https://github.com/itplr-kosit/xrechnung-testsuite/releases/download/v2026-08-31/xrechnung-3.0.2-testsuite-2026-08-31.zip> |
 | `xrechnung-validator-configuration` | 2026-08-31 | Apache-2.0 | <https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v2026-08-31/xrechnung-3.0.2-validator-configuration-2026-08-31.zip> |
 | `ubl-2_1` | 2.1 | OASIS IPR Policy (Copyright (c) OASIS Open 2013) | <https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip> |
-| `zugferd-corpus` | d891458e9822 | Apache-2.0 | <https://github.com/ZUGFeRD/corpus/archive/d891458e9822e34271a5438497bf924e89955979.zip> |
+| `zugferd-corpus` | 82e886fb2136 | Apache-2.0 | <https://github.com/ZUGFeRD/corpus/archive/82e886fb21369e3e83c1e97170a4ff406deceee7.zip> |
 | `schxslt` | 1.10.1 | MIT | <https://codeberg.org/SchXslt/schxslt/releases/download/v1.10.1/schxslt-1.10.1-xslt-only.zip> |
 | `fatturapa-xsd` | 1.2.3 | none stated in the file; fatturapa.gov.it reserves all rights (fetch only, never redistribute; maintainer decision on #115) | <https://www.agenziaentrate.gov.it/portale/documents/d/guest/schema_vfpr12_v1-2-3> |
 

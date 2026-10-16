@@ -65,7 +65,7 @@ EXPECTED: t.Final[dict[str, dict[Bucket, int]]] = {
         (*UBL_INVOICE, XRECHNUNG, "xrechnung"): 5,
         (*UBL_CREDIT_NOTE, CORE, "en16931"): 1,
         (*CII, CORE, "en16931"): 32,
-        (*CII, XRECHNUNG, "xrechnung"): 5,
+        (*CII, XRECHNUNG, "xrechnung"): 6,
         (*CII, XRECHNUNG_1_2, None): 2,
         (*CII, FACTURX_EXTENDED, "facturx-extended"): 3,
         # Italian FatturaPA 1.2 (#121): fatturaPA/eigor/valid (8, one more is truncated below) and

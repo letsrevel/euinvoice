@@ -45,7 +45,7 @@ COUNTS: t.Final[dict[tuple[str, str], int]] = {
     ("xrechnung-testsuite", "ubl"): 45,
     ("xrechnung-testsuite", "cii"): 41,
     ("zugferd-corpus", "ubl"): 31,
-    ("zugferd-corpus", "cii"): 42,
+    ("zugferd-corpus", "cii"): 43,
     ("zugferd-corpus", "not an invoice"): 1,
     ("zugferd-corpus", "fatturapa"): 14,
     ("zugferd-corpus", "pdf"): 74,

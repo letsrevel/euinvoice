@@ -141,6 +141,10 @@ All notable changes to this project are documented here. The format follows
   and writer; the output is unchanged ([#137](https://github.com/letsrevel/euinvoice/issues/137)).
 - A single-file artifact source whose `file` starts with a dot is refused, so the cache marker
   `.euinvoice-fingerprint` can never be a source's file ([#128](https://github.com/letsrevel/euinvoice/issues/128)).
+- The `zugferd-corpus` pin moves from `d891458e9822` to `82e886fb2136` (2026-10-13): one new sample,
+  `ZUGFeRDv2/fail/XRechnung 722825203.XML`, which fails BR-DE-18 as the official Schematron says; its expected
+  findings are recorded in `tests/conformance/expected_invalid.toml`
+  ([#143](https://github.com/letsrevel/euinvoice/issues/143)).
 
 ## [0.1.0] - 2026-10-06
 

@@ -46,7 +46,7 @@ CURRENT: dict[str, t.Any] = {
     # Real situation: 3.0.21 is pinned to an untagged commit, the newest tag is v3.0.20.
     PEPPOL_TAGS: [{"name": "v3.0.20"}, {"name": "v3.0.19"}, {"name": "3.0.18"}, {"name": "not-a-version"}],
     f"{GH}/ZUGFeRD/corpus": {"default_branch": "master"},
-    f"{GH}/ZUGFeRD/corpus/commits/master": {"sha": "d891458e9822e34271a5438497bf924e89955979"},
+    f"{GH}/ZUGFeRD/corpus/commits/master": {"sha": "82e886fb21369e3e83c1e97170a4ff406deceee7"},
     SCHXSLT: [rel("v1.10.1", "2024-10-18T16:51:57+02:00"), rel("v1.10", "2024-07-24T20:01:57+02:00")],
     FATTURAPA_AE: XSD_BYTES,
     FATTURAPA_SDI: XSD_BYTES,
@@ -224,7 +224,7 @@ def test_new_corpus_commit_is_drift(capsys: pytest.CaptureFixture[str]) -> None:
     responses = {**CURRENT, f"{GH}/ZUGFeRD/corpus/commits/master": {"sha": "0123456789abcdef" * 2}}
     code, out = run(responses, capsys)
     assert code == 1
-    assert "DRIFT      zugferd-corpus: pinned d891458e9822, upstream has master@0123456789ab" in out
+    assert "DRIFT      zugferd-corpus: pinned 82e886fb2136, upstream has master@0123456789ab" in out
 
 
 def test_api_error_exits_2_with_distinct_message(capsys: pytest.CaptureFixture[str]) -> None:
