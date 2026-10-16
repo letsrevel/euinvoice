@@ -84,16 +84,18 @@ def _releases(
     return (Check("releases", api=api, repo=repo, tag_prefix=tag_prefix, ignore_tags=ignore_tags),)
 
 
+# Held at 1.3.16 by maintainer decision 2026-10-17 (#142, revisit in #147): the XRechnung 2.6.0 / KoSIT
+# 2026-08-31 rule sets and the pinned Peppol BIS (which ships its own CEN-EN16931-*.sch at 1.3.16) are built
+# on 1.3.16, and 1.3.17 rejects Greek EL VAT ids (ConnectingEurope/eInvoicing-EN16931#532). ponytail: remove
+# ignore_tags from both CEN entries when #147 is resolved.
+_CEN_HELD: tuple[str, ...] = ("validation-1.3.17",)
+
 # Every manifest source needs an entry; a missing one is an ERROR, so a new pin cannot go unchecked.
 # GitHub's /releases/latest is not used: it is picked by date or a manual flag and skips prereleases
 # (CEN 1.2.2 only ever existed as a prerelease; 1.3.15 was cut from a branch).
 CHECKS: dict[str, tuple[Check, ...]] = {
-    # Held at 1.3.16 by maintainer decision 2026-10-17 (#142, revisit in #147): the XRechnung 2.6.0 /
-    # KoSIT 2026-08-31 rule sets and the pinned Peppol BIS (which ships its own CEN-EN16931-*.sch at
-    # 1.3.16) are built on 1.3.16, and 1.3.17 rejects Greek EL VAT ids (ConnectingEurope/eInvoicing-EN16931#532).
-    # ponytail: manual list; upgrade path: drop the entry when #147 is resolved.
-    "cen-ubl": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=("validation-1.3.17",)),
-    "cen-cii": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=("validation-1.3.17",)),
+    "cen-ubl": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=_CEN_HELD),
+    "cen-cii": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=_CEN_HELD),
     "xrechnung-schematron": _releases("itplr-kosit/xrechnung-schematron", "v"),
     "xrechnung-testsuite": _releases("itplr-kosit/xrechnung-testsuite", "v"),
     "xrechnung-validator-configuration": _releases("itplr-kosit/validator-configuration-xrechnung", "v"),

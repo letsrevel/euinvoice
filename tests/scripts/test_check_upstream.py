@@ -335,7 +335,7 @@ def test_get_wraps_network_errors(monkeypatch: pytest.MonkeyPatch) -> None:
         cu.get(PEPPOL_SCH)
 
 
-def test_ignored_tag_is_not_reported(capsys: pytest.CaptureFixture[str]) -> None:
+def test_ignored_tag_is_not_reported() -> None:
     # A release matching ignore_tags is not reported as DRIFT, even if published after the pin.
     ignore_check = cu.Check(
         "releases",
@@ -355,7 +355,7 @@ def test_ignored_tag_is_not_reported(capsys: pytest.CaptureFixture[str]) -> None
     assert findings == []
 
 
-def test_non_ignored_newer_tag_still_reported(capsys: pytest.CaptureFixture[str]) -> None:
+def test_non_ignored_newer_tag_still_reported() -> None:
     # A newer tag not in ignore_tags is still reported even if other tags are ignored.
     ignore_check = cu.Check(
         "releases",
