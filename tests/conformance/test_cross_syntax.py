@@ -48,7 +48,7 @@ COUNTS: t.Final[dict[tuple[Syntax, str], int]] = {
     (Syntax.UBL, "normalized"): 5,
     (Syntax.UBL, "refuses"): 2,
     (Syntax.CII, "lossless"): 74,
-    (Syntax.CII, "normalized"): 74,
+    (Syntax.CII, "normalized"): 75,
     (Syntax.CII, "refuses"): 3,
 }
 """Outcomes per source syntax: ``lossless`` (equal without normalization), ``normalized`` (equal after
