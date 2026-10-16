@@ -62,6 +62,8 @@ class Check:
         tag_prefix: Prefix of the release tag before the pinned version.
         url: Document URL for ``published-sha256`` and ``release-notes``.
         sha256: Expected sha256 for ``published-sha256``.
+        ignore_tags: Tags to ignore when using the ``releases`` strategy. A release matching one of
+            these tags will not be reported as DRIFT even if published after the pinned release.
     """
 
     strategy: Strategy
@@ -70,18 +72,28 @@ class Check:
     tag_prefix: str = ""
     url: str = ""
     sha256: str = ""
+    ignore_tags: tuple[str, ...] = ()
 
 
-def _releases(repo: str, tag_prefix: str, api: str = GITHUB_API) -> tuple[Check, ...]:
-    return (Check("releases", api=api, repo=repo, tag_prefix=tag_prefix),)
+def _releases(
+    repo: str,
+    tag_prefix: str,
+    api: str = GITHUB_API,
+    ignore_tags: tuple[str, ...] = (),
+) -> tuple[Check, ...]:
+    return (Check("releases", api=api, repo=repo, tag_prefix=tag_prefix, ignore_tags=ignore_tags),)
 
 
 # Every manifest source needs an entry; a missing one is an ERROR, so a new pin cannot go unchecked.
 # GitHub's /releases/latest is not used: it is picked by date or a manual flag and skips prereleases
 # (CEN 1.2.2 only ever existed as a prerelease; 1.3.15 was cut from a branch).
 CHECKS: dict[str, tuple[Check, ...]] = {
-    "cen-ubl": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-"),
-    "cen-cii": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-"),
+    # Held at 1.3.16 by maintainer decision 2026-10-17 (#142, revisit in #147): the XRechnung 2.6.0 /
+    # KoSIT 2026-08-31 rule sets and the pinned Peppol BIS (which ships its own CEN-EN16931-*.sch at
+    # 1.3.16) are built on 1.3.16, and 1.3.17 rejects Greek EL VAT ids (ConnectingEurope/eInvoicing-EN16931#532).
+    # ponytail: manual list; upgrade path: drop the entry when #147 is resolved.
+    "cen-ubl": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=("validation-1.3.17",)),
+    "cen-cii": _releases("ConnectingEurope/eInvoicing-EN16931", "validation-", ignore_tags=("validation-1.3.17",)),
     "xrechnung-schematron": _releases("itplr-kosit/xrechnung-schematron", "v"),
     "xrechnung-testsuite": _releases("itplr-kosit/xrechnung-testsuite", "v"),
     "xrechnung-validator-configuration": _releases("itplr-kosit/validator-configuration-xrechnung", "v"),
@@ -223,9 +235,13 @@ def _check_releases(source: Source, check: Check, fetch: Get) -> list[tuple[Kind
     if pinned is None:
         raise UpstreamError(f"pinned release {pinned_tag!r} not found in {url}")
     pinned_at = _published(pinned, url)
-    # Accepted (issue #45): a maintenance release on an older line published after the pin is DRIFT too;
-    # if that gets noisy, add per-source ignore_tags with dated comments.
-    newer = [r for r in releases if r is not pinned and _published(r, url) > pinned_at]
+    # Accepted (issue #45): a maintenance release on an older line published after the pin is DRIFT too.
+    # Per-source ignore_tags allows deliberate holds on specific releases (e.g., awaiting ecosystem adoption).
+    newer = [
+        r
+        for r in releases
+        if r is not pinned and _published(r, url) > pinned_at and _field(r, "tag_name", url) not in check.ignore_tags
+    ]
     return [
         (
             "PRERELEASE" if r.get("prerelease") is True else "DRIFT",
