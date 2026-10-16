@@ -76,9 +76,25 @@ def no_local_constants(monkeypatch: pytest.MonkeyPatch) -> collections.abc.Itera
     Private Hypothesis API: if it is renamed, ``monkeypatch.setattr`` raises instead of silently not pinning. The
     per-constraint cache of permitted constants is cleared on the way in (it may hold the process-wide pool) and on the
     way out (so later tests do not see the empty one).
+
+    A guard assertion verifies that the patch is actually applied: if a future Hypothesis keeps the name but stops
+    calling the function, or if HypothesisProvider changes how it builds _local_constants, the guard fails loudly
+    instead of allowing order-dependent test flakes to return silently.
     """
     # ponytail: patches a Hypothesis internal; switch to a public knob if Hypothesis grows one.
-    monkeypatch.setattr(providers, "_get_local_constants", Constants)
+    # Guard wrapper: track whether the patched function is called, and return an empty Constants instance.
+    called: list[bool] = []
+
+    def _get_local_constants_pinned() -> Constants:
+        called.append(True)
+        return Constants()
+
+    monkeypatch.setattr(providers, "_get_local_constants", _get_local_constants_pinned)
+    # Build _local_constants to trigger the patched function.
+    local_constants: Constants = providers.HypothesisProvider(None)._local_constants
+    # Assert both that the function was called and that it returned an empty Constants instance.
+    assert called, "HypothesisProvider did not call the patched _get_local_constants"
+    assert not local_constants.strings, "Hypothesis _get_local_constants pin did not return empty Constants"
     providers.CONSTANTS_CACHE.cache.clear()
     yield
     providers.CONSTANTS_CACHE.cache.clear()
