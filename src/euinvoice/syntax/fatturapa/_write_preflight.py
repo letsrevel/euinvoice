@@ -178,9 +178,10 @@ def _post_codes(invoice: Invoice) -> t.Iterator[Finding]:
             yield finding(
                 POST_CODE,
                 f"{prefix}.postal_address.post_code",
-                f"{term} {address.post_code!r} is not a five-digit CAPType value, so it is written as CAP "
-                f"{FOREIGN_CAP} for the address in {address.country_code} (AdE FAQ n. 63 and n. 74, compendium "
-                "22/12/2022) and the real post code is not carried",
+                f"{term} {address.post_code!r} is not carried: outside Italy only a five-digit code other than "
+                f"00000 is written as it is, so CAP {FOREIGN_CAP} is written for the address in "
+                f"{address.country_code} (AdE FAQ n. 63 and n. 74, compendium 22/12/2022), which the reader reads "
+                "as no post code",
                 Severity.WARNING,
             )
 

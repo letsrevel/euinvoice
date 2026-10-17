@@ -81,7 +81,10 @@ def _anagrafica(parent: etree._Element, it: ItalianExtension, *, party: str, nam
 def post_code_replaced(address: SellerPostalAddress | BuyerPostalAddress) -> bool:
     """Whether the writer replaces a post code of the address with :data:`FOREIGN_CAP` and so drops its value."""
     code = address.post_code
-    return address.country_code != ITALY and code is not None and re.fullmatch(_CAP, code) is None
+    # a genuine foreign 00000 reads back as no post code, so it counts as replaced too
+    return (
+        address.country_code != ITALY and code is not None and (code == FOREIGN_CAP or re.fullmatch(_CAP, code) is None)
+    )
 
 
 def _address(

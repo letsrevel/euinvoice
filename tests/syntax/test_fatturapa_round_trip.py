@@ -95,7 +95,7 @@ def _assert_round_trip(invoice: Invoice, transmission: Transmission = TRANSMISSI
         if before.post_code != after.post_code:
             assert before.country_code != "IT"
             assert before.post_code is not None
-            assert re.fullmatch(r"[0-9]{5}", before.post_code) is None
+            assert before.post_code == "00000" or re.fullmatch(r"[0-9]{5}", before.post_code) is None
             assert after.post_code is None
 
 

@@ -143,7 +143,7 @@ def _payments(draw: st.DrawFn) -> tuple[ItalianPayment | None, PaymentInstructio
 
 # Foreign post codes: five digits are kept, anything else (and none) is written as CAP 00000 and reads back as none
 # (AdE FAQ n. 63 / n. 74, #158).
-_FOREIGN_POST_CODES: t.Final = st.sampled_from(["10115", "SW1A 1AA", "1011 AB", "123456", "A-1010", None])
+_FOREIGN_POST_CODES: t.Final = st.sampled_from(["10115", "SW1A 1AA", "1011 AB", "123456", "A-1010", "00000", None])
 
 
 def _foreign_seller(post_code: str | None) -> Seller:

@@ -217,10 +217,12 @@ def test_an_absent_post_code_is_required_only_in_italy() -> None:
 
 def test_a_replaced_foreign_post_code_is_a_warning() -> None:
     abroad = BuyerPostalAddress(address_line_1="A", city="London", post_code="SW1A 1AA", country_code="GB")
+    zeros = BuyerPostalAddress(address_line_1="A", city="Paris", post_code="00000", country_code="FR")
     kept = BuyerPostalAddress(address_line_1="A", city="Paris", post_code="75001", country_code="FR")
 
     assert _found(buyer=buyer(postal_address=abroad)) == [
         (POST_CODE, "buyer.postal_address.post_code", Severity.WARNING)
     ]
+    assert _found(buyer=buyer(postal_address=zeros)) == _found(buyer=buyer(postal_address=abroad))
     assert _found(buyer=buyer(postal_address=kept)) == []
     assert "00000" in preflight(it_invoice(buyer=buyer(postal_address=abroad)))[0].message
