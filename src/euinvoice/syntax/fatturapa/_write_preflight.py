@@ -23,7 +23,13 @@ from euinvoice.model import Invoice
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, SoggettoEmittente, TipoDocumento
 from euinvoice.report import Finding
-from euinvoice.syntax.fatturapa._write_codes import CATEGORY_OF_NATURA, DOCUMENT_TYPES, PAYMENT_METHOD_OF_MEANS
+from euinvoice.syntax.fatturapa._write_codes import (
+    CATEGORY_OF_NATURA,
+    DOCUMENT_TYPES,
+    INSTRUMENT_NOT_DEFINED,
+    METHODS_WITHOUT_MEANS,
+    PAYMENT_METHOD_OF_MEANS,
+)
 from euinvoice.syntax.fatturapa._write_lines import Block, summarize
 from euinvoice.syntax.fatturapa._write_refuse import structure
 from euinvoice.syntax.fatturapa._write_rules import (
@@ -183,7 +189,12 @@ def _payment(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
             f"2.4.2.2 ModalitaPagamento is required: set it.payment.method, or give a BT-81 that App. 5.6 of the "
             f"Regole tecniche v2.6 maps (found {found})",
         )
-    elif method is not None and means is not None and mapped is not method:
+    elif (
+        method is not None
+        and means is not None
+        and mapped is not method
+        and not (means == INSTRUMENT_NOT_DEFINED and method in METHODS_WITHOUT_MEANS)  # #136: no App. 5.6 row
+    ):
         found = "no ModalitaPagamento" if mapped is None else f"ModalitaPagamento {mapped}"
         yield finding(
             PAYMENT,

@@ -83,7 +83,11 @@ terms do not determine a summary: an EsigibilitaIVA that BT-8 and the VAT catego
 BT-8 3 or 35 gives I, 432 gives D, category B gives S), or a RiferimentoNormativo the writer cannot take from BT-120
 (row 2.2.2.8), because the VAT breakdown has several DatiRiepilogo. Set `Invoice.it.payment` when the invoice has
 payment instructions (BG-16), a due date (BT-9) or a payee (BG-10): FatturaPA then needs CondizioniPagamento, which has
-no business term.
+no business term. ModalitaPagamento comes from `it.payment.method` or, without it, from BT-81 through App. 5.6. App. 5.6
+maps BT-81 to a code many to one and gives no BT-81 to MP07, MP09, MP10, MP11, MP14, MP16, MP20 and MP21, so for these
+eight set `it.payment.method` and give BT-81 `1` (UNTDID 4461, "Instrument not defined"), which is what the reader
+produces. `1` next to any other method is refused, because App. 5.6 maps `1` to MP01; so is any BT-81 whose App. 5.6
+row is not the explicit method.
 
 ## 2. Write FPR12
 
@@ -248,8 +252,6 @@ guessed. The open questions wait for a maintainer decision (`needs-human`):
   `Invoice.it.payment`.
 - [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example `PrezzoTotale` with more than two
   decimals, the generic Natura N2, N3 and N6, and the BT-81 of each ModalitaPagamento.
-- [#136](https://github.com/letsrevel/euinvoice/issues/136): the ModalitaPagamento codes App. 5.6 gives no BT-81
-  (MP07, MP09-MP11, MP14, MP16, MP20, MP21) read, but the writer refuses the read invoice.
 - [#130](https://github.com/letsrevel/euinvoice/issues/130): the SdI checks Allegato A leaves partly open (see
   above).
 

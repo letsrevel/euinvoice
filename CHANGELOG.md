@@ -133,6 +133,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The FPR12 writer accepts BT-81 `1` (UNTDID 4461, "Instrument not defined") next to an explicit `it.payment.method`
+  of MP07, MP09, MP10, MP11, MP14, MP16, MP20 or MP21, the codes App. 5.6 gives no BT-81, which the reader reads as
+  `1`; so FPR12 → model → FPR12 is lossless for all 23 ModalitaPagamento codes. `1` with any other method, and any
+  other BT-81 that App. 5.6 does not map to the method, are still refused with `EUINVOICE-FATTURAPA-PAYMENT`
+  ([#153](https://github.com/letsrevel/euinvoice/issues/153), [#136](https://github.com/letsrevel/euinvoice/issues/136)).
 - `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
   `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
 - `convert --to` offers `fatturapa` too, and a `convert` refused by the FatturaPA checks says "FatturaPA pre-flight
