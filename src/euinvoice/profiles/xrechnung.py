@@ -307,7 +307,7 @@ def _document(invoice: Invoice) -> Iterator[Finding]:
         yield _fatal(
             "PEPPOL-EN16931-R001",
             "process_control.business_process_type",
-            "Business process (BT-23) must be provided. The XRechnung profiles set a default when prepare() is called.",
+            "Business process (BT-23) required; call prepare() for the XRechnung default (§11.27).",
         )
     # BR-DE-15: UBL lines 329-331 / CII lines 336-338.
     if _blank(invoice.buyer_reference):

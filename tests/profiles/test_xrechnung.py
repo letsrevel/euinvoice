@@ -21,6 +21,7 @@ from euinvoice.model import (
     TaxRepresentativePostalAddress,
 )
 from euinvoice.profiles import xrechnung
+from euinvoice.profiles.peppol import BILLING_PROCESS
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
 
@@ -58,8 +59,6 @@ class TestDeclarations:
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
     def test_has_bt23_default(self, profile: profiles.Profile) -> None:
         # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process.
-        from euinvoice.profiles.peppol import BILLING_PROCESS
-
         assert profile.business_process_type == BILLING_PROCESS
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
@@ -164,8 +163,6 @@ class TestPreflightEdges:
 
     def test_bt23_default_is_filled_when_unset(self) -> None:
         # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process when unset.
-        from euinvoice.profiles.peppol import BILLING_PROCESS
-
         invoice = xrechnung_invoice(process_control=ProcessControl(specification_identifier=CIUS))
         prepared = profiles.XRECHNUNG.prepare(invoice)
         assert prepared.process_control.business_process_type == BILLING_PROCESS
@@ -178,3 +175,18 @@ class TestPreflightEdges:
         )
         prepared = profiles.XRECHNUNG.prepare(invoice)
         assert prepared.process_control.business_process_type == custom_process
+
+    @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
+    def test_r001_still_fires_when_unprepared_invoice_lacks_bt23(self, profile: profiles.Profile) -> None:
+        # PEPPOL-EN16931-R001 (missing BT-23) must still be reported by preflight when called on an
+        # unprepared invoice (or one with BT-23 explicitly set to None). The pre-flight rule itself is
+        # the safeguard for cases where prepare() was not called or the invoice was malformed.
+        invoice = VIOLATIONS["PEPPOL-EN16931-R001"]()
+        findings = profile.preflight(invoice, Syntax.CII)
+
+        ids = {f.rule_id for f in findings} - set(CVD_VIOLATIONS)
+        assert "PEPPOL-EN16931-R001" in ids
+        finding = next(f for f in findings if f.rule_id == "PEPPOL-EN16931-R001")
+        assert (finding.severity, finding.source) == (Severity.FATAL, xrechnung.PREFLIGHT_SOURCE)
+        assert finding.message.startswith("[PEPPOL-EN16931-R001] ")
+        assert finding.location

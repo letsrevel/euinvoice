@@ -8,6 +8,7 @@ from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles import facturx
 from euinvoice.profiles._base import FACTURX_RULE_SET
+from euinvoice.profiles.peppol import BILLING_PROCESS
 from euinvoice.syntax import Syntax, cii
 
 CORE = "urn:cen.eu:en16931:2017"
@@ -61,8 +62,6 @@ def test_declares_its_identifiers(
     # FACTURX_XRECHNUNG inherits BT-23 default from XRECHNUNG (XRechnung 3.0.2 §11.27 p. 57);
     # other Factur-X profiles have no BT-23 default.
     if profile.id == "facturx-xrechnung":
-        from euinvoice.profiles.peppol import BILLING_PROCESS
-
         assert profile.business_process_type == BILLING_PROCESS
     else:
         assert profile.business_process_type is None
