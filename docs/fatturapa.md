@@ -328,7 +328,7 @@ whose `Nazione` is not `IT`, the writer writes a post code of five digits as it 
 `1011 AB`, no post code at all) as `00000`. The real foreign post code is not carried in `Indirizzo`: the FAQ only
 allows it ("si potrà"), and a suffix in that free-text line could not be told from the street on the way back. When a
 post code is dropped this way, `preflight` reports a `warning` finding `EUINVOICE-FATTURAPA-POST-CODE`; it does not
-block the write. The reader turns `00000` outside Italy into no post code. For an Italian address nothing changes: the
+block the write. The reader turns `00000` outside Italy into no post code. A genuine foreign post code of `00000` is treated as dropped too: it gets the same warning and reads back as no post code. For an Italian address nothing changes: the
 post code is required and must be five digits.
 
 ## Refusals and open questions
