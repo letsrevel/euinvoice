@@ -298,11 +298,28 @@ _RAW: t.Final[dict[str, Case]] = {
                     summaries=summary("22.00", "110.00", "24.20"),
                 )
             ),
-            # Two percentages (cascade or sum) and a line without Quantita have no single reading: not checked.
-            Doc(bodies=body(lines=line(total="100.00", adjustments=adjustment(percent="10.00") * 2))),
-            Doc(bodies=body(lines=line(quantity=None, unit="50.00", total="100.00"))),
+            # Two percentages cascade (50.00 * 0.90 * 0.90 = 40.50, twice): Elenco p. 27, Caso 2.
+            Doc(
+                bodies=body(
+                    lines=line(total="81.00", adjustments=adjustment(percent="10.00") * 2),
+                    summaries=summary("22.00", "81.00", "17.82"),
+                )
+            ),
+            # No Quantita counts as 1 (Elenco p. 26).
+            Doc(
+                bodies=body(
+                    lines=line(quantity=None, unit="50.00", total="50.00"), summaries=summary("22.00", "50.00", "11.00")
+                )
+            ),
         ),
         Doc(bodies=body(lines=line(total="100.02"))),
+    ),
+    "00424": case(
+        (
+            Doc(bodies=body(lines=line(rate="1.00"), summaries=summary("1.00", "100.00", "1.00"))),
+            Doc(bodies=body(lines=line(rate="0.00", natura="N2.1"), summaries=_ZERO)),
+        ),
+        Doc(bodies=body(lines=line(rate="0.22"), summaries=summary("0.22", "100.00", "0.22"))),
     ),
     "00425": case(Doc(bodies=body(number="A/1")), Doc(bodies=body(number="FT-A"))),
     "00427": case(
@@ -409,6 +426,9 @@ EXTRA_FAILING: t.Final[dict[str, Doc]] = {
             summaries=summary("22.00", "89.00", "19.58"),
         )
     ),
+    "00424 cassa": Doc(bodies=body(cassa=cassa("0.10"), summaries=summary() + summary("0.10", "4.00", "0.00"))),
+    "00424 summary": Doc(bodies=body(summaries=summary() + summary("0.50", "0.00", "0.00"))),
+    "00409 two credit notes": Doc(bodies=(Body(tipo="TD04"), Body(tipo="TD04"))),
     "00445 cassa Natura": Doc(
         bodies=body(
             cassa=cassa("0.00", natura="N2"), summaries=summary() + summary("0.00", "4.00", "0.00", natura="N2")
