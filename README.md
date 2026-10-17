@@ -179,7 +179,7 @@ Open questions waiting for a maintainer decision (`needs-human`):
 - FatturaPA: [#133](https://github.com/letsrevel/euinvoice/issues/133) (the writer refuses what the SdI rules do
   not settle, e.g. generic document level allowances and charges and VAT categories O, L, M),
   [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses
-  `PrezzoTotale` with more than two decimals), [#136](https://github.com/letsrevel/euinvoice/issues/136) (eight
+  the generic Natura N2, N3 and N6), [#136](https://github.com/letsrevel/euinvoice/issues/136) (eight
   ModalitaPagamento codes do not round-trip) and [#130](https://github.com/letsrevel/euinvoice/issues/130) (SdI
   checks Allegato A leaves partly open, e.g. 00424 is not checked).
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over

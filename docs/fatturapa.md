@@ -269,6 +269,22 @@ code and tax id), `--transmission-number` (ProgressivoInvio), `--recipient-code`
 `0000000`) and `--pec` (PECDestinatario); the invoice needs `Invoice.it`, so the input is in practice a FatturaPA
 file. `info` and `convert` read one invoice and refuse a lotto (exit 1); `validate` checks all its bodies.
 
+## Reader decisions
+
+Two readings settled by the maintainer ([#132](https://github.com/letsrevel/euinvoice/issues/132) items 1 and 21):
+
+- **`PrezzoTotale` beyond two decimals.** The element is `Amount8DecimalType` (2 to 8 decimals), while BT-131 is an
+  EN 16931 amount of at most two. BT-131 is the declared value rounded half up; the exact value is kept in
+  `InvoiceLine.it.total_price` (2.2.1.11) and the element is listed as `…/PrezzoTotale/text()` in
+  `ParseResult.unmapped`. The writer writes `total_price` back when it rounds to BT-131, so the round trip is lossless;
+  otherwise it reports a pre-flight error. No other declared amount is changed, so a summary that sums the unrounded
+  lines is judged by `validate()` as declared.
+- **`Natura` with a rate, TD16 only.** The SdI accepts it only on a TD16 (Allegato A 1.9.1, checks 00401 and 00430).
+  There, on a line or a `DatiCassaPrevidenziale`, it reads as VAT category S at that rate (no BT-120 or BT-121), with
+  the Natura kept in `InvoiceLine.it.nature` and `Invoice.it.vat_summaries` (in BT-104 for a fund). Any other
+  document type refuses it. The v1 writer does not emit TD16, so it refuses to write that reading with a pre-flight
+  error.
+
 ## Refusals and open questions
 
 Where the sources do not settle a mapping, euinvoice does the most conservative thing: the writer refuses with an
@@ -278,8 +294,8 @@ guessed. The open questions wait for a maintainer decision (`needs-human`):
 - [#133](https://github.com/letsrevel/euinvoice/issues/133), writer: for example generic document level allowances
   and charges (only a zero stamp duty is written), VAT categories O, L and M, and payment data without
   `Invoice.it.payment`.
-- [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example `PrezzoTotale` with more than two
-  decimals, the generic Natura N2, N3 and N6, and the BT-81 of each ModalitaPagamento.
+- [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example the generic Natura N2, N3 and N6,
+  and the BT-81 of each ModalitaPagamento.
 - [#130](https://github.com/letsrevel/euinvoice/issues/130): the SdI checks Allegato A leaves partly open (see
   above).
 

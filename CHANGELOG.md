@@ -162,6 +162,18 @@ All notable changes to this project are documented here. The format follows
   `1`; so FPR12 → model → FPR12 is lossless for all 23 ModalitaPagamento codes. `1` with any other method, and any
   other BT-81 that App. 5.6 does not map to the method, are still refused with `EUINVOICE-FATTURAPA-PAYMENT`
   ([#153](https://github.com/letsrevel/euinvoice/issues/153), [#136](https://github.com/letsrevel/euinvoice/issues/136)).
+- FatturaPA reader, maintainer decisions on [#132](https://github.com/letsrevel/euinvoice/issues/132)
+  ([#152](https://github.com/letsrevel/euinvoice/issues/152)):
+  - A `PrezzoTotale` (2.2.1.11, `Amount8DecimalType`) with more than two decimals no longer fails: BT-131 is the
+    value rounded half up (D11), the exact value is kept in the new `InvoiceLine.it.total_price`, and the element is
+    listed as `…/PrezzoTotale/text()` in `ParseResult.unmapped`. The FPR12 writer writes `total_price` back when it
+    rounds to BT-131 (so the round trip is lossless), and a pre-flight error (`EUINVOICE-FATTURAPA-TOTAL-PRICE`) reports one that does not. No other
+    declared amount changes.
+  - On a TD16 only, a `Natura` with an `AliquotaIVA` other than 0, on a line or a `DatiCassaPrevidenziale`, reads as
+    VAT category S at that rate (Allegato A 1.9.1, checks 00401 and 00430), with the Natura kept in
+    `InvoiceLine.it.nature` and `Invoice.it.vat_summaries` (a fund's, in BT-104). Other document types still refuse
+    it. The v1 writer does not emit TD16, so writing that reading is refused by the existing document-type and
+    Natura pre-flight errors, which now cite the TD16 rule.
 - `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
   `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
 - `convert --to` offers `fatturapa` too, and a `convert` refused by the FatturaPA checks says "FatturaPA pre-flight

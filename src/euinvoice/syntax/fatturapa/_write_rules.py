@@ -18,6 +18,7 @@ __all__ = [
     "REQUIRED",
     "SUMMARY",
     "TOTALS",
+    "TOTAL_PRICE",
     "UNSUPPORTED_CATEGORIES",
     "UNWRITTEN",
     "finding",
@@ -37,6 +38,8 @@ REQUIRED: t.Final = "EUINVOICE-FATTURAPA-REQUIRED"
 """An element the XSD requires whose business term is missing."""
 NATURA: t.Final = "EUINVOICE-FATTURAPA-NATURA"
 """A line's Natura (2.2.1.14) is missing at rate zero (SdI 00400) or does not match its VAT category (App. 5.1)."""
+TOTAL_PRICE: t.Final = "EUINVOICE-FATTURAPA-TOTAL-PRICE"
+"""A line's ``it.total_price`` (2.2.1.11 PrezzoTotale as declared) does not round half up to its BT-131."""
 PAYMENT: t.Final = "EUINVOICE-FATTURAPA-PAYMENT"
 """DatiPagamento (2.4) cannot be filled: CondizioniPagamento or ModalitaPagamento has no source, or they conflict."""
 UNWRITTEN: t.Final = "EUINVOICE-FATTURAPA-UNWRITTEN"

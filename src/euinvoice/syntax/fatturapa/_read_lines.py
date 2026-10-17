@@ -14,6 +14,7 @@ from lxml import etree
 
 from euinvoice.errors import ParseError
 from euinvoice.model import InvoiceLine, VatBreakdown
+from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes._generated import UNECE_REC20_REC21_UNIT
 from euinvoice.model.it import ItalianVatSummary, Natura
 from euinvoice.syntax._marks import XML_SPACE
@@ -27,6 +28,7 @@ __all__ = [
     "Summary",
     "breakdown",
     "lines",
+    "nature_category",
     "read_nature",
     "summaries",
     "vat_category",
@@ -64,14 +66,16 @@ class Summaries:
         read: Each summary as read, in document order.
         extension: The ``Invoice.it.vat_summaries`` entries, one per rate, Natura and split payment.
         split: Per rate of the summaries without ``Natura``: whether it is split payment (``EsigibilitaIVA`` S).
+        integration: The document is a TD16, which may carry a ``Natura`` with a rate (#132 item 21).
     """
 
     read: tuple[Summary, ...]
     extension: tuple[ItalianVatSummary, ...]
     split: t.Mapping[Decimal, bool]
+    integration: bool = False
 
 
-def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
+def summaries(cursor: Cursor, goods: etree._Element | None, *, integration: bool = False) -> Summaries:
     """Read 2.2.2 ``DatiRiepilogo`` (rows 2.2.2.1 to 2.2.2.8) and their ``.it.vat_summaries`` entries.
 
     The category is App. 5.1's for ``Natura``; without one it is B for ``EsigibilitaIVA`` S (row 2.2.2.7), else S.
@@ -81,7 +85,8 @@ def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
     from the lines) and ``Arrotondamento`` ("Mappatura non considerabile") are reported. Each rate has one payment
     mode (row 2.2.2.7), so split payment at one rate and ordinary VAT at another read as categories B and S, as
     declared, for validation to report BR-B-02 (#132 item 22); both at one rate are refused, as a line has no
-    ``EsigibilitaIVA`` (#132 item 16).
+    ``EsigibilitaIVA`` (#132 item 16). On a TD16 (``integration``), a ``Natura`` with a rate other than 0 reads as
+    category S at that rate (#132 item 21, :func:`nature_category`).
     """
     read: list[Summary] = []
     entries: dict[tuple[Decimal, Natura | None, bool], ItalianVatSummary] = {}
@@ -96,8 +101,7 @@ def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
             category, reason = ("B" if chargeability == "S" else "S"), None
             split.setdefault(entry.rate, set()).add(chargeability == "S")
         else:
-            _zero_rate(cursor, element, nature, entry.rate)
-            category, reason = NATURE_CATEGORY[nature]
+            category, reason = nature_category(cursor, element, nature, entry.rate, integration=integration)
         taxable = _required(cursor, element, "ImponibileImporto", "2.2.2.5")
         tax = _required(cursor, element, "Imposta", "2.2.2.6")
         read.append(Summary(element, entry.rate, nature, chargeability, legal, taxable, tax, category, reason))
@@ -120,7 +124,9 @@ def summaries(cursor: Cursor, goods: etree._Element | None) -> Summaries:
                 f"undecidable ({POLICY_ISSUE})",
                 location=cursor.path(goods if goods is not None else cursor.root),
             )
-    return Summaries(tuple(read), tuple(entries.values()), {rate: True in modes for rate, modes in split.items()})
+    return Summaries(
+        tuple(read), tuple(entries.values()), {rate: True in modes for rate, modes in split.items()}, integration
+    )
 
 
 def _required(cursor: Cursor, element: etree._Element, name: str, ident: str) -> Decimal:
@@ -212,6 +218,7 @@ def _line(cursor: Cursor, element: etree._Element, vat: Summaries) -> InvoiceLin
     # ScontoMaggiorazione) * Quantita, and the official FPR03 body 2 has PrezzoUnitario = PrezzoTotale.
     quantity = cursor.decimal(element, "Quantita", "2.2.1.5")
     price, negative = _price(cursor, element)
+    net_amount, exact = _net_amount(cursor, element)  # 2.2.1.11 → BT-131, .it.total_price beyond two decimals
     count = Decimal(1) if quantity is None else quantity
     values = {
         "identifier": cursor.code(element, "NumeroLinea"),  # 2.2.1.1 → BT-126
@@ -226,8 +233,10 @@ def _line(cursor: Cursor, element: etree._Element, vat: Summaries) -> InvoiceLin
             "sellers_identifier": _article(cursor, element),  # 2.2.1.3 → BT-155
             "attributes": tuple(a for a in attributes if a is not None),
         },
-        "net_amount": _net_amount(cursor, element),
-        "it": None if supply is None and nature is None else {"supply_type": supply, "nature": nature},
+        "net_amount": net_amount,
+        "it": None
+        if supply is None and nature is None and exact is None
+        else {"supply_type": supply, "nature": nature, "total_price": exact},
     }
     return build(InvoiceLine, element, values)
 
@@ -253,22 +262,33 @@ def read_nature(cursor: Cursor, parent: etree._Element, ident: str) -> Natura | 
     return nature
 
 
-def _zero_rate(cursor: Cursor, element: etree._Element, nature: Natura, rate: Decimal | None) -> None:
-    """Refuse a ``Natura`` with a rate other than 0, which its EN category cannot carry (#132 item 21).
+def nature_category(
+    cursor: Cursor, element: etree._Element, nature: Natura, rate: Decimal | None, *, integration: bool
+) -> tuple[str, str | None]:
+    """The VAT category and BT-121 of a ``Natura`` (App. 5.1), or category S for a TD16 ``Natura`` with a rate.
 
     Every App. 5.1 category of a ``Natura`` (Z, E, G, K, AE) has rate 0 in EN 16931 (BR-Z-05, BR-E-05, BR-G-05,
     BR-IC-05, BR-AE-05 and their -06/-07/-09 siblings). The SdI accepts a ``Natura`` with a rate other than 0 only on
     TD16 (Allegato A 1.9.1, checks 00401 and 00430: "ad eccezione del caso in cui l'elemento TipoDocumento assume
-    valore TD16"), an internal reverse-charge integration, for which App. 5.1 gives no EN reading.
+    valore TD16"), where "è possibile indicare sia la natura … sia un valore diverso da zero". The maintainer's
+    decision (#132 item 21): that is VAT charged at the rate, so category S (BR-S-05: rate above 0; no BT-120 or
+    BT-121, BR-S-10) with the ``Natura`` kept in ``.it``. Any other document type is refused.
+
+    Raises:
+        ParseError: ``rate`` is not 0 and the document is not a TD16.
     """
-    if rate is not None and rate != 0:
-        category = NATURE_CATEGORY[nature][0]
-        raise ParseError(
-            f"Natura {nature} (VAT category {category}, App. 5.1) with AliquotaIVA {format(rate, 'f')}: EN 16931 "
-            f"requires rate 0 for category {category} (BR-{'IC' if category == 'K' else category}-05), so the reader "
-            f"does not map it ({POLICY_ISSUE})",
-            location=cursor.path(element),
-        )
+    category, code = NATURE_CATEGORY[nature]
+    if rate is None or rate == 0:
+        return category, code
+    if integration:
+        return "S", None
+    raise ParseError(
+        f"Natura {nature} (VAT category {category}, App. 5.1) with AliquotaIVA {format(rate, 'f')}: EN 16931 "
+        f"requires rate 0 for category {category} (BR-{'IC' if category == 'K' else category}-05), so the reader "
+        "does not map it; only a TD16 may carry a Natura with a rate (Allegato A 1.9.1, 00401 and 00430), and it "
+        f"reads as category S at that rate ({POLICY_ISSUE})",
+        location=cursor.path(element),
+    )
 
 
 def vat_category(
@@ -281,8 +301,7 @@ def vat_category(
 ) -> str | None:
     """BT-151 / BT-102: by ``Natura`` (App. 5.1), else S, or B when the summary at the rate is split payment."""
     if nature is not None:
-        _zero_rate(cursor, element, nature, rate)
-        return NATURE_CATEGORY[nature][0]
+        return nature_category(cursor, element, nature, rate, integration=vat.integration)[0]
     if rate is None:
         return None  # build() names the missing BT-152 / BT-151
     if rate == 0:
@@ -353,16 +372,20 @@ def _price(cursor: Cursor, element: etree._Element) -> tuple[dict[str, object], 
     return price, sign < 0
 
 
-def _net_amount(cursor: Cursor, element: etree._Element) -> Decimal | None:
-    """2.2.1.11 ``PrezzoTotale`` → BT-131, refused with more than two decimals (#132 item 1)."""
+def _net_amount(cursor: Cursor, element: etree._Element) -> tuple[Decimal | None, Decimal | None]:
+    """2.2.1.11 ``PrezzoTotale`` → BT-131, and the exact declared value when BT-131 had to round it (#132 item 1).
+
+    ``Amount8DecimalType`` has 2 to 8 decimals, while BT-131 is an EN amount of at most two (BR-DEC-23). A value
+    beyond two decimals gives BT-131 rounded half up (D11, :func:`~euinvoice.model.amounts.quantize_amount`); the
+    exact value goes to ``.it.total_price`` (2.2.1.11) and the element's text is reported as only partly mapped
+    (``…/PrezzoTotale/text()`` in ``unmapped``). A value with only trailing zeros loses nothing and is not reported.
+    No other declared amount changes (item 22).
+    """
     total = cursor.decimal(element, "PrezzoTotale", "2.2.1.11")
-    if total is not None and total != total.quantize(_CENT):
-        raise ParseError(
-            f"2.2.1.11 PrezzoTotale {format(total, 'f')} has more than two decimals; BT-131 is an EN 16931 amount "
-            f"(BR-DEC-23) and the reader does not round it ({POLICY_ISSUE})",
-            location=cursor.path(cursor.children(element, "PrezzoTotale")[0]),
-        )
-    return total
+    if total is None or total == total.quantize(_CENT):
+        return total, None
+    cursor.partial(cursor.children(element, "PrezzoTotale")[0])
+    return quantize_amount(total), total
 
 
 def _article(cursor: Cursor, element: etree._Element) -> str | None:

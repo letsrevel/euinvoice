@@ -135,7 +135,12 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
         )
     if price.item_price_discount is not None:
         _price_discount(element, price.item_price_discount, term("BT-147", "price_details.item_price_discount"))
-    child(element, "PrezzoTotale", amount8(line.net_amount, term("BT-131", "net_amount"), "2.2.1.11 PrezzoTotale"))
+    # Row 2.2.1.11: BT-131 is PrezzoTotale. The exact declared value (more than two decimals, kept by the reader,
+    # #132 item 1) is written back when it rounds to BT-131; preflight reports one that does not (TOTAL_PRICE).
+    exact = None if line.it is None else line.it.total_price
+    total = line.net_amount if exact is None or quantize_amount(exact) != line.net_amount else exact
+    label = term("BT-131", "net_amount") if total is line.net_amount else f"lines[{index}].it.total_price"
+    child(element, "PrezzoTotale", amount8(total, label, "2.2.1.11 PrezzoTotale"))
     child(
         element,
         "AliquotaIVA",
