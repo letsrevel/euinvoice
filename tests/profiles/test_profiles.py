@@ -200,40 +200,26 @@ class TestPrepare:
         with pytest.raises(pydantic.ValidationError, match="specification_identifier"):
             _profile(specification_identifier=" ").prepare(make_invoice())
 
-    def test_xrechnung_fills_missing_bt23_with_peppol_billing_process(self, make_invoice: MakeInvoice) -> None:
-        # XRechnung 3.0.2 §11.27 p. 57: when no BT-23 is provided, default to Peppol billing process.
-        prepared = XRECHNUNG.prepare(make_invoice())
-        assert prepared.process_control.business_process_type == BILLING_PROCESS
-
-    def test_xrechnung_keeps_a_caller_set_bt23(self, make_invoice: MakeInvoice) -> None:
-        # Caller-provided BT-23 should not be overwritten.
-        custom_process = "urn:example:custom:process"
-        pc = ProcessControl(business_process_type=custom_process, specification_identifier=PEPPOL_BT24)
-        prepared = XRECHNUNG.prepare(make_invoice(process_control=pc))
-        assert prepared.process_control.business_process_type == custom_process
-
-    def test_xrechnung_extension_fills_missing_bt23_with_peppol_billing_process(
-        self, make_invoice: MakeInvoice
+    @pytest.mark.parametrize(
+        "profile",
+        [XRECHNUNG, XRECHNUNG_EXTENSION, XRECHNUNG_CVD],
+        ids=lambda p: p.id,
+    )
+    def test_xrechnung_fills_missing_bt23_with_peppol_billing_process(
+        self, profile: profiles.Profile, make_invoice: MakeInvoice
     ) -> None:
         # XRechnung 3.0.2 §11.27 p. 57: when no BT-23 is provided, default to Peppol billing process.
-        prepared = XRECHNUNG_EXTENSION.prepare(make_invoice())
+        prepared = profile.prepare(make_invoice())
         assert prepared.process_control.business_process_type == BILLING_PROCESS
 
-    def test_xrechnung_extension_keeps_a_caller_set_bt23(self, make_invoice: MakeInvoice) -> None:
+    @pytest.mark.parametrize(
+        "profile",
+        [XRECHNUNG, XRECHNUNG_EXTENSION, XRECHNUNG_CVD],
+        ids=lambda p: p.id,
+    )
+    def test_xrechnung_keeps_a_caller_set_bt23(self, profile: profiles.Profile, make_invoice: MakeInvoice) -> None:
         # Caller-provided BT-23 should not be overwritten.
         custom_process = "urn:example:custom:process"
         pc = ProcessControl(business_process_type=custom_process, specification_identifier=PEPPOL_BT24)
-        prepared = XRECHNUNG_EXTENSION.prepare(make_invoice(process_control=pc))
-        assert prepared.process_control.business_process_type == custom_process
-
-    def test_xrechnung_cvd_fills_missing_bt23_with_peppol_billing_process(self, make_invoice: MakeInvoice) -> None:
-        # XRechnung 3.0.2 §11.27 p. 57: when no BT-23 is provided, default to Peppol billing process.
-        prepared = XRECHNUNG_CVD.prepare(make_invoice())
-        assert prepared.process_control.business_process_type == BILLING_PROCESS
-
-    def test_xrechnung_cvd_keeps_a_caller_set_bt23(self, make_invoice: MakeInvoice) -> None:
-        # Caller-provided BT-23 should not be overwritten.
-        custom_process = "urn:example:custom:process"
-        pc = ProcessControl(business_process_type=custom_process, specification_identifier=PEPPOL_BT24)
-        prepared = XRECHNUNG_CVD.prepare(make_invoice(process_control=pc))
+        prepared = profile.prepare(make_invoice(process_control=pc))
         assert prepared.process_control.business_process_type == custom_process

@@ -13,7 +13,7 @@ import pytest
 
 from _xrechnung_cases import CVD_VIOLATIONS, EDGES, VIOLATIONS, xrechnung_invoice, xrechnung_o_invoice
 from euinvoice import profiles
-from euinvoice.model import Invoice
+from euinvoice.model import Invoice, ProcessControl
 from euinvoice.profiles import xrechnung
 from euinvoice.report import Severity, ValidationReport
 from euinvoice.syntax import Syntax, cii, ubl
@@ -96,22 +96,31 @@ def test_each_cvd_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) 
 
 
 @pytest.mark.parametrize("syntax", list(WRITERS))
-def test_peppol_en16931_r001_fires_on_unprepared_invoice(syntax: Syntax) -> None:
+@pytest.mark.parametrize(
+    "profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id
+)
+def test_peppol_en16931_r001_fires_on_unprepared_invoice(profile: profiles.Profile, syntax: Syntax) -> None:
     """Verify R001 (missing BT-23) fires on unprepared invoice, both in preflight and official Schematron.
 
     PEPPOL-EN16931-R001 is excluded from test_each_preflight_rule_fires_officially because prepare()
     now fills BT-23 with the XRechnung default (§11.27). This test verifies that when an invoice
     genuinely lacks BT-23 (unprepared), both the preflight and official Schematron agree on firing R001.
+
+    XRECHNUNG_CVD is excluded because the R001 violation invoice (based on xrechnung_invoice) lacks
+    CVD-required fields (BT-12, BT-17), so validation reports additional CVD violations.
     """
-    invoice = VIOLATIONS["PEPPOL-EN16931-R001"]()
-    # Do NOT call prepare(); keep BT-23 unset and BT-24 as XRECHNUNG id so validate() detects the profile.
+    # Create unprepared invoice with the profile's BT-24 and no BT-23.
+    invoice = xrechnung_invoice(
+        process_control=ProcessControl(specification_identifier=profile.specification_identifier)
+    )
+    # Do NOT call prepare(); keep BT-23 unset and BT-24 as the profile's id so validate() detects the profile.
     assert invoice.process_control.business_process_type is None
-    assert invoice.process_control.specification_identifier == profiles.XRECHNUNG.specification_identifier
+    assert invoice.process_control.specification_identifier == profile.specification_identifier
 
     # Write, validate, and check agreement between preflight and official findings.
     report = validate(WRITERS[syntax](invoice))
     assert all(f.source != EUINVOICE_SOURCE for f in report.findings), "fell back to EN 16931 core"
-    preflight = profiles.XRECHNUNG.preflight(invoice, syntax)
+    preflight = profile.preflight(invoice, syntax)
     assert all(f.severity is Severity.FATAL for f in preflight)
 
     ids = {f.rule_id for f in preflight}

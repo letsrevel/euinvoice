@@ -114,8 +114,8 @@ class Target:
 
 CORE: t.Final = Target(profiles.EN16931, None, mandatory=False)
 PEPPOL: t.Final = Target(profiles.PEPPOL, BILLING_PROCESS, mandatory=True)
-# XRechnung fixes no BT-23 value, but its rule set re-asserts PEPPOL-EN16931-R001 (BT-23 present); every
-# instance of the pinned testsuite uses the Peppol billing 01 process.
+# XRechnung defaults BT-23 to the Peppol billing process (XRechnung 3.0.2 §11.27); its rule set also
+# re-asserts PEPPOL-EN16931-R001.
 XRECHNUNG: t.Final = Target(profiles.XRECHNUNG, BILLING_PROCESS, mandatory=True)
 TARGETS: t.Final = (CORE, PEPPOL, XRECHNUNG)
 """Every target; adding a profile to the property tests is one entry here."""
