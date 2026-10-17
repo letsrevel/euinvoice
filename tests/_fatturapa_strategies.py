@@ -164,6 +164,23 @@ _PERSON = st.none() | st.tuples(_NAME_PART, _NAME_PART)
 
 
 @st.composite
+def _buyers(draw: st.DrawFn) -> Buyer:
+    """An Italian buyer (by codice fiscale or partita IVA) or one abroad, whose post code may need CAP 00000."""
+    abroad = BuyerPostalAddress(
+        address_line_1="Rue Exemple 1", city="Paris", post_code=draw(_FOREIGN_POST_CODES), country_code="FR"
+    )
+    return draw(
+        st.sampled_from(
+            [
+                buyer(),
+                buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None),
+                buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None, postal_address=abroad),
+            ]
+        )
+    )
+
+
+@st.composite
 def v1_invoices(draw: st.DrawFn) -> Invoice:
     """A completed TD01, TD04, TD24 or TD17 with 1 to 5 lines of the v1 subset.
 
@@ -184,20 +201,13 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
     }
     if seller_person is not None:
         changes["seller"] = seller(name=" ".join(seller_person))
-    buyer_: Buyer = draw(
-        st.sampled_from([buyer(), buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)])
-    )
+    buyer_: Buyer = draw(_buyers())
     if tipo is TipoDocumento.TD17:  # the buyer integrates a foreign supplier's invoice (SdI 00473, 00475)
         changes |= {
             "seller": _foreign_seller(draw(_FOREIGN_POST_CODES)),
             "it": italian(document_type=tipo, issuer=SoggettoEmittente.CC, tax_regime=RegimeFiscale.RF18, **split),
         }
         buyer_ = buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)
-    elif draw(st.booleans()):  # a buyer abroad
-        address = BuyerPostalAddress(
-            address_line_1="Rue Exemple 1", city="Paris", post_code=draw(_FOREIGN_POST_CODES), country_code="FR"
-        )
-        buyer_ = buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None, postal_address=address)
     payment, instructions = draw(st.one_of(st.just((None, None)), _payments()))
     if payment is not None:
         changes |= {"it": changes["it"].model_copy(update={"payment": payment}), "payment_instructions": instructions}
