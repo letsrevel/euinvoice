@@ -65,7 +65,7 @@ def _line_number(identifier: str, term: str) -> str:
 
 def _description(line: InvoiceLine) -> str:
     """2.2.1.4 Descrizione: BT-153, then ``" - "`` and BT-154 when there is one (App. 4.1 concatenates them; #133)."""
-    if line.item.description is None:
+    if not line.item.description:  # absent or empty
         return line.item.name
     return f"{line.item.name}{DESCRIPTION_SEPARATOR}{line.item.description}"
 

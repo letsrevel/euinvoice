@@ -53,6 +53,13 @@ def test_descrizione_without_bt_154_is_bt_153() -> None:
     assert written(_described("Biglietto", None)).findtext(f"{LINE}/Descrizione") == "Biglietto"
 
 
+def test_an_empty_bt_154_is_absent() -> None:
+    invoice = _described("Biglietto", "")
+
+    assert _errors(invoice) == []
+    assert written(invoice).findtext(f"{LINE}/Descrizione") == "Biglietto"
+
+
 def test_descrizione_of_exactly_1000_characters_is_written() -> None:
     invoice = _described("n" * 500, "d" * 497)
 

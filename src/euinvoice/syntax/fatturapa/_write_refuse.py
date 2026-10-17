@@ -204,7 +204,7 @@ def payment_days(invoice: Invoice, it: ItalianExtension) -> str | None:
 def _lines(invoice: Invoice) -> t.Iterator[Finding]:
     for index, line in enumerate(invoice.lines):
         description = line.item.description
-        if description is not None:
+        if description:  # an empty BT-154 is absent: Descrizione is BT-153 alone
             joined = len(line.item.name) + len(DESCRIPTION_SEPARATOR) + len(description)
             if joined > DESCRIZIONE_MAX:
                 yield _unwritable(
