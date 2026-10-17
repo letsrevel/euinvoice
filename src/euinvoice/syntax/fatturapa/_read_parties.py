@@ -5,8 +5,10 @@ Elements App. 4.1 marks "Mappatura non considerabile" or EXT without a model hom
 IscrizioneREA, the Albo data, Fax, the buyer's RappresentanteFiscale) stay unmarked, so they are reported.
 """
 
+import pydantic
 from lxml import etree
 
+from euinvoice.errors import ParseError
 from euinvoice.model import (
     Buyer,
     BuyerPostalAddress,
@@ -14,6 +16,7 @@ from euinvoice.model import (
     SellerContact,
     SellerPostalAddress,
 )
+from euinvoice.model.it.extension import Latin60Text
 from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
@@ -99,6 +102,9 @@ def _name(cursor: Cursor, data: etree._Element | None) -> str | None:
     return " ".join(parts) if parts else None
 
 
+_LATIN_60: pydantic.TypeAdapter[str] = pydantic.TypeAdapter(Latin60Text)
+
+
 def person_names(cursor: Cursor, header: etree._Element, party: str) -> dict[str, str | None]:
     """The ``Invoice.it`` name split of a natural person: ``Nome`` and ``Cognome`` of ``party`` (#150).
 
@@ -109,15 +115,34 @@ def person_names(cursor: Cursor, header: etree._Element, party: str) -> dict[str
 
     Returns:
         The ``it`` fields (``seller_*`` or ``buyer_*``): empty for a ``Denominazione`` (a "persona non fisica").
+
+    Raises:
+        ParseError: A part does not fit String60LatinType, or only one of the two is given.
     """
     registry = cursor.one(cursor.one(cursor.one(header, party), "DatiAnagrafici"), "Anagrafica")
     if cursor.children(registry, "Denominazione"):
         return {}
-    prefix = "seller" if party == "CedentePrestatore" else "buyer"
-    return {
-        f"{prefix}_first_name": cursor.text(registry, "Nome"),
-        f"{prefix}_last_name": cursor.text(registry, "Cognome"),
-    }
+    prefix, ids = (
+        ("seller", ("1.2.1.3.2", "1.2.1.3.3"))
+        if party == "CedentePrestatore"
+        else ("buyer", ("1.4.1.3.2", "1.4.1.3.3"))
+    )
+    found: dict[str, str | None] = {}
+    for field, tag, ident in (("first_name", "Nome", ids[0]), ("last_name", "Cognome", ids[1])):
+        element = cursor.one(registry, tag)
+        if element is None:
+            continue
+        try:
+            found[f"{prefix}_{field}"] = _LATIN_60.validate_python(element.text or "")
+        except pydantic.ValidationError as exc:
+            raise ParseError(f"{ident} {tag}: {exc.errors()[0]['msg']}", location=cursor.path(element)) from None
+    if len(found) == 1 and registry is not None:
+        missing, ident = ("Cognome", ids[1]) if f"{prefix}_first_name" in found else ("Nome", ids[0])
+        raise ParseError(
+            f"{ident} {missing}: missing; AnagraficaType takes Nome and Cognome together",
+            location=cursor.path(registry),
+        )
+    return found
 
 
 def _address[A: SellerPostalAddress | BuyerPostalAddress](

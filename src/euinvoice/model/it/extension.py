@@ -64,8 +64,6 @@ __all__ = [
 ]
 
 _ELEMENT_ID = re.compile(r"[1-9][0-9]*(?:\.[1-9][0-9]*)*")
-_LATIN_100 = re.compile(r"[\u0000-ÿ]{1,100}")
-_LATIN_60 = re.compile(r"[\u0000-ÿ]{1,60}")
 _RATE_MAX = Decimal(100)
 _CENT = Decimal("0.01")
 
@@ -116,32 +114,29 @@ def _rate(value: Decimal) -> Decimal:
     return value
 
 
-def _latin_100(value: str) -> str:
-    if not _LATIN_100.fullmatch(value):
-        raise ModelError(
-            "must be 1 to 100 characters of Basic Latin and Latin-1 Supplement (U+0000..U+00FF), "
-            f"String100LatinType of the FatturaPA XSD 1.2.3; got {len(value)} characters"
-        )
-    return value
+def _latin(limit: int) -> t.Callable[[str], str]:
+    """The check of XSD ``String<limit>LatinType`` (1 to ``limit`` characters of U+0000..U+00FF)."""
+    pattern = re.compile(rf"[\u0000-ÿ]{{1,{limit}}}")
 
+    def check(value: str) -> str:
+        if not pattern.fullmatch(value):
+            raise ModelError(
+                f"must be 1 to {limit} characters of Basic Latin and Latin-1 Supplement (U+0000..U+00FF), "
+                f"String{limit}LatinType of the FatturaPA XSD 1.2.3; got {len(value)} characters"
+            )
+        return value
 
-def _latin_60(value: str) -> str:
-    if not _LATIN_60.fullmatch(value):
-        raise ModelError(
-            "must be 1 to 60 characters of Basic Latin and Latin-1 Supplement (U+0000..U+00FF), "
-            f"String60LatinType of the FatturaPA XSD 1.2.3; got {len(value)} characters"
-        )
-    return value
+    return check
 
 
 Rate = t.Annotated[Percentage, pydantic.AfterValidator(_rate)]
 """A FatturaPA VAT rate (``AliquotaIVA``, XSD ``RateType``): a percentage from 0 to 100 with at most two decimals."""
 
-Latin100Text = t.Annotated[Text, pydantic.AfterValidator(_latin_100)]
+Latin100Text = t.Annotated[Text, pydantic.AfterValidator(_latin(100))]
 """Text of XSD ``String100LatinType`` (``xs:normalizedString``, pattern
 ``[\\p{IsBasicLatin}\\p{IsLatin-1Supplement}]{1,100}``)."""
 
-Latin60Text = t.Annotated[Text, pydantic.AfterValidator(_latin_60)]
+Latin60Text = t.Annotated[Text, pydantic.AfterValidator(_latin(60))]
 """Text of XSD ``String60LatinType`` (``xs:normalizedString``, pattern
 ``[\\p{IsBasicLatin}\\p{IsLatin-1Supplement}]{1,60}``)."""
 
@@ -216,7 +211,7 @@ class ItalianExtension(EuInvoiceModel):
     """``DatiPagamento`` data (BG-16 in App. 4.1)."""
     seller_first_name: t.Annotated[Latin60Text | None, fatturapa("1.2.1.3.2")] = None
     """``Nome`` <1.1 with Cognome> of the seller, a natural person (``Anagrafica``). Set with
-    :attr:`seller_last_name` or not at all. Allegato A 1.9.1 (p. 38) reserves ``Denominazione`` (BT-27) for a
+    :attr:`seller_last_name` or not at all. Allegato A 1.9.1 (pp. 33 and 38) reserves ``Denominazione`` (BT-27) for a
     "persona non fisica"; with the pair set the writer emits ``Nome`` and ``Cognome`` instead, and BT-27 must be
     ``Nome Cognome`` (the form the reader gives, #132 item 2a). App. 4.1 only describes the reverse
     concatenation into BT-27."""

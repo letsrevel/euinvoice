@@ -453,7 +453,10 @@ def test_natural_persons_are_written_as_nome_and_cognome() -> None:
 
     for party, name in ((SELLER, ("Anna", "Verdi")), (BUYER, ("Mario", "De Rossi"))):
         anagrafica = _find(root, f"{party}/DatiAnagrafici/Anagrafica")
-        assert _pairs(anagrafica) == [("Nome", name[0]), ("Cognome", name[1])]  # no Denominazione (Allegato A p. 38)
+        assert _pairs(anagrafica) == [
+            ("Nome", name[0]),
+            ("Cognome", name[1]),
+        ]  # no Denominazione (Allegato A pp. 33, 38)
 
 
 def test_a_party_without_a_name_split_stays_a_denominazione() -> None:
