@@ -450,6 +450,17 @@ def test_stamp_duty_on_a_credit_note_is_a_zero_allowance() -> None:
     assert result.unmapped[1:] == ()
 
 
+def test_a_negative_importo_bollo_is_reported_not_refused() -> None:
+    # Amount2DecimalType is signed; a negative duty is no charged duty (#165), so it stays unmapped as before.
+    result = parse_detailed(VARIANTS["negative stamp duty"])
+
+    assert result.invoice.it is not None
+    assert result.invoice.it.stamp_duty_amount is None
+    assert result.unmapped[1:] == (
+        "/p:FatturaElettronica/FatturaElettronicaBody/DatiGenerali/DatiGeneraliDocumento/DatiBollo/ImportoBollo",
+    )
+
+
 def test_a_zero_importo_bollo_is_no_stamp_duty_amount() -> None:
     invoice = parse(VARIANTS["stamp duty"])
 

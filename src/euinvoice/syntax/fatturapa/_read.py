@@ -196,7 +196,9 @@ def _stamp_duty(
         return (), (), None
     cursor.code(stamp, "BolloVirtuale")  # SI, the only XSD value: the presence of the allowance or charge says it
     amount = cursor.decimal(stamp, "ImportoBollo", "2.1.1.6.2")
-    charged = amount if amount else None  # None and 0 alike: not charged
+    if amount is not None and amount < 0:  # valid in the signed XSD type, but no charged duty: reported (#165)
+        cursor.discard(cursor.children(stamp, "ImportoBollo")[0])
+    charged = amount if amount is not None and amount > 0 else None  # None and 0 alike: not charged
     marker = ((_STAMP_DUTY_ALLOWANCE,), ()) if credit_note else ((), (_STAMP_DUTY_CHARGE,))
     return (*marker, charged)
 
