@@ -36,6 +36,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     DOCUMENT_TYPE,
     EXTENSION,
     ISSUER,
+    NAME,
     NATURA,
     PAYMENT,
     REQUIRED,
@@ -79,6 +80,7 @@ def preflight(invoice: Invoice, transmission: Transmission | None = None) -> tup
     blocks, summary_findings = summarize(invoice, it)
     findings = [
         *_document(invoice, it),
+        *_names(invoice, it),
         *_required(invoice),
         *_natura(invoice),
         *_payment(invoice, it),
@@ -115,6 +117,26 @@ def _document(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
             f'required: {SoggettoEmittente.CC} or {SoggettoEmittente.TZ} (Allegato A 1.9.1 §2.1.6: "Nei casi di '
             "documenti emessi da un soggetto diverso dal cedente/prestatore va valorizzato l'elemento seguente\")",
         )
+
+
+def _names(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
+    """A natural person's Nome / Cognome against BT-27 / BT-44.
+
+    App. 4.1 (rows 1.2.1.3.1-3, 1.4.1.3.1-3) folds Nome and Cognome into the one BT, so they are consistent when the
+    BT is ``Nome Cognome`` (the reader's form, #132 item 2a); anything else would be read back as another name.
+    """
+    for term, name, first, last, path in (
+        ("BT-27", invoice.seller.name, it.seller_first_name, it.seller_last_name, "seller"),
+        ("BT-44", invoice.buyer.name, it.buyer_first_name, it.buyer_last_name, "buyer"),
+    ):
+        expected = f"{first} {last}"
+        if first is not None and last is not None and name != expected:
+            yield finding(
+                NAME,
+                f"{path}.name",
+                f"{term} is {name!r}, but it.{path}_first_name and it.{path}_last_name (Nome, Cognome) give "
+                f"{expected!r}: with the split set, the name must be 'Nome Cognome'",
+            )
 
 
 def _required(invoice: Invoice) -> t.Iterator[Finding]:

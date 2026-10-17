@@ -11,6 +11,7 @@ __all__ = [
     "DOCUMENT_TYPE",
     "EXTENSION",
     "ISSUER",
+    "NAME",
     "NATURA",
     "PAYMENT",
     "PREFLIGHT_SOURCE",
@@ -30,6 +31,8 @@ DOCUMENT_TYPE: t.Final = "EUINVOICE-FATTURAPA-DOCUMENT-TYPE"
 """TipoDocumento is not one the v1 writer emits (plan M11), or BT-3 is not its code in App. 5.4."""
 ISSUER: t.Final = "EUINVOICE-FATTURAPA-ISSUER"
 """A TD17 without SoggettoEmittente (1.6)."""
+NAME: t.Final = "EUINVOICE-FATTURAPA-NAME"
+"""A natural person's Nome / Cognome (1.2.1.3.2-3, 1.4.1.3.2-3) in ``Invoice.it`` disagree with BT-27 / BT-44."""
 REQUIRED: t.Final = "EUINVOICE-FATTURAPA-REQUIRED"
 """An element the XSD requires whose business term is missing."""
 NATURA: t.Final = "EUINVOICE-FATTURAPA-NATURA"

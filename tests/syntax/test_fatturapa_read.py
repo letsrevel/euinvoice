@@ -250,8 +250,28 @@ def test_a_natural_person_name_is_nome_cognome() -> None:
     result = parse_detailed(data)
 
     assert result.invoice.buyer.name == "Mario De Rossi"
+    assert result.invoice.it is not None
+    assert (result.invoice.it.buyer_first_name, result.invoice.it.buyer_last_name) == ("Mario", "De Rossi")
+    assert (result.invoice.it.seller_first_name, result.invoice.it.seller_last_name) == (None, None)
     anagrafica = "/p:FatturaElettronica/FatturaElettronicaHeader/CessionarioCommittente/DatiAnagrafici/Anagrafica"
-    assert result.unmapped[1:] == (f"{anagrafica}/Nome", f"{anagrafica}/Cognome", f"{anagrafica}/Titolo")
+    assert result.unmapped[1:] == (f"{anagrafica}/Titolo",)  # Nome and Cognome are mapped (1.4.1.3.2-3, #150)
+
+
+def test_a_seller_person_name_is_split_too() -> None:
+    seller = "<Anagrafica><Nome>Anna</Nome><Cognome>Verdi</Cognome></Anagrafica>"
+
+    invoice = parse(document(seller_name=seller))
+
+    assert invoice.seller.name == "Anna Verdi"
+    assert invoice.it is not None
+    assert (invoice.it.seller_first_name, invoice.it.seller_last_name) == ("Anna", "Verdi")
+
+
+def test_a_denominazione_leaves_the_name_split_unset() -> None:
+    invoice = parse(document())
+
+    assert invoice.it is not None
+    assert (invoice.it.seller_first_name, invoice.it.buyer_last_name) == (None, None)
 
 
 def test_a_foreign_seller_reads_with_the_core_bt_24() -> None:

@@ -52,13 +52,19 @@ def _codice_fiscale(parent: etree._Element, identifier: Identifier | None, term:
     child(parent, "CodiceFiscale", matching(value, _CODICE_FISCALE, term, "CodiceFiscale (CodiceFiscaleType)"))
 
 
-def _anagrafica(parent: etree._Element, name: str, term: str) -> None:
-    # ponytail: always Denominazione. Allegato A asks for Nome and Cognome for natural persons, and App. 4.1 only
-    # describes the reverse concatenation ("Nome&Cognome" or "Nome#Cognome"); how to split a name is a #115
-    # decision 5 policy (#133). Upgrade path: a name split on Invoice.it.
-    child(
-        child(parent, "Anagrafica"), "Denominazione", text(name, term, "Denominazione (String80LatinType)", maximum=80)
-    )
+def _anagrafica(parent: etree._Element, name: str, term: str, person: tuple[str | None, str | None], path: str) -> None:
+    """``AnagraficaType`` choice: ``Nome`` + ``Cognome`` of a natural person, else ``Denominazione`` = BT-27 / BT-44.
+
+    Allegato A 1.9.1 (p. 38) reserves ``Denominazione`` for a "persona non fisica". ``person`` is the pair from
+    ``Invoice.it``; the pre-flight checks that the BT is ``Nome Cognome``.
+    """
+    anagrafica = child(parent, "Anagrafica")
+    first, last = person
+    if first is None or last is None:  # the extension sets both or neither
+        child(anagrafica, "Denominazione", text(name, term, "Denominazione (String80LatinType)", maximum=80))
+        return
+    child(anagrafica, "Nome", text(first, f"{path}_first_name", "Nome (String60LatinType)", maximum=60))
+    child(anagrafica, "Cognome", text(last, f"{path}_last_name", "Cognome (String60LatinType)", maximum=60))
 
 
 def _address(
@@ -122,7 +128,13 @@ def write_seller(header: etree._Element, invoice: Invoice, it: ItalianExtension)
     data = child(party, "DatiAnagrafici")
     _vat(data, seller.vat_identifier or "", "BT-31 (seller.vat_identifier)")
     _codice_fiscale(data, seller.legal_registration_identifier, "BT-30 (seller.legal_registration_identifier)")
-    _anagrafica(data, seller.name, "BT-27 (seller.name)")
+    _anagrafica(
+        data,
+        seller.name,
+        "BT-27 (seller.name)",
+        (it.seller_first_name, it.seller_last_name),
+        "it.seller",
+    )
     child(data, "RegimeFiscale", it.tax_regime)
     _address(
         party, seller.postal_address, ("BT-35", "BT-36", "BT-37", "BT-38", "BT-39", "BT-40"), "seller.postal_address"
@@ -164,7 +176,7 @@ def write_seller(header: etree._Element, invoice: Invoice, it: ItalianExtension)
         )
 
 
-def write_buyer(header: etree._Element, invoice: Invoice) -> None:
+def write_buyer(header: etree._Element, invoice: Invoice, it: ItalianExtension) -> None:
     """1.4 CessionarioCommittente from the BUYER (BG-7)."""
     buyer: Buyer = invoice.buyer
     party = child(header, "CessionarioCommittente")
@@ -172,7 +184,7 @@ def write_buyer(header: etree._Element, invoice: Invoice) -> None:
     if buyer.vat_identifier is not None:
         _vat(data, buyer.vat_identifier, "BT-48 (buyer.vat_identifier)")
     _codice_fiscale(data, buyer.legal_registration_identifier, "BT-47 (buyer.legal_registration_identifier)")
-    _anagrafica(data, buyer.name, "BT-44 (buyer.name)")
+    _anagrafica(data, buyer.name, "BT-44 (buyer.name)", (it.buyer_first_name, it.buyer_last_name), "it.buyer")
     _address(
         party, buyer.postal_address, ("BT-50", "BT-51", "BT-52", "BT-53", "BT-54", "BT-55"), "buyer.postal_address"
     )

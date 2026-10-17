@@ -28,6 +28,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     DOCUMENT_TYPE,
     EXTENSION,
     ISSUER,
+    NAME,
     NATURA,
     PAYMENT,
     PREFLIGHT_SOURCE,
@@ -120,6 +121,32 @@ def test_o_lines_are_reported_as_a_category_only() -> None:
         (CATEGORY, "lines[0].vat_information.category_code", Severity.ERROR),
         (CATEGORY, "vat_breakdown[0].category_code", Severity.ERROR),
     ]
+
+
+@pytest.mark.parametrize(
+    ("changes", "location"),
+    [
+        (
+            {"seller": seller(name="Anna Verdi"), "it": italian(seller_first_name="Anna", seller_last_name="Bianchi")},
+            "seller.name",
+        ),
+        (
+            {"buyer": buyer(name="Mario"), "it": italian(buyer_first_name="Mario", buyer_last_name="Rossi")},
+            "buyer.name",
+        ),
+    ],
+)
+def test_a_name_split_must_agree_with_the_bt_name(changes: dict[str, t.Any], location: str) -> None:
+    findings = preflight(it_invoice(**changes))
+
+    assert [(f.rule_id, f.location, f.severity) for f in findings] == [(NAME, location, Severity.ERROR)]
+    assert "'Nome Cognome'" in findings[0].message
+
+
+def test_a_name_split_equal_to_nome_cognome_is_accepted() -> None:
+    it = italian(buyer_first_name="Mario", buyer_last_name="De Rossi")
+
+    assert preflight(it_invoice(buyer=buyer(name="Mario De Rossi"), it=it)) == ()
 
 
 @pytest.mark.parametrize(

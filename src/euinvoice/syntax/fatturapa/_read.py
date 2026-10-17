@@ -33,7 +33,7 @@ from euinvoice.syntax.fatturapa._read_cassa import funds
 from euinvoice.syntax.fatturapa._read_codes import TYPE_CODE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 from euinvoice.syntax.fatturapa._read_lines import breakdown, lines, summaries, vat_point_date_code
-from euinvoice.syntax.fatturapa._read_parties import buyer, seller
+from euinvoice.syntax.fatturapa._read_parties import buyer, person_names, seller
 from euinvoice.syntax.fatturapa._read_payment import Payment, payment
 from euinvoice.syntax.result import ParseResult
 
@@ -135,6 +135,8 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
         "document_type": kind,  # 2.1.1.1
         "vat_summaries": vat.extension,  # 2.2.2
         "payment": paid.extension,  # 2.4
+        **person_names(cursor, header, "CedentePrestatore"),  # 1.2.1.3.2-3
+        **person_names(cursor, header, "CessionarioCommittente"),  # 1.4.1.3.2-3
     }
     values = {
         "number": cursor.text(document, "Numero"),  # 2.1.1.4 → BT-1

@@ -16,7 +16,13 @@ All notable changes to this project are documented here. The format follows
   transmission's `CodiceDestinatario`, so a Peppol-shaped invoice can be written; a Natura `DatiRiepilogo` without
   `RiferimentoNormativo` gives a non-blocking `warning` finding (Allegato A 1.9.1). `fatturapa.preflight` takes an
   optional `transmission` for the BT-49 check.
-
+- FatturaPA natural-person names ([#150](https://github.com/letsrevel/euinvoice/issues/150), #133 item 7):
+  `ItalianExtension` takes `seller_first_name` / `seller_last_name` (1.2.1.3.2-3) and `buyer_first_name` /
+  `buyer_last_name` (1.4.1.3.2-3), `String60LatinType`, each pair together or not at all. The writer emits
+  `Nome` + `Cognome` instead of `Denominazione` for a party with the pair set (Allegato A 1.9.1 p. 38), and the
+  pre-flight reports `EUINVOICE-FATTURAPA-NAME` unless BT-27 / BT-44 is `Nome Cognome`. The reader fills the pair
+  from `Nome` / `Cognome` (BT-27 / BT-44 stay `Nome Cognome`) and no longer lists those elements as unmapped, so
+  FPR12 to model to FPR12 is lossless for natural persons.
 - `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged

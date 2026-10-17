@@ -9,6 +9,8 @@ Specifiche tecniche 1.9.1 page; the table has no version of its own), in
 Where the data hangs:
 
 * Document level: :class:`ItalianExtension` on ``Invoice.it`` / ``InvoiceDraft.it``.
+* Natural-person names: :attr:`ItalianExtension.seller_first_name` / ``seller_last_name`` and the buyer's pair,
+  ``Nome`` and ``Cognome`` of ``Anagrafica`` (#150), which the writer emits instead of ``Denominazione``.
 * Line level: :class:`ItalianLineExtension` on ``InvoiceLine.it`` / ``LineDraft.it``. Lines are input data, one
   FatturaPA ``DettaglioLinee`` (2.2.1) per INVOICE LINE (BG-25) (App. 4.1). Keying them from the root would need
   a unique line id, and no CEN rule makes BT-126 unique (BR-21 only requires it, ``EN16931-model.sch`` 1.3.16).
@@ -63,6 +65,7 @@ __all__ = [
 
 _ELEMENT_ID = re.compile(r"[1-9][0-9]*(?:\.[1-9][0-9]*)*")
 _LATIN_100 = re.compile(r"[\u0000-ÿ]{1,100}")
+_LATIN_60 = re.compile(r"[\u0000-ÿ]{1,60}")
 _RATE_MAX = Decimal(100)
 _CENT = Decimal("0.01")
 
@@ -122,12 +125,25 @@ def _latin_100(value: str) -> str:
     return value
 
 
+def _latin_60(value: str) -> str:
+    if not _LATIN_60.fullmatch(value):
+        raise ModelError(
+            "must be 1 to 60 characters of Basic Latin and Latin-1 Supplement (U+0000..U+00FF), "
+            f"String60LatinType of the FatturaPA XSD 1.2.3; got {len(value)} characters"
+        )
+    return value
+
+
 Rate = t.Annotated[Percentage, pydantic.AfterValidator(_rate)]
 """A FatturaPA VAT rate (``AliquotaIVA``, XSD ``RateType``): a percentage from 0 to 100 with at most two decimals."""
 
 Latin100Text = t.Annotated[Text, pydantic.AfterValidator(_latin_100)]
 """Text of XSD ``String100LatinType`` (``xs:normalizedString``, pattern
 ``[\\p{IsBasicLatin}\\p{IsLatin-1Supplement}]{1,100}``)."""
+
+Latin60Text = t.Annotated[Text, pydantic.AfterValidator(_latin_60)]
+"""Text of XSD ``String60LatinType`` (``xs:normalizedString``, pattern
+``[\\p{IsBasicLatin}\\p{IsLatin-1Supplement}]{1,60}``)."""
 
 
 class ItalianLineExtension(EuInvoiceModel):
@@ -198,6 +214,31 @@ class ItalianExtension(EuInvoiceModel):
     value)."""
     payment: t.Annotated[ItalianPayment | None, fatturapa("2.4")] = None
     """``DatiPagamento`` data (BG-16 in App. 4.1)."""
+    seller_first_name: t.Annotated[Latin60Text | None, fatturapa("1.2.1.3.2")] = None
+    """``Nome`` <1.1 with Cognome> of the seller, a natural person (``Anagrafica``). Set with
+    :attr:`seller_last_name` or not at all. Allegato A 1.9.1 (p. 38) reserves ``Denominazione`` (BT-27) for a
+    "persona non fisica"; with the pair set the writer emits ``Nome`` and ``Cognome`` instead, and BT-27 must be
+    ``Nome Cognome`` (the form the reader gives, #132 item 2a). App. 4.1 only describes the reverse
+    concatenation into BT-27."""
+    seller_last_name: t.Annotated[Latin60Text | None, fatturapa("1.2.1.3.3")] = None
+    """``Cognome`` of the seller; see :attr:`seller_first_name`."""
+    buyer_first_name: t.Annotated[Latin60Text | None, fatturapa("1.4.1.3.2")] = None
+    """``Nome`` of the buyer, a natural person; as :attr:`seller_first_name`, for BT-44."""
+    buyer_last_name: t.Annotated[Latin60Text | None, fatturapa("1.4.1.3.3")] = None
+    """``Cognome`` of the buyer; see :attr:`buyer_first_name`."""
+
+    @pydantic.model_validator(mode="after")
+    def _names_in_pairs(self) -> t.Self:
+        for party, first, last in (
+            ("seller", self.seller_first_name, self.seller_last_name),
+            ("buyer", self.buyer_first_name, self.buyer_last_name),
+        ):
+            if (first is None) != (last is None):
+                raise ModelError(
+                    f"{party}_first_name and {party}_last_name (Nome and Cognome of the {party}) are given together "
+                    "or not at all: the XSD AnagraficaType takes both"
+                )
+        return self
 
     @pydantic.field_validator("vat_summaries")
     @classmethod

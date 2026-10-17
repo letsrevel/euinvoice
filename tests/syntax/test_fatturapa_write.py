@@ -446,3 +446,18 @@ def test_optional_parts_are_written_alone() -> None:
     assert root.find(f"{GENERAL}/Causale") is None
     linked = _find(root, "FatturaElettronicaBody/DatiGenerali/DatiFattureCollegate")
     assert _pairs(linked) == [("IdDocumento", "FT-0")]
+
+
+def test_natural_persons_are_written_as_nome_and_cognome() -> None:
+    root = written(samples()["TD01 natural persons"].invoice)
+
+    for party, name in ((SELLER, ("Anna", "Verdi")), (BUYER, ("Mario", "De Rossi"))):
+        anagrafica = _find(root, f"{party}/DatiAnagrafici/Anagrafica")
+        assert _pairs(anagrafica) == [("Nome", name[0]), ("Cognome", name[1])]  # no Denominazione (Allegato A p. 38)
+
+
+def test_a_party_without_a_name_split_stays_a_denominazione() -> None:
+    root = written(it_invoice(it=italian(buyer_first_name="Mario", buyer_last_name="Rossi")))
+
+    assert _pairs(_find(root, f"{SELLER}/DatiAnagrafici/Anagrafica")) == [("Denominazione", "Esempio Eventi S.r.l.")]
+    assert _pairs(_find(root, f"{BUYER}/DatiAnagrafici/Anagrafica")) == [("Nome", "Mario"), ("Cognome", "Rossi")]

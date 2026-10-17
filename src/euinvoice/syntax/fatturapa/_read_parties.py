@@ -17,7 +17,7 @@ from euinvoice.model import (
 from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
-__all__ = ["CODICE_FISCALE", "buyer", "seller"]
+__all__ = ["CODICE_FISCALE", "buyer", "person_names", "seller"]
 
 CODICE_FISCALE = "0210"
 """ISO 6523 ICD of the Italian codice fiscale: App. 4.1 rows 1.2.1.2 and 1.4.1.2 ("schemeIdentifier … 0210")."""
@@ -85,21 +85,39 @@ def _eori(cursor: Cursor, data: etree._Element | None) -> tuple[dict[str, str], 
 def _name(cursor: Cursor, data: etree._Element | None) -> str | None:
     """``Anagrafica`` → the party name: ``Denominazione``, else ``Nome Cognome``.
 
-    App. 4.1 folds ``Nome`` and ``Cognome`` into one BT; the model has no place for the split, so the name is
-    ``Nome Cognome`` and both elements are reported in ``unmapped`` (policy item 2 of #132). App. 4.1 rows
-    1.2.1.3.1-3 / 1.4.1.3.1-3 also prefix the BT with ``Denominazione:`` or ``Nome#Cognome:``, the CIUS-IT marker of
-    which form a name takes (BR-IT-091, BR-IT-171); the reader keeps the plain name, as its BT-24 claims no CIUS-IT
-    (``_read``). ``EORI:`` stays: it is part of the BT-29 / BT-46 identifier's value, which carries no scheme.
+    App. 4.1 folds ``Nome`` and ``Cognome`` into one BT, so the name is ``Nome Cognome`` (policy item 2 of #132);
+    :func:`person_names` keeps the split in ``Invoice.it`` (#150). App. 4.1 rows 1.2.1.3.1-3 / 1.4.1.3.1-3 also
+    prefix the BT with ``Denominazione:`` or ``Nome#Cognome:``, the CIUS-IT marker of which form a name takes
+    (BR-IT-091, BR-IT-171); the reader keeps the plain name, as its BT-24 claims no CIUS-IT (``_read``). ``EORI:``
+    stays: it is part of the BT-29 / BT-46 identifier's value, which carries no scheme.
     """
     registry = cursor.one(data, "Anagrafica")
     name = cursor.text(registry, "Denominazione")
     if name is not None:
         return name
-    first, last = cursor.one(registry, "Nome"), cursor.one(registry, "Cognome")
-    parts = [element.text or "" for element in (first, last) if element is not None]
-    cursor.discard(first)
-    cursor.discard(last)
+    parts = [part for part in (cursor.text(registry, "Nome"), cursor.text(registry, "Cognome")) if part is not None]
     return " ".join(parts) if parts else None
+
+
+def person_names(cursor: Cursor, header: etree._Element, party: str) -> dict[str, str | None]:
+    """The ``Invoice.it`` name split of a natural person: ``Nome`` and ``Cognome`` of ``party`` (#150).
+
+    Args:
+        cursor: The reading cursor.
+        header: The ``FatturaElettronicaHeader``.
+        party: ``"CedentePrestatore"`` (1.2.1.3.2-3) or ``"CessionarioCommittente"`` (1.4.1.3.2-3).
+
+    Returns:
+        The ``it`` fields (``seller_*`` or ``buyer_*``): empty for a ``Denominazione`` (a "persona non fisica").
+    """
+    registry = cursor.one(cursor.one(cursor.one(header, party), "DatiAnagrafici"), "Anagrafica")
+    if cursor.children(registry, "Denominazione"):
+        return {}
+    prefix = "seller" if party == "CedentePrestatore" else "buyer"
+    return {
+        f"{prefix}_first_name": cursor.text(registry, "Nome"),
+        f"{prefix}_last_name": cursor.text(registry, "Cognome"),
+    }
 
 
 def _address[A: SellerPostalAddress | BuyerPostalAddress](
