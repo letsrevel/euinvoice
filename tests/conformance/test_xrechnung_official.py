@@ -95,6 +95,34 @@ def test_each_cvd_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) 
     assert ids == {rule_id, "BR-DE-CVD-03"}
 
 
+@pytest.mark.parametrize("syntax", list(WRITERS))
+def test_peppol_en16931_r001_fires_on_unprepared_invoice(syntax: Syntax) -> None:
+    """Verify R001 (missing BT-23) fires on unprepared invoice, both in preflight and official Schematron.
+
+    PEPPOL-EN16931-R001 is excluded from test_each_preflight_rule_fires_officially because prepare()
+    now fills BT-23 with the XRechnung default (§11.27). This test verifies that when an invoice
+    genuinely lacks BT-23 (unprepared), both the preflight and official Schematron agree on firing R001.
+    """
+    invoice = VIOLATIONS["PEPPOL-EN16931-R001"]()
+    # Do NOT call prepare(); keep BT-23 unset and BT-24 as XRECHNUNG id so validate() detects the profile.
+    assert invoice.process_control.business_process_type is None
+    assert invoice.process_control.specification_identifier == profiles.XRECHNUNG.specification_identifier
+
+    # Write, validate, and check agreement between preflight and official findings.
+    report = validate(WRITERS[syntax](invoice))
+    assert all(f.source != EUINVOICE_SOURCE for f in report.findings), "fell back to EN 16931 core"
+    preflight = profiles.XRECHNUNG.preflight(invoice, syntax)
+    assert all(f.severity is Severity.FATAL for f in preflight)
+
+    ids = {f.rule_id for f in preflight}
+    official = {
+        f.rule_id
+        for f in report.findings
+        if f.source == XRECHNUNG_SOURCE and f.severity is Severity.FATAL and f.rule_id in xrechnung._RULES
+    }
+    assert ids == official == {"PEPPOL-EN16931-R001"}, (ids, official, report.findings)
+
+
 @pytest.mark.parametrize(
     ("name", "syntax"), [(name, syntax) for name, (_, expected) in EDGES.items() for syntax in expected]
 )
