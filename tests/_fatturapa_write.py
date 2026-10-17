@@ -177,7 +177,7 @@ SELLER: t.Final = "FatturaElettronicaHeader/CedentePrestatore"
 BUYER: t.Final = "FatturaElettronicaHeader/CessionarioCommittente"
 
 
-def _stamp_duty() -> Invoice:
+def _stamp_duty(charged: Decimal | None = None) -> Invoice:
     return it_invoice(
         charges=(
             DocumentLevelCharge(
@@ -185,7 +185,10 @@ def _stamp_duty() -> Invoice:
             ),
         ),
         lines=(it_line(rate="0", category="E", nature=Natura.N4),),
-        it=italian(vat_summaries=(ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="Art. 10"),)),
+        it=italian(
+            vat_summaries=(ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="Art. 10"),),
+            stamp_duty_amount=charged,
+        ),
     )
 
 
@@ -411,6 +414,7 @@ def samples() -> dict[str, Sample]:
             )
         ),
         "TD01 stamp duty": Sample(_stamp_duty()),
+        "TD01 stamp duty charged": Sample(_stamp_duty(Decimal("2.00"))),
         "TD01 exempt and split payment": Sample(_exempt_and_split()),
         "TD01 rich line": Sample(_rich_line()),
         "TD01 every written term": Sample(every_written_term()),

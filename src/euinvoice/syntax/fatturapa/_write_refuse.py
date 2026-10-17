@@ -277,7 +277,7 @@ def _entries(invoice: Invoice, it: ItalianExtension) -> list[_Entry]:
 
 
 def _allowances_and_charges(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
-    """Only a zero stamp duty is written (2.1.1.6 DatiBollo, App. 4.1); everything else is refused (#133).
+    """Only the zero stamp duty marker is written (2.1.1.6 DatiBollo, App. 4.1); everything else is refused (#133).
 
     FatturaPA's 2.1.1.8 ScontoMaggiorazione does not reduce the DatiRiepilogo taxable amount that SdI 00422 compares
     with the lines, so it cannot carry BG-20 / BG-21.
@@ -311,11 +311,25 @@ def _allowances_and_charges(invoice: Invoice, it: ItalianExtension) -> t.Iterato
                 f"{path}.reason",
                 f"{reason_term}: 2.1.1.6 DatiBollo has no reason; only {STAMP_DUTY_REASON!r} (BR-IT-DC-480) is implied",
             )
+    if it.stamp_duty_amount is not None and not seen:
+        yield finding(
+            ALLOWANCE_CHARGE,
+            "it.stamp_duty_amount",
+            "2.1.1.6.2 ImportoBollo: needs the zero stamp duty marker (BT-105 = SAE on an invoice, BT-98 = 95 on a "
+            "credit note, App. 4.1), which writes DatiBollo; none is present (#165)",
+        )
 
 
 def stamp_duty(invoice: Invoice, it: ItalianExtension) -> Decimal | None:
-    """ImportoBollo: the amount of the stamp duty allowance or charge, or ``None`` (after :func:`structure`)."""
-    return next((entry[2] for entry in _entries(invoice, it) if entry[4]), None)
+    """ImportoBollo, or ``None`` without the marker (after :func:`structure`).
+
+    The marker (the zero stamp duty allowance or charge) writes DatiBollo; the amount is ``it.stamp_duty_amount``
+    when set (row 2.1.1.6.2: non-zero = charged to the buyer), else the marker's own amount (0).
+    """
+    marker = next((entry[2] for entry in _entries(invoice, it) if entry[4]), None)
+    if marker is None:
+        return None
+    return marker if it.stamp_duty_amount is None else it.stamp_duty_amount
 
 
 def is_stamp_duty_group(invoice: Invoice, it: ItalianExtension, category: str, rate: Decimal | None) -> bool:

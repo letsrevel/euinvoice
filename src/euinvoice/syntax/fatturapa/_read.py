@@ -124,7 +124,7 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
     general = cursor.one(body, "DatiGenerali")
     document = cursor.one(general, "DatiGeneraliDocumento")
     kind = _document_type(cursor, document)
-    allowances, stamp = _stamp_duty(cursor, document, kind is TipoDocumento.TD04)
+    allowances, stamp, stamp_amount = _stamp_duty(cursor, document, kind is TipoDocumento.TD04)
     goods = cursor.one(body, "DatiBeniServizi")
     vat = summaries(cursor, goods, integration=kind is TipoDocumento.TD16)
     charges = (*funds(cursor, document, vat), *stamp)
@@ -137,6 +137,7 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
         "document_type": kind,  # 2.1.1.1
         "vat_summaries": vat.extension,  # 2.2.2
         "payment": paid.extension,  # 2.4
+        "stamp_duty_amount": stamp_amount,  # 2.1.1.6.2
         **person_names(cursor, header, "CedentePrestatore"),  # 1.2.1.3.2-3
         **person_names(cursor, header, "CessionarioCommittente"),  # 1.4.1.3.2-3
     }
@@ -184,20 +185,20 @@ def _document_type(cursor: Cursor, document: etree._Element | None) -> TipoDocum
 
 def _stamp_duty(
     cursor: Cursor, document: etree._Element | None, credit_note: bool
-) -> tuple[tuple[DocumentLevelAllowance, ...], tuple[DocumentLevelCharge, ...]]:
-    """2.1.1.6 ``DatiBollo`` → (BG-20, BG-21) (see ``_STAMP_DUTY_CHARGE``).
+) -> tuple[tuple[DocumentLevelAllowance, ...], tuple[DocumentLevelCharge, ...], Decimal | None]:
+    """2.1.1.6 ``DatiBollo`` → (BG-20, BG-21, ``it.stamp_duty_amount``) (see ``_STAMP_DUTY_CHARGE``).
 
-    The EN amount is 0 (BR-IT-DC-480), so a non-zero ``ImportoBollo`` (the duty itself) has no EN home and is
-    reported (#132 item 9).
+    The EN amount is 0 (BR-IT-DC-480), so a non-zero ``ImportoBollo`` (the duty itself, row 2.1.1.6.2) goes to
+    ``Invoice.it`` (#165); zero (not charged) is ``None``, which the writer writes back as 0.00.
     """
     stamp = cursor.one(document, "DatiBollo")
     if stamp is None:
-        return (), ()
+        return (), (), None
     cursor.code(stamp, "BolloVirtuale")  # SI, the only XSD value: the presence of the allowance or charge says it
     amount = cursor.decimal(stamp, "ImportoBollo", "2.1.1.6.2")
-    if amount is not None and amount != 0:
-        cursor.discard(cursor.children(stamp, "ImportoBollo")[0])
-    return ((_STAMP_DUTY_ALLOWANCE,), ()) if credit_note else ((), (_STAMP_DUTY_CHARGE,))
+    charged = amount if amount else None  # None and 0 alike: not charged
+    marker = ((_STAMP_DUTY_ALLOWANCE,), ()) if credit_note else ((), (_STAMP_DUTY_CHARGE,))
+    return (*marker, charged)
 
 
 def _single(

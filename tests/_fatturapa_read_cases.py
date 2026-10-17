@@ -68,7 +68,6 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
         ),
         (
             f"{GENERAL}/DatiGeneraliDocumento/DatiRitenuta",
-            f"{GENERAL}/DatiGeneraliDocumento/DatiBollo/ImportoBollo",  # BR-IT-DC-480: the EN charge is 0
             f"{GENERAL}/DatiGeneraliDocumento/Art73",
         ),
     ),

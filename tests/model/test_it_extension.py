@@ -47,6 +47,7 @@ EXPECTED_IDS: t.Final = {
     (ItalianExtension, "document_type"): "2.1.1.1",
     (ItalianExtension, "vat_summaries"): "2.2.2",
     (ItalianExtension, "payment"): "2.4",
+    (ItalianExtension, "stamp_duty_amount"): "2.1.1.6.2",
     (ItalianExtension, "seller_first_name"): "1.2.1.3.2",
     (ItalianExtension, "seller_last_name"): "1.2.1.3.3",
     (ItalianExtension, "buyer_first_name"): "1.4.1.3.2",
@@ -362,3 +363,11 @@ def test_without_extensions_clears_hooks_in_nested_models_and_tuples() -> None:
     assert extension_paths(outer) == ("inner.it", "items[1].it")
     assert plain == _Outer(inner=_Inner(), items=(_Inner(), _Inner()))
     assert plain.items[0] is outer.items[0]
+
+
+def test_stamp_duty_amount_is_a_non_negative_two_decimal_amount() -> None:
+    assert _it(stamp_duty_amount="2.00").stamp_duty_amount == Decimal("2")
+    assert _it().stamp_duty_amount is None
+    for bad in ("-0.01", "2.001"):
+        with pytest.raises(pydantic.ValidationError):
+            _it(stamp_duty_amount=bad)

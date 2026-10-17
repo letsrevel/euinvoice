@@ -22,9 +22,10 @@ Where the data hangs:
 
 Transmission data (IdTrasmittente, ProgressivoInvio, CodiceDestinatario, PECDestinatario) are writer options
 (#119), not model data. Withholding (DatiRitenuta), social-security funds (DatiCassaPrevidenziale), Art73 and
-instalments beyond one ``DettaglioPagamento`` are not modelled in v1. Stamp duty (DatiBollo, 2.1.1.6) needs no
-extension field: App. 4.1 maps it to a document-level charge with BT-105 = SAE and amount BT-99 (credit note:
-BT-98 = 95, BT-92). The writer (#119) maps it.
+instalments beyond one ``DettaglioPagamento`` are not modelled in v1. Stamp duty (DatiBollo, 2.1.1.6): App. 4.1 maps
+the marker to a zero document-level charge with BT-105 = SAE (credit note: BT-98 = 95, BT-92), which the writer (#119)
+maps; the duty itself, when charged to the buyer, has no EN home (BT-99 stays 0, BR-IT-DC-480) and is
+:attr:`ItalianExtension.stamp_duty_amount` (#165).
 
 The model checks only what the XSD makes local and unambiguous (code lists, ``RateType``,
 ``String100LatinType``) plus the uniqueness its keying needs. The SdI checks of Allegato A 1.9.1 (e.g. 00413/00414
@@ -41,7 +42,7 @@ from pydantic.fields import FieldInfo
 
 from euinvoice.errors import ModelError
 from euinvoice.model._base import EuInvoiceModel
-from euinvoice.model.amounts import Percentage, UnitPriceAmount
+from euinvoice.model.amounts import Amount, Percentage, UnitPriceAmount
 from euinvoice.model.datatypes import Text
 from euinvoice.model.it.codes import (
     CondizioniPagamento,
@@ -225,6 +226,19 @@ class ItalianExtension(EuInvoiceModel):
     """``Nome`` of the buyer, a natural person; as :attr:`seller_first_name`, for BT-44."""
     buyer_last_name: t.Annotated[Latin60Text | None, fatturapa("1.4.1.3.3")] = None
     """``Cognome`` of the buyer; see :attr:`buyer_first_name`."""
+    stamp_duty_amount: t.Annotated[Amount | None, fatturapa("2.1.1.6.2")] = None
+    """``ImportoBollo`` of ``DatiBollo``, the stamp duty charged to the buyer, >= 0. Regole tecniche v2.6 App. 4.1 row
+    2.1.1.6.2 (p. 83): "Valorizzare a zero in caso di mancato addebito al cessionario-committente", so a non-zero value
+    marks a charged duty; ``None`` writes 0.00. The EN side stays BT-99 = 0 / category Z (BR-IT-DC-480, p. 62) and the
+    library generates no line: the recharge is ordinary consideration (Interpello 428/2022, p. 4), which the caller
+    models as an ordinary invoice line. Requires the zero SAE (credit note: 95) marker, else the writer refuses."""
+
+    @pydantic.field_validator("stamp_duty_amount")
+    @classmethod
+    def _stamp_duty_not_negative(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and value < 0:
+            raise ModelError("2.1.1.6.2 ImportoBollo (stamp_duty_amount) is not negative (Decimal2Type, XSD 1.2.3)")
+        return value
 
     @pydantic.model_validator(mode="after")
     def _names_in_pairs(self) -> t.Self:
