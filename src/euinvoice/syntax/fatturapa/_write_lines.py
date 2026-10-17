@@ -29,6 +29,7 @@ from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ItalianExtension, ItalianVatSummary, Natura, TipoCessionePrestazione
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax.fatturapa._exemption import exemption_reason
+from euinvoice.syntax.fatturapa._write_adjust import write_adjustments, write_reasons
 from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT, VATEX_OF_NATURA
 from euinvoice.syntax.fatturapa._write_format import (
     BASIC,
@@ -135,6 +136,7 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
         )
     if price.item_price_discount is not None:
         _price_discount(element, price.item_price_discount, term("BT-147", "price_details.item_price_discount"))
+    write_adjustments(element, line)
     # Row 2.2.1.11: BT-131 is PrezzoTotale. The exact declared value (more than two decimals, kept by the reader,
     # #132 item 1) is written back when it rounds to BT-131; preflight reports one that does not (TOTAL_PRICE).
     exact = None if line.it is None else line.it.total_price
@@ -162,6 +164,7 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
                 charset=BASIC,
             ),
         )
+    write_reasons(element, line)
 
 
 def _price_discount(element: etree._Element, discount: Decimal, term: str) -> None:

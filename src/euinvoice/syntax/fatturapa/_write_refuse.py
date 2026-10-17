@@ -20,6 +20,7 @@ from euinvoice.model._base import bt_id, extension_of
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, TipoDocumento
 from euinvoice.report import Finding
+from euinvoice.syntax.fatturapa._write_adjust import check as adjustment_findings
 from euinvoice.syntax.fatturapa._write_format import fits
 from euinvoice.syntax.fatturapa._write_rules import (
     ALLOWANCE_CHARGE,
@@ -88,11 +89,17 @@ WRITTEN: t.Final = frozenset(
         # Lines (2.2.1); BT-151 is checked against Natura (App. 5.1) and becomes EsigibilitaIVA S for B.
         *("BG-25", "BT-126", "BT-129", "BT-130", "BT-131", "BT-133", "BG-26", "BT-134", "BT-135"),
         *("BG-29", "BT-146", "BT-147", "BT-148", "BG-30", "BT-151", "BT-152", "BG-31", "BT-153", "BT-154"),
+        # Line allowances and charges: ScontoMaggiorazione Importo + the reason in AltriDatiGestionali (_write_adjust)
+        *("BG-27", "BT-136", "BT-139", "BT-140", "BG-28", "BT-141", "BT-144", "BT-145"),
     }
 )
 """Every business term and group the writer maps or derives. A group listed here is entered; its own terms are
 checked one by one."""
 
+_LINE_BASIS: t.Final = (
+    "2.2.1.10 ScontoMaggiorazione is written as an Importo per unit only: a base amount or percentage would need "
+    "Percentuale, which SdI 00423 cannot check next to amounts (#130 item 2, #151)"
+)
 _REASONS: t.Final[t.Mapping[str, str]] = {
     "BT-6": "FatturaPA has one currency, Divisa (2.1.1.2); App. 4.1 maps no element to BT-6",
     "BT-20": "App. 4.1 builds it from 2.4.1 CondizioniPagamento and 2.4.2.4 GiorniTerminiPagamento, which are codes "
@@ -103,8 +110,10 @@ _REASONS: t.Final[t.Mapping[str, str]] = {
     "App. 4.1 row 1.1.4 takes from it (#133 item 13); CIUS-IT BR-IT-190/200 make BT-49 the 6-character IPA code, "
     "which FPR12 refuses (SdI 00427)",
     "BG-11": "1.3 RappresentanteFiscale has no address, so the tax representative's BG-12 would be lost",
-    "BG-27": "2.2.1.10 ScontoMaggiorazione has no place for the reason (BT-139/BT-140, BR-42) or base amount (#133)",
-    "BG-28": "2.2.1.10 ScontoMaggiorazione has no place for the reason (BT-144/BT-145, BR-44) or base amount (#133)",
+    "BT-137": _LINE_BASIS,
+    "BT-138": _LINE_BASIS,
+    "BT-142": _LINE_BASIS,
+    "BT-143": _LINE_BASIS,
     "BT-149": "2.2.1.9 PrezzoUnitario is the price of one unit (UnitaMisura); there is no base quantity",
     "BT-150": "2.2.1.9 PrezzoUnitario is the price of one unit (UnitaMisura); there is no base quantity unit",
 }
@@ -227,6 +236,7 @@ def _lines(invoice: Invoice) -> t.Iterator[Finding]:
                 f"lines[{index}].vat_information.category_code",
                 f"BT-151 VAT category {category} has no Natura in App. 5.1 of the Regole tecniche v2.6 (#133)",
             )
+        yield from adjustment_findings(index, line)
         price = line.price_details
         if price.item_price_discount is not None and price.item_price_discount != 0 and price.item_gross_price is None:
             yield _unwritable(

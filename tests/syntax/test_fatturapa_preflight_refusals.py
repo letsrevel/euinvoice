@@ -32,8 +32,6 @@ from euinvoice.model import (
     DocumentTotals,
     Identifier,
     Invoice,
-    InvoiceLineAllowance,
-    InvoiceLineCharge,
     InvoiceNote,
     ItemAttribute,
     ItemInformation,
@@ -140,16 +138,6 @@ UNWRITTEN_TERMS: t.Final[dict[str, tuple[dict[str, t.Any], str, str]]] = {
         {"lines": (it_line(item=ItemInformation(name="A", attributes=(ItemAttribute(name="N", value="V"),))),)},
         "lines[0].item.attributes",
         r"^BG-32 ",
-    ),
-    "BG-27": (
-        {"lines": (it_line(allowances=(InvoiceLineAllowance(amount=Decimal(1), reason="Promo"),)),)},
-        "lines[0].allowances",
-        r"no place for the reason \(BT-139/BT-140, BR-42\)",
-    ),
-    "BG-28": (
-        {"lines": (it_line(charges=(InvoiceLineCharge(amount=Decimal(1), reason="Fee"),)),)},
-        "lines[0].charges",
-        r"BR-44",
     ),
     "BT-149": (
         {"lines": (it_line(price_details=PriceDetails(item_net_price=Decimal(50), base_quantity=Decimal(1))),)},

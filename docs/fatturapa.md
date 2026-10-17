@@ -148,6 +148,41 @@ FPR12 cannot carry, totals against the summaries), writes the file, then runs th
 EUINVOICE-FATTURAPA-EXTENSION it
 ```
 
+### Line allowances and charges
+
+A line allowance (BG-27) is written as a `ScontoMaggiorazione` of `Tipo` SC and a line charge (BG-28) as one of `Tipo`
+MG, with `Importo` the amount divided by the invoiced quantity BT-129 (App. 4.1 row 2.2.1.10.3: the amount per unit).
+The item price discount BT-147 stays the first `ScontoMaggiorazione`, so that `PrezzoTotale` is
+(`PrezzoUnitario` ± the `Importo` entries) × `Quantita`, the formula of SdI check 00423, whatever the number of
+entries. `ScontoMaggiorazione` has no place for the reason that EN 16931 requires (BR-42, BR-44), so each reason is an
+`AltriDatiGestionali` (row 2.2.1.16) written after `RiferimentoAmministrazione`:
+
+| `TipoDato` | `RiferimentoTesto` | `RiferimentoNumero` |
+|---|---|---|
+| `BT-139` | the allowance reason | the position (from 1) of its `ScontoMaggiorazione` in the line |
+| `BT-140` | the allowance reason code | the same |
+| `BT-144` | the charge reason | the same |
+| `BT-145` | the charge reason code | the same |
+
+The reader maps them back: an `AltriDatiGestionali` with one of these `TipoDato` and a position that exists explains
+that `ScontoMaggiorazione`, whose amount is `Importo` × `Quantita`; the one that nothing explains is BT-147. Any other
+`AltriDatiGestionali` is still read as an item attribute (BG-32), so FPR12 → model → FPR12 loses nothing. The reader
+refuses (`ParseError`) an entry that has such a `TipoDato` and a valid position but whose `ScontoMaggiorazione` is not
+SC (or MG) with an `Importo` and no `Percentuale`, and any explained `ScontoMaggiorazione` on a line with a negative
+`PrezzoUnitario` (the reader negates BT-129 there, and no source says how an allowance or charge follows that sign).
+
+The writer refuses, with an `error` finding that names the term, what it cannot write exactly:
+
+- an amount whose division by BT-129 has no `Amount8DecimalType` value that multiplies back to the amount (for example
+  1.00 over a quantity of 3), or any amount on a line of quantity 0;
+- a negative BT-129 (`Quantita` is unsigned);
+- a reason longer than 60 characters or outside Latin-1 (`RiferimentoTesto`, `String60LatinType`);
+- a base amount or a percentage (BT-137, BT-138, BT-142, BT-143): a `Percentuale` next to amounts is not a case SdI
+  check 00423 can evaluate ([#130](https://github.com/letsrevel/euinvoice/issues/130) item 2);
+- a BT-131 that SdI 00423 would refuse (`EUINVOICE-FATTURAPA-LINE-TOTAL`). EN 16931 itself only requires BT-131
+  (BR-24, two decimals by BR-DEC-23); the formula BT-131 = BT-129 × BT-146 − Σ BT-136 + Σ BT-141 is Peppol BIS rule
+  PEPPOL-EN16931-R120.
+
 SdI also checks the name and size of the file it receives (codes 00001 and 00003), which `validate()` cannot see.
 [`file_name`](reference/api.md#euinvoice.syntax.fatturapa.file_name) builds a name per Allegato A 1.9.1 §1.2.2, and
 [`check_file`](reference/api.md#euinvoice.syntax.fatturapa.check_file) checks a name and a size:
@@ -291,8 +326,8 @@ Where the sources do not settle a mapping, euinvoice does the most conservative 
 `error` finding and the reader refuses with `ParseError` or lists the element as unmapped. Nothing is rounded or
 guessed. The open questions wait for a maintainer decision (`needs-human`):
 
-- [#133](https://github.com/letsrevel/euinvoice/issues/133), writer: for example generic document level allowances
-  and charges (only a zero stamp duty is written), VAT categories O, L and M, and payment data without
+- [#133](https://github.com/letsrevel/euinvoice/issues/133), writer: for example document level allowances
+  and charges (only a zero stamp duty is written; line ones are, see above), VAT categories O, L and M, and payment data without
   `Invoice.it.payment`.
 - [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example the generic Natura N2, N3 and N6,
   and the BT-81 of each ModalitaPagamento.

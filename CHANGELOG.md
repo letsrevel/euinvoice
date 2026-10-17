@@ -154,6 +154,17 @@ All notable changes to this project are documented here. The format follows
   - CLI `info` and `convert` refuse a FatturaPA lotto with a command-line message (exit 1); `validate` checks the
     whole lotto.
   - README: a FatturaPA row in the support matrix and its known limitations.
+- FatturaPA: line allowances and charges (BG-27, BG-28) are written and read
+  ([#151](https://github.com/letsrevel/euinvoice/issues/151), [#133](https://github.com/letsrevel/euinvoice/issues/133)
+  item 12). Each is a 2.2.1.10 `ScontoMaggiorazione` (`Tipo` SC / MG, `Importo` = amount / BT-129) after BT-147's, and
+  each reason (BT-139, BT-140, BT-144, BT-145) is a 2.2.1.16 `AltriDatiGestionali` with that term id as `TipoDato`,
+  the value as `RiferimentoTesto` and the position of its `ScontoMaggiorazione` as `RiferimentoNumero`. The reader
+  maps them back, so FPR12 to model to FPR12 is lossless. Pre-flight refuses an amount that does not divide exactly
+  into an `Amount8DecimalType`, a reason beyond `String60LatinType`, BT-137/138/142/143 and a BT-131 that SdI 00423
+  would refuse (`EUINVOICE-FATTURAPA-LINE-TOTAL`). The reader raises `ParseError` for an `AltriDatiGestionali` with
+  one of those `TipoDato` and a valid position whose `ScontoMaggiorazione` is not SC / MG with an `Importo` and no
+  `Percentuale` (before, it was read as an item attribute), and for an explained `ScontoMaggiorazione` on a line with
+  a negative `PrezzoUnitario` (negative BT-129; no source settles the sign of the amounts).
 
 ### Changed
 
