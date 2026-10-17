@@ -22,7 +22,7 @@ from decimal import Decimal
 from euinvoice.model import Invoice
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, SoggettoEmittente, TipoDocumento
-from euinvoice.report import Finding
+from euinvoice.report import Finding, Severity
 from euinvoice.syntax.fatturapa._write_codes import (
     CATEGORY_OF_NATURA,
     DOCUMENT_TYPES,
@@ -43,13 +43,14 @@ from euinvoice.syntax.fatturapa._write_rules import (
     UNSUPPORTED_CATEGORIES,
     finding,
 )
+from euinvoice.syntax.fatturapa.transmission import Transmission
 
 __all__ = ["preflight"]
 
 _NO_NATURA: t.Final = frozenset({VatCategory.STANDARD_RATED, VatCategory.SPLIT_PAYMENT})
 
 
-def preflight(invoice: Invoice) -> tuple[Finding, ...]:
+def preflight(invoice: Invoice, transmission: Transmission | None = None) -> tuple[Finding, ...]:
     """Report what keeps an invoice from being written as FPR12, before :func:`~euinvoice.syntax.fatturapa.write`.
 
     ``error`` findings block the write (``write`` raises :class:`~euinvoice.errors.ModelError`, ``to_xml``
@@ -58,9 +59,12 @@ def preflight(invoice: Invoice) -> tuple[Finding, ...]:
 
     Args:
         invoice: The invoice.
+        transmission: The transmission header it is written with. BT-49 is accepted only when it equals its
+            ``recipient_code`` (the CodiceDestinatario, row 1.1.4), so without one it is refused.
 
     Returns:
-        The findings, located by model path, with source ``"fatturapa-preflight"``.
+        The findings, located by model path, with source ``"fatturapa-preflight"``. ``warning`` findings do not
+        block the write.
     """
     it = invoice.it
     if it is None:
@@ -78,10 +82,11 @@ def preflight(invoice: Invoice) -> tuple[Finding, ...]:
         *_required(invoice),
         *_natura(invoice),
         *_payment(invoice, it),
-        *structure(invoice, it),
+        *structure(invoice, it, transmission),
         *summary_findings,
     ]
-    if not findings:  # the totals are compared with the summaries only once those can be built
+    if not any(f.severity in (Severity.FATAL, Severity.ERROR) for f in findings):
+        # the totals are compared with the summaries only once those can be built
         findings += _totals(invoice, blocks)
     return tuple(findings)
 

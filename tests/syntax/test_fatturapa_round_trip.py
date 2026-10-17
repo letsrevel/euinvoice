@@ -40,6 +40,8 @@ UNMAPPED: t.Final = re.compile(
 
 NORMALIZED: t.Final = re.compile(
     r"\.payment_terms"  # BT-20: None → the CondizioniPagamento code (App. 4.1 row 2.4.1)
+    r"|\.process_control\.business_process_type|\.seller\.electronic_address"  # BT-23, BT-34: accepted, not written
+    r"|\.lines\[\d+\]\.item\.(name|description)"  # BT-153 and BT-154 joined in Descrizione (#133 item 3)
     r"|\.payment_instructions(\.payment_means_type_code)?"  # BT-81 ↔ ModalitaPagamento, App. 5.6 many-to-one
     r"|\.it\.payment\.method"  # ModalitaPagamento derived from BT-81 becomes explicit
     r"|\.it\.vat_summaries"  # one entry per DatiRiepilogo (Natura, EsigibilitaIVA, RiferimentoNormativo)

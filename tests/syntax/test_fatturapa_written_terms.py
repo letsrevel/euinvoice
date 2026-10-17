@@ -41,6 +41,7 @@ ELEMENTS: t.Final[dict[str, str]] = {
     "BT-13": f"{_GEN}/DatiOrdineAcquisto/IdDocumento",
     "BT-15": f"{_GEN}/DatiRicezione/IdDocumento",
     "BT-19": f"{_SELLER}/RiferimentoAmministrazione",
+    "BT-20": f"{_PAY}/GiorniTerminiPagamento",
     "BT-22": f"{_DOC}/Causale",
     "BT-25": f"{_GEN}/DatiFattureCollegate/IdDocumento",
     "BT-26": f"{_GEN}/DatiFattureCollegate/Data",
@@ -100,7 +101,10 @@ DERIVED: t.Final = frozenset(
         "BT-3",  # checked against TipoDocumento (App. 5.4)
         "BT-24",  # the EN 16931 specification identifier
         "BT-121",  # carried by Natura: the pre-flight requires the App. 5.1 VATEX code of the group's Natura
-        "BT-20",  # carried by CondizioniPagamento: accepted only as its code (App. 4.1 row 2.4.1)
+        "BT-154",  # joined to BT-153 in Descrizione (#133 item 3), tested in test_fatturapa_writer_policies
+        "BT-23",  # EN 16931 process metadata, accepted like BT-24 and not written (#133 item 15)
+        "BT-34",
+        "BT-49",  # accepted only when it is the transmission's CodiceDestinatario (#133 item 13)
         "BT-95",  # the stamp duty's category, rate and reason: implied by DatiBollo (BR-IT-DC-480)
         "BT-96",
         "BT-97",
