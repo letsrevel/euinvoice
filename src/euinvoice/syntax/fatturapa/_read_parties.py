@@ -20,7 +20,7 @@ from euinvoice.model.it.extension import Latin60Text
 from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
-__all__ = ["CODICE_FISCALE", "buyer", "person_names", "seller"]
+__all__ = ["CODICE_FISCALE", "buyer", "person_names", "post_code", "seller"]
 
 CODICE_FISCALE = "0210"
 """ISO 6523 ICD of the Italian codice fiscale: App. 4.1 rows 1.2.1.2 and 1.4.1.2 ("schemeIdentifier … 0210")."""
@@ -145,6 +145,16 @@ def person_names(cursor: Cursor, header: etree._Element, party: str) -> dict[str
     return found
 
 
+def post_code(cursor: Cursor, address: etree._Element, country: str | None) -> str | None:
+    """``CAP`` → BT-38 / BT-53 / BT-78, except the generic ``00000`` of an address outside Italy, which is no post code.
+
+    AdE FAQ n. 63 (pp. 27-28) and n. 74 (pp. 33-34) of the compendium of 22/12/2022 (sha256
+    763eec56...1862): "il campo CAP andrà compilato con il valore generico 00000". The element is still consumed.
+    """
+    code = cursor.text(address, "CAP")
+    return None if code == "00000" and country != "IT" else code
+
+
 def _address[A: SellerPostalAddress | BuyerPostalAddress](
     cursor: Cursor, party: etree._Element | None, cls: type[A]
 ) -> A | None:
@@ -152,12 +162,13 @@ def _address[A: SellerPostalAddress | BuyerPostalAddress](
     sede = cursor.one(party, "Sede")
     if sede is None:
         return None
+    country = cursor.code(sede, "Nazione")
     values = {
         "address_line_1": cursor.text(sede, "Indirizzo"),  # BT-35 / BT-50
         "address_line_2": cursor.text(sede, "NumeroCivico"),  # BT-36 / BT-51
-        "post_code": cursor.text(sede, "CAP"),  # BT-38 / BT-53
+        "post_code": post_code(cursor, sede, country),  # BT-38 / BT-53
         "city": cursor.text(sede, "Comune"),  # BT-37 / BT-52
         "country_subdivision": cursor.text(sede, "Provincia"),  # BT-39 / BT-54
-        "country_code": cursor.code(sede, "Nazione"),  # BT-40 / BT-55
+        "country_code": country,  # BT-40 / BT-55
     }
     return build(cls, sede, values)

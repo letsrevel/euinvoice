@@ -320,6 +320,17 @@ Two readings settled by the maintainer ([#132](https://github.com/letsrevel/euin
   document type refuses it. The v1 writer does not emit TD16, so it refuses to write that reading with a pre-flight
   error.
 
+## Addresses outside Italy
+
+CAPType is five digits and the technical rules say nothing about foreign addresses. Agenzia delle Entrate's FAQ
+compendium of 22 December 2022 does (FAQ n. 63 and n. 74): outside Italy the CAP is the generic `00000`. For an address
+whose `Nazione` is not `IT`, the writer writes a post code of five digits as it is, and anything else (`SW1A 1AA`,
+`1011 AB`, no post code at all) as `00000`. The real foreign post code is not carried in `Indirizzo`: the FAQ only
+allows it ("si potrà"), and a suffix in that free-text line could not be told from the street on the way back. When a
+post code is dropped this way, `preflight` reports a `warning` finding `EUINVOICE-FATTURAPA-POST-CODE`; it does not
+block the write. The reader turns `00000` outside Italy into no post code. For an Italian address nothing changes: the
+post code is required and must be five digits.
+
 ## Refusals and open questions
 
 Where the sources do not settle a mapping, euinvoice does the most conservative thing: the writer refuses with an

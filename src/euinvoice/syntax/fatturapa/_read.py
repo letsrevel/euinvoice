@@ -35,7 +35,7 @@ from euinvoice.syntax.fatturapa._read_cassa import funds
 from euinvoice.syntax.fatturapa._read_codes import TYPE_CODE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 from euinvoice.syntax.fatturapa._read_lines import breakdown, lines, summaries, vat_point_date_code
-from euinvoice.syntax.fatturapa._read_parties import buyer, person_names, seller
+from euinvoice.syntax.fatturapa._read_parties import buyer, person_names, post_code, seller
 from euinvoice.syntax.fatturapa._read_payment import Payment, payment
 from euinvoice.syntax.result import ParseResult
 
@@ -256,13 +256,14 @@ def _delivery(cursor: Cursor, general: etree._Element | None) -> dict[str, objec
         return None
     address = None
     if place is not None:
+        country = cursor.code(place, "Nazione")  # → BT-80
         address = {
             "address_line_1": cursor.text(place, "Indirizzo"),  # 2.1.9.12.1 → BT-75
             "address_line_2": cursor.text(place, "NumeroCivico"),  # → BT-76
-            "post_code": cursor.text(place, "CAP"),  # → BT-78
+            "post_code": post_code(cursor, place, country),  # → BT-78
             "city": cursor.text(place, "Comune"),  # → BT-77
             "country_subdivision": cursor.text(place, "Provincia"),  # → BT-79
-            "country_code": cursor.code(place, "Nazione"),  # → BT-80
+            "country_code": country,
         }
     return {"actual_delivery_date": date, "deliver_to_address": address}
 

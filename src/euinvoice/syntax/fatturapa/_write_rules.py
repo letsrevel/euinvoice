@@ -15,6 +15,7 @@ __all__ = [
     "NAME",
     "NATURA",
     "PAYMENT",
+    "POST_CODE",
     "PREFLIGHT_SOURCE",
     "REQUIRED",
     "SUMMARY",
@@ -43,6 +44,8 @@ TOTAL_PRICE: t.Final = "EUINVOICE-FATTURAPA-TOTAL-PRICE"
 """A line's ``it.total_price`` (2.2.1.11 PrezzoTotale as declared) does not round half up to its BT-131."""
 PAYMENT: t.Final = "EUINVOICE-FATTURAPA-PAYMENT"
 """DatiPagamento (2.4) cannot be filled: CondizioniPagamento or ModalitaPagamento has no source, or they conflict."""
+POST_CODE: t.Final = "EUINVOICE-FATTURAPA-POST-CODE"
+"""A post code outside Italy that is not five digits is written as the generic CAP 00000, losing its value (warning)."""
 UNWRITTEN: t.Final = "EUINVOICE-FATTURAPA-UNWRITTEN"
 """A business term FPR12 cannot carry (no App. 4.1 row the writer fills), or carries only partly."""
 CATEGORY: t.Final = "EUINVOICE-FATTURAPA-CATEGORY"

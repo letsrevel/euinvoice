@@ -185,6 +185,12 @@ All notable changes to this project are documented here. The format follows
     `InvoiceLine.it.nature` and `Invoice.it.vat_summaries` (a fund's, in BT-104). Other document types still refuse
     it. The v1 writer does not emit TD16, so writing that reading is refused by the existing document-type and
     Natura pre-flight errors, which now cite the TD16 rule.
+- FatturaPA addresses outside Italy: the writer writes CAP `00000` for a seller or buyer whose `Nazione` is not `IT`
+  and whose post code is absent or not five digits (a five-digit foreign code is kept), instead of refusing it; the
+  real code is not carried, and the pre-flight reports it as a `warning` `EUINVOICE-FATTURAPA-POST-CODE`. An absent
+  post code is no longer required outside Italy. The reader turns `00000` outside Italy (including `IndirizzoResa`)
+  into no post code. Source: AdE FAQ n. 63 and n. 74, compendium of 22/12/2022 (sha256 `763eec56…1862`)
+  ([#158](https://github.com/letsrevel/euinvoice/issues/158), part of #133).
 - `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
   `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
 - `convert --to` offers `fatturapa` too, and a `convert` refused by the FatturaPA checks says "FatturaPA pre-flight
