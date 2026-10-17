@@ -14,10 +14,10 @@ requires (BR-42, BR-44), so each reason is carried in 2.2.1.16 ``AltriDatiGestio
 
 The entries of a line are, in this order: BT-147 (the item price discount, if not zero; it has no reason), the
 allowances, the charges. SdI 00423 (Allegato A 1.9.1, 2.2.1.11) is ``PrezzoTotale = (PrezzoUnitario ±
-ScontoMaggiorazione) * Quantita`` with a tolerance of 0.01, which :func:`euinvoice.validation.sdi.check` evaluates
-only for entries that all carry an ``Importo`` and no ``Percentuale`` (#130 item 2): a percentage next to amounts, or
-several percentages, is not evaluable. So only ``Importo`` is written (BT-137, BT-138, BT-142 and BT-143 are refused)
-and any number of allowances and charges can be.
+ScontoMaggiorazione) * Quantita`` with a tolerance of 0.01; :func:`euinvoice.validation.sdi.check` applies the
+entries in order to a running price (Elenco dei controlli v2.0, #162): ``Importo`` per unit or a cascading
+``Percentuale``. Only ``Importo`` is written, so any number of allowances and charges can be; BT-137, BT-138,
+BT-142 and BT-143 are refused by choice of #151, not because the checker cannot evaluate a percentage (follow-up).
 
 An amount must survive the division: ``Importo`` is ``Amount8DecimalType`` (at most 8 decimals) and the reader
 multiplies it by BT-129 again, so an amount whose quotient has no such exact value is refused, never rounded.
@@ -153,15 +153,19 @@ def _total(index: int, line: InvoiceLine) -> t.Iterator[Finding]:
     unit = price.item_gross_price if price.item_gross_price is not None else price.item_net_price
     entry_sum = sum((-e.importo if e.tipo == "SC" else e.importo for e in entries(line)), Decimal(0))
     expected = (unit - _discount(line) + entry_sum) * line.invoiced_quantity
-    if abs(line.net_amount - expected) > _TOLERANCE:
+    exact = None if line.it is None else line.it.total_price
+    # PrezzoTotale as written: the declared exact value when it rounds to BT-131 (a mismatch is TOTAL_PRICE's)
+    written = exact if exact is not None and quantize_amount(exact) == line.net_amount else line.net_amount
+    if abs(written - expected) > _TOLERANCE:
         if expected == quantize_amount(expected):
             expected = quantize_amount(expected)
         yield finding(
             LINE_TOTAL,
             f"lines[{index}].net_amount",
-            f"BT-131 {line.net_amount} is not the PrezzoTotale SdI check 00423 accepts: (PrezzoUnitario ± "
-            f"ScontoMaggiorazione) * Quantita = {format(expected, 'f')}, tolerance ±0.01; EN 16931 gives "
-            "BT-131 = BT-129 x BT-146 - sum(BT-136) + sum(BT-141) (Peppol BIS PEPPOL-EN16931-R120)",
+            f"PrezzoTotale {format(written, 'f')} (BT-131 {line.net_amount}) is not what SdI check 00423 "
+            f"accepts: (PrezzoUnitario ± ScontoMaggiorazione) * Quantita = {format(expected, 'f')}, "
+            "tolerance ±0.01; EN 16931 gives BT-131 = BT-129 x BT-146 - sum(BT-136) + sum(BT-141) "
+            "(Peppol BIS PEPPOL-EN16931-R120)",
         )
 
 

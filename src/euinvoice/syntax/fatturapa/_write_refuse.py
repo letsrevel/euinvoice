@@ -98,7 +98,7 @@ checked one by one."""
 
 _LINE_BASIS: t.Final = (
     "2.2.1.10 ScontoMaggiorazione is written as an Importo per unit only: a base amount or percentage would need "
-    "Percentuale, which SdI 00423 cannot check next to amounts (#130 item 2, #151)"
+    "Percentuale, which this writer does not emit (#151; SdI 00423 can check one since #162, a possible follow-up)"
 )
 _REASONS: t.Final[t.Mapping[str, str]] = {
     "BT-6": "FatturaPA has one currency, Divisa (2.1.1.2); App. 4.1 maps no element to BT-6",

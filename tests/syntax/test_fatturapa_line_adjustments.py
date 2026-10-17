@@ -16,6 +16,7 @@ from _fatturapa_write import GOODS, TRANSMISSION, it_invoice, it_line, written
 from euinvoice import _xml, parse_all, to_xml
 from euinvoice.errors import ModelError, ParseError
 from euinvoice.model import Invoice, InvoiceLineAllowance, InvoiceLineCharge, PriceDetails
+from euinvoice.model.it import ItalianLineExtension
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import preflight, write
@@ -392,3 +393,18 @@ def test_a_pointer_that_is_not_a_position_is_an_ordinary_attribute(position: str
 
     assert invoice.lines[0].allowances == ()
     assert len(invoice.lines[0].item.attributes) == 1
+
+
+def test_an_exact_total_price_stays_consistent_with_the_entries() -> None:
+    # BT-131 98.00; PrezzoTotale 98.004 rounds to it, and (50 - 1.00) * 2 = 98 is within 0.01 of it
+    good = it_invoice(it_line(quantity="2", allowances=(_allowance("2.00"),)))
+    ext = ItalianLineExtension(total_price=D("98.004"))
+    line = good.lines[0].model_copy(update={"it": ext})
+    invoice = good.model_copy(update={"lines": (line,)})
+
+    assert _errors(invoice) == []
+    assert written(invoice).findtext(f"{LINE}/PrezzoTotale") == "98.004"
+
+    far = good.lines[0].model_copy(update={"it": ItalianLineExtension(total_price=D("98.014"))})
+    other = good.model_copy(update={"lines": (far,)})
+    assert [r for r, _, _ in _errors(other)] == ["EUINVOICE-FATTURAPA-TOTAL-PRICE"]

@@ -177,8 +177,8 @@ The writer refuses, with an `error` finding that names the term, what it cannot 
   1.00 over a quantity of 3), or any amount on a line of quantity 0;
 - a negative BT-129 (`Quantita` is unsigned);
 - a reason longer than 60 characters or outside Latin-1 (`RiferimentoTesto`, `String60LatinType`);
-- a base amount or a percentage (BT-137, BT-138, BT-142, BT-143): a `Percentuale` next to amounts is not a case SdI
-  check 00423 can evaluate ([#130](https://github.com/letsrevel/euinvoice/issues/130) item 2);
+- a base amount or a percentage (BT-137, BT-138, BT-142, BT-143): the writer emits `Importo` only (SdI check 00423 can
+  check a `Percentuale` since the Elenco algorithm was adopted, so this is a possible follow-up, not a limit of the check);
 - a BT-131 that SdI 00423 would refuse (`EUINVOICE-FATTURAPA-LINE-TOTAL`). EN 16931 itself only requires BT-131
   (BR-24, two decimals by BR-DEC-23); the formula BT-131 = BT-129 × BT-146 − Σ BT-136 + Σ BT-141 is Peppol BIS rule
   PEPPOL-EN16931-R120.
