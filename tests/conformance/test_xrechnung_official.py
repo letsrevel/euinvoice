@@ -96,9 +96,7 @@ def test_each_cvd_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) 
 
 
 @pytest.mark.parametrize("syntax", list(WRITERS))
-@pytest.mark.parametrize(
-    "profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id
-)
+@pytest.mark.parametrize("profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id)
 def test_peppol_en16931_r001_fires_on_unprepared_invoice(profile: profiles.Profile, syntax: Syntax) -> None:
     """Verify R001 (missing BT-23) fires on unprepared invoice, both in preflight and official Schematron.
 
