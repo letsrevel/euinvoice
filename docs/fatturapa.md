@@ -331,6 +331,20 @@ post code is dropped this way, `preflight` reports a `warning` finding `EUINVOIC
 block the write. The reader turns `00000` outside Italy into no post code. A genuine foreign post code of `00000` is treated as dropped too: it gets the same warning and reads back as no post code. For an Italian address nothing changes: the
 post code is required and must be five digits.
 
+## Stamp duty charged to the buyer
+
+`DatiBollo` (2.1.1.6) is written from the zero stamp duty marker: a document level charge with BT-105 = `SAE` on an
+invoice, an allowance with BT-98 = `95` on a credit note, amount 0 (BR-IT-DC-480). Set `Invoice.it.stamp_duty_amount`
+(2.1.1.6.2 `ImportoBollo`) to the duty when it is charged to the buyer: Regole tecniche v2.6 App. 4.1 row 2.1.1.6.2
+(printed p. 84) says to write zero when it is not, which reads as a non-zero value for a charged duty, and AdE FAQ 48
+(compendium 22/12/2022, p. 19) fills `DatiBollo` "con l'importo dell'imposta". Use `None`, not 0, for a duty not charged;
+the value must be above 0. For the EN-derived mapping euinvoice follows the App. 4.1 row. The field needs the marker (preflight
+refuses it otherwise), leaves BT-99 and every total as they are, and the reader fills it from a non-zero
+`ImportoBollo`.
+
+euinvoice generates no line for the recharge. The reimbursement is ordinary consideration (Interpello 428/2022,
+p. 4), so the caller models it as an ordinary invoice line.
+
 ## Refusals and open questions
 
 Where the sources do not settle a mapping, euinvoice does the most conservative thing: the writer refuses with an
@@ -338,7 +352,7 @@ Where the sources do not settle a mapping, euinvoice does the most conservative 
 guessed. The open questions wait for a maintainer decision (`needs-human`):
 
 - [#133](https://github.com/letsrevel/euinvoice/issues/133), writer: for example document level allowances
-  and charges (only a zero stamp duty is written; line ones are, see above), VAT categories O, L and M, and payment data without
+  and charges (only the zero stamp duty marker is written; line ones are, see above), VAT categories O, L and M, and payment data without
   `Invoice.it.payment`.
 - [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example the generic Natura N2, N3 and N6,
   and the BT-81 of each ModalitaPagamento.

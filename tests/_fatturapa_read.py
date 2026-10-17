@@ -338,6 +338,11 @@ VARIANTS.update(
                 document_extra="<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>2.00</ImportoBollo></DatiBollo>",
             )
         ),
+        "negative stamp duty": document(
+            body(
+                document_extra="<DatiBollo><BolloVirtuale>SI</BolloVirtuale><ImportoBollo>-2.00</ImportoBollo></DatiBollo>"
+            )
+        ),
         "line-level receipt": document(
             body(
                 general="<DatiRicezione><RiferimentoNumeroLinea>1</RiferimentoNumeroLinea><IdDocumento>R-1</IdDocumento>"

@@ -23,6 +23,10 @@ All notable changes to this project are documented here. The format follows
   [#132](https://github.com/letsrevel/euinvoice/issues/132)): in document order, each entry changes a running price
   by `Importo` (SC -1, MG +1) or, without one, by its `Percentuale` of that price (exact, no rounding). Entries that
   `AltriDatiGestionali` explain (BG-27 / BG-28) move the price but stay out of BT-147.
+- FatturaPA: the stamp duty charged to the buyer is `Invoice.it.stamp_duty_amount`, written to
+  `DatiBollo/ImportoBollo` (row 2.1.1.6.2) and read back from a non-zero `ImportoBollo` instead of being reported as
+  unmapped ([#165](https://github.com/letsrevel/euinvoice/issues/165)). The zero SAE / 95 marker is still required
+  (preflight refuses the field without it); BT-99 and the totals are unchanged and no line is generated.
 - FatturaPA writer policies for the Peppol-shaped and text-heavy terms ([#149](https://github.com/letsrevel/euinvoice/issues/149),
   part of [#133](https://github.com/letsrevel/euinvoice/issues/133)): `Descrizione` is BT-153 + `" - "` + BT-154
   (refused above 1000 characters, `String1000LatinType`); a BT-20 of the form `TP02 30` is carried as

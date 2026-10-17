@@ -253,6 +253,20 @@ def test_invoice_stamp_duty_comes_from_the_sae_charge() -> None:
     assert document.findtext("DatiBollo/BolloVirtuale") == "SI"
 
 
+def test_a_charged_stamp_duty_is_importo_bollo_and_leaves_the_total_alone() -> None:
+    # Row 2.1.1.6.2 (App. 4.1 p. 84): non-zero = charged to the buyer; BT-99 stays 0 (BR-IT-DC-480), so BT-112 too.
+    plain = samples()["TD01 stamp duty"].invoice
+    charged = samples()["TD01 stamp duty charged"].invoice
+    root = written(charged)
+
+    assert root.findtext(f"{GENERAL}/DatiBollo/BolloVirtuale") == "SI"
+    assert root.findtext(f"{GENERAL}/DatiBollo/ImportoBollo") == "2.00"
+    assert charged.totals == plain.totals
+    assert root.findtext(f"{GENERAL}/ImportoTotaleDocumento") == written(plain).findtext(
+        f"{GENERAL}/ImportoTotaleDocumento"
+    )
+
+
 def test_line_maps_every_written_term_in_xsd_order() -> None:
     line = it_line(
         "7",

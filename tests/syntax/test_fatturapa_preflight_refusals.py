@@ -271,7 +271,13 @@ def test_allowances_and_charges_other_than_a_zero_stamp_duty(
 
 def test_stamp_duty_charged_to_the_buyer_is_reported() -> None:
     line = it_line(category="E", rate="0", nature=Natura.N4)
-    _reported(it_invoice(line, charges=(_charge("2"),)), ALLOWANCE_CHARGE, "charges[0].amount", r"charged to the buyer")
+    _reported(it_invoice(line, charges=(_charge("2"),)), ALLOWANCE_CHARGE, "charges[0].amount", r"stamp_duty_amount")
+
+
+def test_a_stamp_duty_amount_without_the_marker_is_reported() -> None:
+    line = it_line(category="E", rate="0", nature=Natura.N4)
+    invoice = it_invoice(line, it=italian(stamp_duty_amount=Decimal(2)))
+    _reported(invoice, ALLOWANCE_CHARGE, "it.stamp_duty_amount", r"needs the zero stamp duty marker")
 
 
 @pytest.mark.parametrize("category", ["O", "L", "M"])
