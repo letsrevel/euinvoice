@@ -208,17 +208,15 @@ def _sdi_documents() -> list[tuple[str, Doc]]:
     return found + list(EXTRA_FAILING.items())
 
 
-# The #121 documents the reader refuses, with the reason: #132 item 6 (generic Natura), item 12 (several
-# ScontoMaggiorazione), item 21 (a Natura with a rate other than 0 off TD16: SdI-refused documents; the TD16
-# integrations of 00401 / 00430 passing 0 read as category S) and a rate 0 without Natura on a line or a fund (SdI
-# 00400, 00413).
+# The #121 documents the reader refuses, with the reason: #132 item 6 (generic Natura), item 21 (a Natura with a
+# rate other than 0 off TD16: SdI-refused documents; the TD16 integrations of 00401 / 00430 passing 0 read as
+# category S) and a rate 0 without Natura on a line or a fund (SdI 00400, 00413).
 _NATURA_RATE: t.Final = "with AliquotaIVA 22.00: EN 16931 requires rate 0"
 _NO_NATURA: t.Final = "Natura is required with AliquotaIVA 0"
 REFUSED_SDI: t.Final = {
     "00401 failing": _NATURA_RATE,
     "00430 failing": _NATURA_RATE,
     "00414 failing": _NATURA_RATE,
-    "00423 passing 4": "2 ScontoMaggiorazione on one line",
     "00400 failing": _NO_NATURA,
     "00413 failing": _NO_NATURA,
     "00445 failing": "the generic code N2 has no VAT category",
