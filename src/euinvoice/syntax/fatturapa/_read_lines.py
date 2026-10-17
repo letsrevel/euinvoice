@@ -101,7 +101,7 @@ def summaries(cursor: Cursor, goods: etree._Element | None, *, integration: bool
             category, reason = ("B" if chargeability == "S" else "S"), None
             split.setdefault(entry.rate, set()).add(chargeability == "S")
         else:
-            category, reason = nature_category(cursor, element, nature, entry.rate, integration)
+            category, reason = nature_category(cursor, element, nature, entry.rate, integration=integration)
         taxable = _required(cursor, element, "ImponibileImporto", "2.2.2.5")
         tax = _required(cursor, element, "Imposta", "2.2.2.6")
         read.append(Summary(element, entry.rate, nature, chargeability, legal, taxable, tax, category, reason))
@@ -263,7 +263,7 @@ def read_nature(cursor: Cursor, parent: etree._Element, ident: str) -> Natura | 
 
 
 def nature_category(
-    cursor: Cursor, element: etree._Element, nature: Natura, rate: Decimal | None, integration: bool
+    cursor: Cursor, element: etree._Element, nature: Natura, rate: Decimal | None, *, integration: bool
 ) -> tuple[str, str | None]:
     """The VAT category and BT-121 of a ``Natura`` (App. 5.1), or category S for a TD16 ``Natura`` with a rate.
 
@@ -301,7 +301,7 @@ def vat_category(
 ) -> str | None:
     """BT-151 / BT-102: by ``Natura`` (App. 5.1), else S, or B when the summary at the rate is split payment."""
     if nature is not None:
-        return nature_category(cursor, element, nature, rate, vat.integration)[0]
+        return nature_category(cursor, element, nature, rate, integration=vat.integration)[0]
     if rate is None:
         return None  # build() names the missing BT-152 / BT-151
     if rate == 0:

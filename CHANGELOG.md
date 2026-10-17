@@ -167,7 +167,7 @@ All notable changes to this project are documented here. The format follows
   - A `PrezzoTotale` (2.2.1.11, `Amount8DecimalType`) with more than two decimals no longer fails: BT-131 is the
     value rounded half up (D11), the exact value is kept in the new `InvoiceLine.it.total_price`, and the element is
     listed as `…/PrezzoTotale/text()` in `ParseResult.unmapped`. The FPR12 writer writes `total_price` back when it
-    rounds to BT-131 (so the round trip is lossless), and a pre-flight error reports one that does not. No other
+    rounds to BT-131 (so the round trip is lossless), and a pre-flight error (`EUINVOICE-FATTURAPA-TOTAL-PRICE`) reports one that does not. No other
     declared amount changes.
   - On a TD16 only, a `Natura` with an `AliquotaIVA` other than 0, on a line or a `DatiCassaPrevidenziale`, reads as
     VAT category S at that rate (Allegato A 1.9.1, checks 00401 and 00430), with the Natura kept in

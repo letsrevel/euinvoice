@@ -6,8 +6,10 @@ mapping cites its row (the ids of the Rappresentazione tabellare). Data with no 
 ``InvoiceLine.it`` (D3 as amended, ADR 0001). Everything else (the transmission data of 1.1, which are writer options;
 the EXT rows outside the v1 extension, such as withholding, Art73 or the intermediary; and
 every "Mappatura non considerabile" row) is left unmarked, so it is listed in ``ParseResult.unmapped``: nothing is
-dropped silently. Where FatturaPA holds a value the model cannot (more than two decimals in an amount, a generic
-Natura, several discounts on a line, …), the reader refuses with :class:`~euinvoice.errors.ParseError` instead of
+dropped silently. A ``PrezzoTotale`` with more than two decimals is rounded half up to BT-131, its exact value kept in
+``.it.total_price`` and the rounding reported (#132 item 1). Where FatturaPA holds another value the model cannot (a
+generic Natura, several discounts on a line, …), the reader refuses with :class:`~euinvoice.errors.ParseError`
+instead of
 rounding or guessing; the open policy questions are in https://github.com/letsrevel/euinvoice/issues/132.
 
 Declared amounts are read as declared (VAT breakdown in ``_read_lines.breakdown``, totals in :func:`_totals`), as the

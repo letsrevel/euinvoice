@@ -37,11 +37,11 @@ from euinvoice.syntax.fatturapa._write_rules import (
     DOCUMENT_TYPE,
     EXTENSION,
     ISSUER,
-    LINE_TOTAL,
     NAME,
     NATURA,
     PAYMENT,
     REQUIRED,
+    TOTAL_PRICE,
     TOTALS,
     UNSUPPORTED_CATEGORIES,
     finding,
@@ -85,7 +85,7 @@ def preflight(invoice: Invoice, transmission: Transmission | None = None) -> tup
         *_names(invoice, it),
         *_required(invoice),
         *_natura(invoice),
-        *_line_total(invoice),
+        *_total_price(invoice),
         *_payment(invoice, it),
         *structure(invoice, it, transmission),
         *summary_findings,
@@ -197,13 +197,13 @@ def _natura(invoice: Invoice) -> t.Iterator[Finding]:
             yield finding(NATURA, location, f"Natura {nature} {reason}, but BT-151 is {category}{detail}")
 
 
-def _line_total(invoice: Invoice) -> t.Iterator[Finding]:
+def _total_price(invoice: Invoice) -> t.Iterator[Finding]:
     """2.2.1.11 PrezzoTotale as declared (``it.total_price``) must round half up to BT-131, or it would be lost."""
     for index, line in enumerate(invoice.lines):
         exact = None if line.it is None else line.it.total_price
         if exact is not None and quantize_amount(exact) != line.net_amount:
             yield finding(
-                LINE_TOTAL,
+                TOTAL_PRICE,
                 f"lines[{index}].it.total_price",
                 f"it.total_price {format(exact, 'f')} (2.2.1.11 PrezzoTotale) rounds half up to "
                 f"{format(quantize_amount(exact), 'f')}, not to BT-131 {format(line.net_amount, 'f')}; unset it or "

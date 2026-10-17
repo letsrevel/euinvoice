@@ -179,3 +179,12 @@ def test_the_writer_refuses_the_td16_reading_with_a_cited_error() -> None:
     message = str(caught.value)
     assert "TD16" in message
     assert "00401" in message
+
+
+def test_a_total_price_beyond_eight_decimals_is_reported_at_it_total_price() -> None:
+    invoice = parse(_priced("100.00500000", taxable="100.01"))
+    extension = ItalianLineExtension(total_price=D("100.005000001"))
+    tampered = invoice.model_copy(update={"lines": (invoice.lines[0].model_copy(update={"it": extension}),)})
+
+    with pytest.raises(Exception, match=re.escape("lines[0].it.total_price")):
+        to_xml(tampered, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)

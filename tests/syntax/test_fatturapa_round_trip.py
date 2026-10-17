@@ -35,8 +35,6 @@ UNMAPPED: t.Final = re.compile(
     r"/p:FatturaElettronica/FatturaElettronicaHeader/DatiTrasmissione"  # the Transmission, not invoice data
     # SpeseAccessorie, the sum of the AC lines, derived from them (App. 4.1 row 2.2.2.3)
     r"|/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi/DatiRiepilogo(\[\d+\])?/SpeseAccessorie"
-    # a PrezzoTotale beyond two decimals, rounded to BT-131 and kept exact in it.total_price (#132 item 1)
-    r"|/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi/DettaglioLinee(\[\d+\])?/PrezzoTotale/text\(\)"
 )
 """What the reader lists as unmapped in a written document: the transmission header and the derived SpeseAccessorie."""
 
@@ -66,6 +64,10 @@ def _diff(a: object, b: object, path: str = "") -> t.Iterator[str]:
         yield path
 
 
+def _is_total(path: str) -> bool:
+    return path.endswith("/PrezzoTotale/text()")
+
+
 def _write(invoice: Invoice, transmission: Transmission = TRANSMISSION) -> bytes:
     return to_xml(invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=transmission)
 
@@ -74,7 +76,15 @@ def _assert_round_trip(invoice: Invoice, transmission: Transmission = TRANSMISSI
     data = _write(invoice, transmission)
     (result,) = parse_all(data)
 
-    assert all(UNMAPPED.fullmatch(path) for path in result.unmapped), result.unmapped
+    rounded = [i for i, line in enumerate(invoice.lines, 1) if line.it is not None and line.it.total_price is not None]
+    goods = "/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi/DettaglioLinee"
+    expected = [
+        f"{goods}[{i}]/PrezzoTotale/text()" if len(invoice.lines) > 1 else f"{goods}/PrezzoTotale/text()"
+        for i in rounded
+    ]
+    # a PrezzoTotale beyond two decimals is reported exactly where it.total_price keeps it (#132 item 1)
+    assert [p for p in result.unmapped if p.endswith("/PrezzoTotale/text()")] == expected
+    assert all(UNMAPPED.fullmatch(path) for path in result.unmapped if not _is_total(path)), result.unmapped
     assert [path for path in _diff(invoice, result.invoice) if not NORMALIZED.fullmatch(path)] == []
     assert _write(result.invoice, transmission) == data
 
