@@ -46,3 +46,11 @@ The #115 research (official sources only) found:
   and raised as `needs-human`.
 - Deferred: the Italian UBL profile (#123), a Fatture in Cloud adapter (#124), FPA12 and signing, and
   writing batch files (lotti). Transmission stays outside the core (#114).
+
+## Addendum (2026-10-17, #130, #154): decision 0
+
+The SdI "Elenco dei controlli" v2.0 (31/01/2025, sha256 `a3ec6b4b5f74c43bca8c5849f49b33d2c9b0784c5d227f32a25a81b1d7caf9f2`,
+fetch only) is a secondary oracle for D8. Its pseudo-code settles what Allegato A 1.9.1 leaves silent or ambiguous:
+00409 (two TD04 are duplicates; Art73 is read on one body), 00419 (a count), 00423 (cascade, Quantita defaults to 1) and
+00424 (`0 < rate < 1`). Where Allegato A is explicit it still wins: the 00423 tolerance, the 00418 and 00471 scope and
+00443/00444 are unchanged, and the documented consequence is that SdI may accept a document we report.

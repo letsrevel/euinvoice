@@ -232,9 +232,12 @@ Here the tax of the 22 % summary (`Imposta`) is off by more than a cent, which S
 [('00421', <Severity.ERROR: 'error'>, 'sdi')]
 ```
 
-`report.ok` can be `True` for a file SdI still rejects. Where Allegato A and SdI's "Elenco dei controlli" v2.0 disagree,
-it can also report a code SdI does not raise: 00418 is checked on every document, while the Elenco checks it only on
-TD04 ([#130](https://github.com/letsrevel/euinvoice/issues/130)). `validate()` does **not** check
+`report.ok` can be `True` for a file SdI still rejects. Allegato A 1.9.1 is the check list; where it is silent or
+ambiguous, the pseudo-code of SdI's "Elenco dei controlli" v2.0 settles the check (00409, 00419, 00423, 00424;
+[#130](https://github.com/letsrevel/euinvoice/issues/130)). Where Allegato A is explicit it wins, so `validate()` can
+also report a code SdI does not raise: 00418 is checked on every document, while the Elenco checks it only on TD04,
+and 00471 covers the 13 TipoDocumento of Allegato A, while the Elenco lists TD16-TD20 and TD29.
+`validate()` does **not** check
 (IMPLEMENTATION_PLAN.md D8; the module docstring of `euinvoice.validation.sdi` lists every code with its reason):
 
 - the tax register and SdI's state: identifiers and VAT groups (00300-00306, 00320-00327), whether the
@@ -246,7 +249,7 @@ TD04 ([#130](https://github.com/letsrevel/euinvoice/issues/130)). `validate()` d
   `fatturapa.check_file` for 00001 and 00003;
 - the signature (00100-00105, 00107): v1 is unsigned. `parse()`, `detect()`, `validate()` and the CLI refuse a
   signed `.p7m` with `UnsupportedDocumentError`; extract its XML first;
-- the parts of the prose that are ambiguous: 00424 and parts of 00409, 00423 and 00471-00473
+- the parts of the prose that neither Allegato A nor the Elenco settle: parts of 00472 and 00473
   ([#130](https://github.com/letsrevel/euinvoice/issues/130));
 - simplified invoices (FSM10, 00460), which are not detected as FatturaPA.
 

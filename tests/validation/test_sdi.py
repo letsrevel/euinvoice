@@ -5,10 +5,11 @@ is valid against the pinned XSD 1.2.3 is proved in tests/conformance/test_sdi_of
 """
 
 import re
+import typing as t
 
 import pytest
 
-from _fatturapa import CASES, EXTRA_FAILING, Body, Case, Doc, body, line, summary
+from _fatturapa import CASES, EXTRA_FAILING, Body, Case, Doc, adjustment, body, cassa, line, summary
 from euinvoice import _xml
 from euinvoice.report import Severity
 from euinvoice.validation import sdi
@@ -75,14 +76,107 @@ def test_duplicate_in_lotto_is_reported_on_the_repeating_body_and_names_the_firs
 @pytest.mark.parametrize(
     ("first", "second", "duplicate"),
     [
-        (Body(art73=True), Body(art73=True), True),  # Art73 SI: same full date
-        (Body(art73=True), Body(date="2026-02-15"), False),  # Art73 SI on either: the full date decides
-        (Body(tipo="TD04"), Body(tipo="TD04"), False),  # both credit notes: not settled by Allegato A (#130)
+        (Body(art73=True), Body(art73=True), True),  # both Art73 SI: same full date
+        (Body(art73=True), Body(art73=True, date="2026-02-15"), False),  # both Art73 SI: the full date decides
+        # Elenco p. 15: Art73 is read on F only, so the pair is also compared with F = the non-SI body, by year.
+        (Body(art73=True), Body(date="2026-02-15"), True),
+        (Body(date="2026-02-15"), Body(art73=True), True),
+        (Body(art73=True), Body(date="2027-02-15"), False),
+        (Body(tipo="TD04"), Body(tipo="TD04"), True),  # Elenco p. 15: same TipoDocumento, Numero and year
+        (Body(tipo="TD04"), Body(tipo="TD04", date="2027-01-15"), False),
+        (Body(tipo="TD04"), Body(), False),  # one TD04 and another type: never
+        (Body(tipo="TD04", art73=True), Body(tipo="TD04", art73=True, date="2026-02-15"), False),  # full date, p. 16
+        (Body(tipo="TD04", art73=True), Body(tipo="TD04", art73=True), True),
         (Body(), Body(number="FT-2"), False),
     ],
 )
 def test_duplicate_in_lotto_rules(first: Body, second: Body, duplicate: bool) -> None:
     assert ("00409" in codes(Doc(bodies=(first, second)))) is duplicate
+
+
+def _priced(total: str, *adjustments: str, quantity: str | None = "100.00") -> Doc:
+    return Doc(
+        bodies=body(
+            lines=line(quantity=quantity, unit="500.00", total=total, adjustments="".join(adjustments)),
+            summaries=summary("22.00", total, "0.00"),
+        )
+    )
+
+
+def _sc(*, percent: str | None = None, amount: str | None = None) -> str:
+    return adjustment("SC", percent=percent, amount=amount)
+
+
+_CASO_1: t.Final = [_sc(amount="10.05"), _sc(amount="5.25"), _sc(amount="4.70")]
+_CASO_2: t.Final = [_sc(percent="8.50"), _sc(percent="5.15"), _sc(percent="3.00")]
+_CASO_3: t.Final = [_sc(percent="8.50"), _sc(percent="5.15", amount="23.56"), _sc(amount="15.00"), _sc(percent="2.00")]
+
+
+@pytest.mark.parametrize(
+    ("total", "adjustments", "quantity", "ok"),
+    [
+        # Elenco pp. 28-30, Caso 1: amounts are per unit and add up: [500.00 - 20.00] * 100.00
+        ("48000.00", _CASO_1, "100.00", True),
+        ("48100.00", _CASO_1, "100.00", False),
+        # Caso 2: percentages cascade on the running price: 420.9205875 * 100
+        ("42092.05875", _CASO_2, "100.00", True),
+        ("42092.05", _CASO_2, "100.00", True),
+        ("42092.06", _CASO_2, "100.00", True),
+        ("42092.07", _CASO_2, "100.00", False),
+        ("42092.04", _CASO_2, "100.00", False),
+        # Caso 3: mixed, in document order; an entry with both uses Importo (23.56, not 5.15 %)
+        ("41056.12", _CASO_3, "100.00", True),
+        ("41055.9975", _CASO_3, "100.00", False),
+        # The order matters: a percentage applies to the running price.
+        ("40000.00", [_sc(percent="10.00"), _sc(amount="50.00")], "100.00", True),
+        ("40500.00", [_sc(amount="50.00"), _sc(percent="10.00")], "100.00", True),
+        ("43700.00", [_sc(percent="10.00"), _sc(amount="50.00")], "100.00", False),
+        # A surcharge adds; an absent Quantita counts as 1.
+        ("510.00", [adjustment("MG", amount="10.00")], None, True),
+        ("550.00", [adjustment("MG", percent="10.00")], None, True),
+        ("500.00", [], None, True),
+        ("1000.00", [], None, False),
+    ],
+)
+def test_line_total_follows_the_elenco_algorithm(
+    total: str, adjustments: list[str], quantity: str | None, ok: bool
+) -> None:
+    assert ("00423" not in codes(_priced(total, *adjustments, quantity=quantity))) is ok
+
+
+@pytest.mark.parametrize(
+    ("rate", "reported"),
+    [("0.00", False), ("0.01", True), ("0.10", True), ("0.99", True), ("1.00", False), ("10.00", False)],
+)
+def test_a_rate_between_0_and_1_is_not_a_percentage(rate: str, reported: bool) -> None:
+    natura = "N2.1" if rate == "0.00" else None
+    doc = Doc(
+        bodies=body(lines=line(rate=rate, natura=natura), summaries=summary(rate, "100.00", "0.00", natura=natura))
+    )
+
+    found = [f for f in sdi.check(_xml.parse(doc.xml())) if f.rule_id == "00424"]
+
+    assert [(f.location or "").rsplit("/", 1)[-1] for f in found] == (
+        ["DettaglioLinee", "DatiRiepilogo"] if reported else []
+    )
+
+
+def test_missing_rates_are_counted_not_matched() -> None:
+    """Elenco p. 22: 00419 compares the number of DatiRiepilogo with the number of distinct rates."""
+    lines = line() + line(2, rate="10.00")
+    count_only = Doc(bodies=body(lines=lines, summaries=summary() + summary("22.00", "0.00", "0.00")))
+    one_summary = Doc(bodies=body(lines=lines))
+
+    assert "00419" not in codes(count_only)  # two blocks for two rates: SdI reports 00443 only
+    assert "00443" in codes(count_only)
+    found = [f for f in sdi.check(_xml.parse(one_summary.xml())) if f.rule_id == "00419"]
+    assert [f.location for f in found] == ["/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi"]
+
+
+def test_a_rate_shared_by_cassa_and_lines_is_counted_once() -> None:
+    doc = Doc(bodies=body(cassa=cassa("22.00"), summaries=summary("22.00", "104.00", "22.88")))
+
+    assert "00419" not in codes(doc)
 
 
 def test_withholding_is_reported_once_per_body() -> None:
