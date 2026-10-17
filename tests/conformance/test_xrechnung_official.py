@@ -95,21 +95,30 @@ def test_each_cvd_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) 
     assert ids == {rule_id, "BR-DE-CVD-03"}
 
 
+# CVD needs BT-12/BT-17 to reach its rules, and no model invoice satisfies BR-DE-CVD-03 (see cvd_invoice),
+# so that rule accompanies R001 there, as in test_each_cvd_preflight_rule_fires_officially.
+R001_CASES: dict[str, tuple[profiles.Profile, dict[str, str], set[str]]] = {
+    profiles.XRECHNUNG.id: (profiles.XRECHNUNG, {}, {"PEPPOL-EN16931-R001"}),
+    profiles.XRECHNUNG_EXTENSION.id: (profiles.XRECHNUNG_EXTENSION, {}, {"PEPPOL-EN16931-R001"}),
+    profiles.XRECHNUNG_CVD.id: (
+        profiles.XRECHNUNG_CVD,
+        {"contract_reference": "C-1", "tender_or_lot_reference": "L-1"},
+        {"PEPPOL-EN16931-R001", "BR-DE-CVD-03"},
+    ),
+}
+
+
 @pytest.mark.parametrize("syntax", list(WRITERS))
-@pytest.mark.parametrize("profile", [profiles.XRECHNUNG, profiles.XRECHNUNG_EXTENSION], ids=lambda p: p.id)
-def test_peppol_en16931_r001_fires_on_unprepared_invoice(profile: profiles.Profile, syntax: Syntax) -> None:
-    """Verify R001 (missing BT-23) fires on unprepared invoice, both in preflight and official Schematron.
+@pytest.mark.parametrize("case", list(R001_CASES))
+def test_peppol_en16931_r001_fires_on_unprepared_invoice(case: str, syntax: Syntax) -> None:
+    """R001 (missing BT-23) fires on an unprepared invoice, in the pre-flight and the official Schematron.
 
     PEPPOL-EN16931-R001 is excluded from test_each_preflight_rule_fires_officially because prepare()
-    now fills BT-23 with the XRechnung default (§11.27). This test verifies that when an invoice
-    genuinely lacks BT-23 (unprepared), both the preflight and official Schematron agree on firing R001.
-
-    XRECHNUNG_CVD is excluded because the R001 violation invoice (based on xrechnung_invoice) lacks
-    CVD-required fields (BT-12, BT-17), so validation reports additional CVD violations.
+    now fills BT-23 with the XRechnung default (§11.27). Here BT-23 is genuinely absent.
     """
-    # Create unprepared invoice with the profile's BT-24 and no BT-23.
+    profile, fields, expected = R001_CASES[case]
     invoice = xrechnung_invoice(
-        process_control=ProcessControl(specification_identifier=profile.specification_identifier)
+        process_control=ProcessControl(specification_identifier=profile.specification_identifier), **fields
     )
     # Do NOT call prepare(); keep BT-23 unset and BT-24 as the profile's id so validate() detects the profile.
     assert invoice.process_control.business_process_type is None
@@ -127,7 +136,7 @@ def test_peppol_en16931_r001_fires_on_unprepared_invoice(profile: profiles.Profi
         for f in report.findings
         if f.source == XRECHNUNG_SOURCE and f.severity is Severity.FATAL and f.rule_id in xrechnung._RULES
     }
-    assert ids == official == {"PEPPOL-EN16931-R001"}, (ids, official, report.findings)
+    assert ids == official == expected, (ids, official, report.findings)
 
 
 @pytest.mark.parametrize(
