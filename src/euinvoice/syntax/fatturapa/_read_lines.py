@@ -20,6 +20,8 @@ from euinvoice.model.it import ItalianVatSummary, Natura
 from euinvoice.syntax._marks import XML_SPACE
 from euinvoice.syntax._read_errors import build
 from euinvoice.syntax.fatturapa._exemption import exemption_reason
+from euinvoice.syntax.fatturapa._read_adjust import Claimed, claim
+from euinvoice.syntax.fatturapa._read_adjust import read as read_adjustments
 from euinvoice.syntax.fatturapa._read_codes import NATURE_CATEGORY, POLICY_ISSUE
 from euinvoice.syntax.fatturapa._read_cursor import Cursor
 
@@ -212,14 +214,18 @@ def _line(cursor: Cursor, element: etree._Element, vat: Summaries) -> InvoiceLin
     rate = cursor.decimal(element, "AliquotaIVA", "2.2.1.12")  # → BT-152
     start = cursor.date(element, "DataInizioPeriodo", "2.2.1.7")  # → BT-134
     end = cursor.date(element, "DataFinePeriodo", "2.2.1.8")  # → BT-135
-    attributes = [_attribute(cursor, adg) for adg in cursor.children(element, "AltriDatiGestionali")]  # → BG-32
+    claimed = claim(cursor, element)  # the AltriDatiGestionali that explain a ScontoMaggiorazione → BG-27 / BG-28
+    attributes = [
+        _attribute(cursor, adg) for adg in cursor.children(element, "AltriDatiGestionali") if adg not in claimed.entries
+    ]  # → BG-32
     # 2.2.1.5 Quantita → BT-129. Absent, it is 1: Allegato A 1.9.1 says Quantita "può non essere valorizzato nei casi
     # in cui la prestazione non sia quantificabile", 00423 checks PrezzoTotale as (PrezzoUnitario ±
     # ScontoMaggiorazione) * Quantita, and the official FPR03 body 2 has PrezzoUnitario = PrezzoTotale.
     quantity = cursor.decimal(element, "Quantita", "2.2.1.5")
-    price, negative = _price(cursor, element)
+    price, negative = _price(cursor, element, claimed)
     net_amount, exact = _net_amount(cursor, element)  # 2.2.1.11 → BT-131, .it.total_price beyond two decimals
     count = Decimal(1) if quantity is None else quantity
+    allowances, charges = read_adjustments(cursor, element, claimed, count, negative=negative)
     values = {
         "identifier": cursor.code(element, "NumeroLinea"),  # 2.2.1.1 → BT-126
         "invoiced_quantity": -count if negative else count,
@@ -227,6 +233,8 @@ def _line(cursor: Cursor, element: etree._Element, vat: Summaries) -> InvoiceLin
         "buyer_accounting_reference": cursor.text(element, "RiferimentoAmministrazione"),  # 2.2.1.15 → BT-133
         "period": None if start is None and end is None else {"start_date": start, "end_date": end},
         "price_details": price,
+        "allowances": allowances,  # 2.2.1.10 SC + 2.2.1.16 → BG-27
+        "charges": charges,  # 2.2.1.10 MG + 2.2.1.16 → BG-28
         "vat_information": {"category_code": vat_category(cursor, element, nature, rate, vat), "rate": rate},
         "item": {
             "name": cursor.text(element, "Descrizione"),  # 2.2.1.4 → BT-153
@@ -323,7 +331,7 @@ def _unit(cursor: Cursor, element: etree._Element) -> str:
     return _ONE_UNIT
 
 
-def _price(cursor: Cursor, element: etree._Element) -> tuple[dict[str, object], bool]:
+def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[dict[str, object], bool]:
     """2.2.1.9 ``PrezzoUnitario`` and 2.2.1.10 ``ScontoMaggiorazione`` → BG-29, and whether the line is negative.
 
     App. 4.1 row 2.2.1.9 writes BT-148 when present, else BT-146; row 2.2.1.10 writes BT-147 as the ``Importo``, SC
@@ -336,9 +344,16 @@ def _price(cursor: Cursor, element: etree._Element) -> tuple[dict[str, object], 
     FatturaPA writes a discount or rebate line. BR-27 forbids a negative BT-146, but no CEN rule restricts the sign of
     BT-129, so the prices are negated and the caller negates BT-129: the line net amount is unchanged, and a writer
     can turn it back, as FatturaPA quantities are never negative.
+
+    The ``ScontoMaggiorazione`` that ``AltriDatiGestionali`` explain are BG-27 / BG-28 (:mod:`._read_adjust`), not
+    BT-147: they are left out here, and BT-146 = BT-148 - BT-147 still holds.
     """
     unit_price = cursor.decimal(element, "PrezzoUnitario", "2.2.1.9")
-    adjustments = cursor.children(element, "ScontoMaggiorazione")
+    adjustments = [
+        found
+        for position, found in enumerate(cursor.children(element, "ScontoMaggiorazione"), 1)
+        if position not in claimed.reasons
+    ]
     if len(adjustments) > 1:
         raise ParseError(
             f"2.2.1.10: {len(adjustments)} ScontoMaggiorazione on one line; whether they apply in cascade or add up "

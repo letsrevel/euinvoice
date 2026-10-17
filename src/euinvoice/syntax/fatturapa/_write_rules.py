@@ -11,6 +11,7 @@ __all__ = [
     "DOCUMENT_TYPE",
     "EXTENSION",
     "ISSUER",
+    "LINE_TOTAL",
     "NAME",
     "NATURA",
     "PAYMENT",
@@ -48,6 +49,8 @@ CATEGORY: t.Final = "EUINVOICE-FATTURAPA-CATEGORY"
 """VAT category O, L or M, which App. 5.1 gives no Natura (#133)."""
 ALLOWANCE_CHARGE: t.Final = "EUINVOICE-FATTURAPA-ALLOWANCE-CHARGE"
 """A document level allowance or charge other than a zero stamp duty (App. 4.1 row 2.1.1.6; #133)."""
+LINE_TOTAL: t.Final = "EUINVOICE-FATTURAPA-LINE-TOTAL"
+"""A line's BT-131 that SdI 00423 would refuse against its PrezzoUnitario, ScontoMaggiorazione and Quantita (#151)."""
 SUMMARY: t.Final = "EUINVOICE-FATTURAPA-SUMMARY"
 """The DatiRiepilogo (2.2.2) cannot be built from the lines, VAT BREAKDOWN, BT-8 and ``it.vat_summaries``."""
 TOTALS: t.Final = "EUINVOICE-FATTURAPA-TOTALS"

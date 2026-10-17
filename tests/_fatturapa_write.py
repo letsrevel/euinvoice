@@ -22,6 +22,8 @@ from euinvoice.model import (
     Identifier,
     Invoice,
     InvoiceDraft,
+    InvoiceLineAllowance,
+    InvoiceLineCharge,
     InvoiceLinePeriod,
     InvoiceNote,
     ItemInformation,
@@ -302,6 +304,8 @@ def every_written_term() -> Invoice:
         ),
         buyer_accounting_reference="CDC-1",
         period=InvoiceLinePeriod(start_date=datetime.date(2026, 1, 1), end_date=datetime.date(2026, 1, 31)),
+        allowances=(InvoiceLineAllowance(amount=Decimal("2.00"), reason="Sconto fedelta", reason_code="95"),),
+        charges=(InvoiceLineCharge(amount=Decimal("1.00"), reason="Spese", reason_code="FC"),),
     )
     return it_invoice(
         discounted,

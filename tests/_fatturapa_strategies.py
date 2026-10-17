@@ -12,6 +12,8 @@ from euinvoice.model import (
     Buyer,
     Identifier,
     Invoice,
+    InvoiceLineAllowance,
+    InvoiceLineCharge,
     ItemInformation,
     LineDraft,
     PaymentInstructions,
@@ -60,12 +62,57 @@ _QUANTITIES = st.decimals(min_value=Decimal("0.001"), max_value=Decimal(1000), p
 _PRICES = st.decimals(min_value=Decimal("0.0001"), max_value=Decimal(10000), places=4)
 
 
+# Quantities whose reciprocal has at most 6 decimals, so any amount in cents divides into an Amount8DecimalType exactly
+# (a line allowance or charge is written as an Importo per unit, #151).
+_EXACT_QUANTITIES = st.sampled_from(
+    [Decimal(q) for q in ("1", "2", "4", "5", "8", "10", "20", "25", "0.5", "2.5", "0.25")]
+)
+_REASONS = st.text(alphabet=st.characters(min_codepoint=33, max_codepoint=126), min_size=1, max_size=60)
+_AMOUNTS = st.decimals(min_value=Decimal("0.01"), max_value=Decimal(50), places=2)
+
+
+@st.composite
+def _reasons(draw: st.DrawFn, codes: list[str]) -> tuple[str | None, str | None]:
+    """A reason, a reason code or both (BR-42, BR-44: at least one)."""
+    text = draw(st.none() | _REASONS)
+    code = draw(st.none() | st.sampled_from(codes))
+    return text or ("Motivo" if code is None else None), code
+
+
+@st.composite
+def _adjusted_line(draw: st.DrawFn, number: int, category: str, rate: str, nature: Natura | None) -> LineDraft:
+    """A line with up to two allowances and two charges, each over a quantity that divides every amount exactly."""
+    allowances = []
+    for _ in range(draw(st.integers(min_value=0, max_value=2))):
+        reason, code = draw(_reasons(["95", "100", "41"]))
+        allowances.append(InvoiceLineAllowance(amount=draw(_AMOUNTS), reason=reason, reason_code=code))
+    charges = []
+    for _ in range(draw(st.integers(min_value=0, max_value=2))):
+        reason, code = draw(_reasons(["AA", "FC"]))
+        charges.append(InvoiceLineCharge(amount=draw(_AMOUNTS), reason=reason, reason_code=code))
+    price = draw(st.decimals(min_value=Decimal(20), max_value=Decimal(10000), places=2))
+    quantity = draw(_EXACT_QUANTITIES)
+    return it_line(
+        str(number),
+        str(quantity),
+        str(price),
+        category,
+        rate,
+        nature=nature,
+        allowances=tuple(allowances),
+        charges=tuple(charges),
+    )
+
+
 @st.composite
 def _lines(draw: st.DrawFn) -> tuple[LineDraft, ...]:
     count = draw(st.integers(min_value=1, max_value=5))
     lines = []
     for number in range(1, count + 1):
         category, rate, nature = draw(st.sampled_from(_VAT))
+        if draw(st.booleans()):
+            lines.append(draw(_adjusted_line(number, category, rate, nature)))
+            continue
         # BT-154 joins BT-153 in Descrizione (#149); the reader gives the joined text as BT-153.
         item = ItemInformation(name="Biglietto evento", description=draw(st.none() | st.just("ingresso unico")))
         quantity, price = draw(_QUANTITIES), draw(_PRICES)
