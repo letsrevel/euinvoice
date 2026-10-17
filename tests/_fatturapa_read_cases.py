@@ -225,16 +225,5 @@ REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
         document(body(summaries=summary(chargeability="S") + summary())),
         "has both a split-payment (EsigibilitaIVA S) and an ordinary DatiRiepilogo",
     ),
-    (
-        "two adjustments on a line",
-        document(
-            body(
-                lines=line(
-                    adjustments="<ScontoMaggiorazione><Tipo>SC</Tipo><Importo>1.00</Importo></ScontoMaggiorazione>" * 2
-                )
-            )
-        ),
-        "2 ScontoMaggiorazione on one line",
-    ),
 ]
 """(name, XSD-valid document, message): values the model cannot hold without rounding or guessing (#132)."""

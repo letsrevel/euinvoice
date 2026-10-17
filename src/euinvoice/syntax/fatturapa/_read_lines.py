@@ -335,10 +335,15 @@ def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[d
     """2.2.1.9 ``PrezzoUnitario`` and 2.2.1.10 ``ScontoMaggiorazione`` → BG-29, and whether the line is negative.
 
     App. 4.1 row 2.2.1.9 writes BT-148 when present, else BT-146; row 2.2.1.10 writes BT-147 as the ``Importo``, SC
-    when positive, MG when negative. So one ``ScontoMaggiorazione`` reads as BT-148 = ``PrezzoUnitario``, BT-147 =
-    ``Importo`` (or ``PrezzoUnitario * Percentuale / 100``, exact; a percentage next to an ``Importo`` is reported),
-    negated for MG, and BT-146 = BT-148 - BT-147. Several are refused: cascade or sum is not settled (#130, #132 item
-    12). Without one, BT-146 = ``PrezzoUnitario``.
+    when positive, MG when negative. Several ``ScontoMaggiorazione`` fold into one BT-147 by the SdI's own algorithm,
+    Elenco dei controlli v2.0 check 00423 (pp. 26-30, Casi 1-3), the one :func:`euinvoice.validation.sdi.check` runs
+    on the XML (the reader may not import the validation layer, so the few lines are repeated). They are walked in
+    document order with a running price that starts at ``PrezzoUnitario``; each changes it by ``sign * Importo``
+    (SC -1, MG +1) or, without ``Importo``, by ``sign * price * Percentuale / 100``, exactly, so a percentage applies
+    to the price the entries before it left (a percentage next to an ``Importo`` is reported). An entry with neither
+    is reported (SdI check 00438) and changes nothing. BT-148 = ``PrezzoUnitario``, BT-147 = the sum of the
+    discounts (the changes, negated) and BT-146 = BT-148 - BT-147. Without one,
+    BT-146 = ``PrezzoUnitario``.
 
     A negative ``PrezzoUnitario`` (``Amount8DecimalType`` is signed, ``QuantitaType`` is not, XSD 1.2.3) is how
     FatturaPA writes a discount or rebate line. BR-27 forbids a negative BT-146, but no CEN rule restricts the sign of
@@ -346,45 +351,41 @@ def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[d
     can turn it back, as FatturaPA quantities are never negative.
 
     The ``ScontoMaggiorazione`` that ``AltriDatiGestionali`` explain are BG-27 / BG-28 (:mod:`._read_adjust`), not
-    BT-147: they are left out here, and BT-146 = BT-148 - BT-147 still holds.
+    BT-147: they move the running price, as the SdI's cascade includes them, but are left out of BT-147, and
+    BT-146 = BT-148 - BT-147 still holds.
     """
     unit_price = cursor.decimal(element, "PrezzoUnitario", "2.2.1.9")
-    adjustments = [
-        found
-        for position, found in enumerate(cursor.children(element, "ScontoMaggiorazione"), 1)
-        if position not in claimed.reasons
-    ]
-    if len(adjustments) > 1:
-        raise ParseError(
-            f"2.2.1.10: {len(adjustments)} ScontoMaggiorazione on one line; whether they apply in cascade or add up "
-            f"is not settled by the sources, so the reader does not apply them ({POLICY_ISSUE})",
-            location=cursor.path(element),
-        )
     if unit_price is None:
         return {"item_net_price": None}, False
     sign = Decimal(-1) if unit_price < 0 else Decimal(1)
-    if not adjustments:
+    price = unit_price  # the running price of 00423's cascade (signed, as the SdI computes it)
+    discount = Decimal(0)  # BT-147: the entries nothing claims
+    applied = False
+    for position, found in enumerate(cursor.children(element, "ScontoMaggiorazione"), 1):
+        adjustment = cursor.use(found)
+        kind = cursor.code(adjustment, "Tipo")
+        percent = cursor.decimal(adjustment, "Percentuale", "2.2.1.10.2")
+        amount = cursor.decimal(adjustment, "Importo", "2.2.1.10.3")
+        if kind not in ("SC", "MG"):
+            raise ParseError(f"2.2.1.10.1 Tipo: {kind!r} is not SC or MG (XSD 1.2.3)", location=cursor.path(adjustment))
+        if amount is None and percent is None:
+            cursor.discard(adjustment)  # nothing to apply (SdI check 00438); reported
+            continue
+        unclaimed = position not in claimed.reasons
+        if amount is not None and percent is not None and unclaimed:
+            cursor.discard(cursor.children(adjustment, "Percentuale")[0])
+        change = amount if amount is not None else (price * t.cast(Decimal, percent)).scaleb(-2)
+        price += change if kind == "MG" else -change
+        if unclaimed:
+            discount += -change if kind == "MG" else change
+            applied = True
+    if not applied:
         return {"item_net_price": sign * unit_price}, sign < 0
-    adjustment = cursor.use(adjustments[0])
-    kind = cursor.code(adjustment, "Tipo")
-    percent = cursor.decimal(adjustment, "Percentuale", "2.2.1.10.2")
-    amount = cursor.decimal(adjustment, "Importo", "2.2.1.10.3")
-    if kind not in ("SC", "MG"):
-        raise ParseError(f"2.2.1.10.1 Tipo: {kind!r} is not SC or MG (XSD 1.2.3)", location=cursor.path(adjustment))
-    if amount is None and percent is None:
-        cursor.discard(adjustment)  # nothing to apply (SdI check 00438); reported
-        return {"item_net_price": sign * unit_price}, sign < 0
-    if amount is not None:
-        cursor.discard(cursor.children(adjustment, "Percentuale")[0] if percent is not None else None)
-    discount = amount if amount is not None else (unit_price * t.cast(Decimal, percent)).scaleb(-2)
-    if kind == "MG":
-        discount = -discount
-    price: dict[str, object] = {
+    return {
         "item_net_price": sign * (unit_price - discount),
         "item_price_discount": sign * discount,
         "item_gross_price": sign * unit_price,
-    }
-    return price, sign < 0
+    }, sign < 0
 
 
 def _net_amount(cursor: Cursor, element: etree._Element) -> tuple[Decimal | None, Decimal | None]:

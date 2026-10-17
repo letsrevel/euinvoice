@@ -17,6 +17,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- FatturaPA reader: several `ScontoMaggiorazione` on one `DettaglioLinee` are folded into one BT-147 with the
+  Elenco dei controlli v2.0 check 00423 cascade (pp. 26-30, Casi 1-3) instead of being refused
+  ([#164](https://github.com/letsrevel/euinvoice/issues/164), resolves item 12 of
+  [#132](https://github.com/letsrevel/euinvoice/issues/132)): in document order, each entry changes a running price
+  by `Importo` (SC -1, MG +1) or, without one, by its `Percentuale` of that price (exact, no rounding). Entries that
+  `AltriDatiGestionali` explain (BG-27 / BG-28) move the price but stay out of BT-147.
 - FatturaPA writer policies for the Peppol-shaped and text-heavy terms ([#149](https://github.com/letsrevel/euinvoice/issues/149),
   part of [#133](https://github.com/letsrevel/euinvoice/issues/133)): `Descrizione` is BT-153 + `" - "` + BT-154
   (refused above 1000 characters, `String1000LatinType`); a BT-20 of the form `TP02 30` is carried as

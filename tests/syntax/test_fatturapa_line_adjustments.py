@@ -7,11 +7,12 @@ BT-144 / BT-145) are 2.2.1.16 AltriDatiGestionali with ``TipoDato`` the term id,
 
 import re
 import typing as t
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import pytest
 
 import _fatturapa_read
+from _fatturapa import adjustment
 from _fatturapa_write import GOODS, TRANSMISSION, it_invoice, it_line, written
 from euinvoice import _xml, parse_all, to_xml
 from euinvoice.errors import ModelError, ParseError
@@ -344,9 +345,112 @@ def test_the_reader_refuses_what_it_cannot_map_back(adjustments: str, after: str
         parse_all(data)
 
 
-def test_several_sconti_that_nothing_explains_are_still_refused() -> None:
-    with pytest.raises(ParseError, match=r"2 ScontoMaggiorazione on one line"):
-        _read(_SC + _MG, "", total="96.00")
+# --- several ScontoMaggiorazione fold into one BT-147 by the SdI's 00423 cascade (#164) -------------------------
+
+
+def _sconto(kind: str, *, percent: str | None = None, amount: str | None = None) -> str:
+    return adjustment(kind, percent=percent, amount=amount)
+
+
+# Elenco dei controlli v2.0 pp. 28-30, Casi 1-3: a unit price of 500.00 and Quantita 100.00 (as in the SdI oracle's
+# own tests, tests/validation/test_sdi.py).
+_CASO_1 = _sconto("SC", amount="10.05") + _sconto("SC", amount="5.25") + _sconto("SC", amount="4.70")
+_CASO_2 = _sconto("SC", percent="8.50") + _sconto("SC", percent="5.15") + _sconto("SC", percent="3.00")
+_CASO_3 = (
+    _sconto("SC", percent="8.50")
+    + _sconto("SC", percent="5.15", amount="23.56")
+    + _sconto("SC", amount="15.00")
+    + _sconto("SC", percent="2.00")
+)
+_CASO_TOTALS = {_CASO_1: "48000.00", _CASO_2: "42092.05875", _CASO_3: "41056.12"}
+
+
+def _cascade(
+    adjustments: str, total: str, *, unit: str = "500.00", quantity: str | None = "100.00", after: str = ""
+) -> bytes:
+    taxable = format(Decimal(total).quantize(D("0.01"), ROUND_HALF_UP), "f")
+    tax = format(abs(Decimal(taxable)) * D("0.22"), ".2f")
+    line = _fatturapa_read.line(unit=unit, total=total, adjustments=adjustments, quantity=quantity, after=after)
+    return _fatturapa_read.document(
+        _fatturapa_read.body(lines=line, summaries=_fatturapa_read.summary("22.00", taxable, tax))
+    )
+
+
+def _price_of(data: bytes) -> PriceDetails:
+    (result,) = parse_all(data)
+    return result.invoice.lines[0].price_details
+
+
+@pytest.mark.parametrize(
+    ("adjustments", "total", "discount", "net"),
+    [
+        (_CASO_1, "48000.00", "20.00", "480.00"),  # Caso 1: amounts add up
+        (_CASO_2, "42092.05875", "79.0794125", "420.9205875"),  # Caso 2: percentages cascade
+        (_CASO_3, "41056.12", "89.4388", "410.5612"),  # Caso 3: mixed; Importo wins over Percentuale
+        # MG and SC mixed: 500 * 1.10 = 550, then -50.
+        (_sconto("MG", percent="10.00") + _sconto("SC", amount="50.00"), "50000.00", "0.00", "500.00"),
+        # The order matters: a percentage applies to the running price.
+        (_sconto("SC", amount="50.00") + _sconto("SC", percent="10.00"), "40500.00", "95.00", "405.00"),
+        (_sconto("SC", percent="10.00") + _sconto("SC", amount="50.00"), "40000.00", "100.00", "400.00"),
+    ],
+)
+def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
+    adjustments: str, total: str, discount: str, net: str
+) -> None:
+    price = _price_of(_cascade(adjustments, total))
+
+    assert (price.item_gross_price, price.item_price_discount, price.item_net_price) == (
+        D("500.00"),
+        D(discount),
+        D(net),
+    )
+
+
+def test_a_percentage_next_to_an_importo_in_a_cascade_is_reported() -> None:
+    (result,) = parse_all(_cascade(_CASO_3, "41056.12"))
+
+    assert any(path.endswith("/ScontoMaggiorazione[2]/Percentuale") for path in result.unmapped)
+
+
+def test_a_claimed_importo_moves_the_price_but_is_not_bt_147() -> None:
+    # SC 50.00 (explained: BG-27, 2 * 50.00), then SC 10 % of the 450.00 left: BT-147 is the 45.00 only.
+    adjustments = _sconto("SC", amount="50.00") + _sconto("SC", percent="10.00")
+    data = _cascade(adjustments, "810.00", quantity="2.00", after=_adg("BT-139", "Promo"))
+    (result,) = parse_all(data)
+    line = result.invoice.lines[0]
+
+    assert [a.amount for a in line.allowances] == [D("100.00")]
+    assert (line.price_details.item_gross_price, line.price_details.item_price_discount) == (D("500.00"), D("45.00"))
+    assert line.price_details.item_net_price == D("455.00")
+
+
+def test_a_negative_unit_price_with_two_sconti_keeps_its_sign_on_the_quantity() -> None:
+    adjustments = _sconto("SC", percent="10.00") + _sconto("SC", amount="5.00")
+    data = _cascade(adjustments, "-95.00", unit="-100.00", quantity="1.00")
+    (result,) = parse_all(data)
+    line = result.invoice.lines[0]
+
+    assert line.invoiced_quantity == D("-1.00")
+    assert (line.price_details.item_gross_price, line.price_details.item_price_discount) == (D("100.00"), D("5.00"))
+    assert line.price_details.item_net_price == D("95.00")
+
+
+def test_an_empty_sconto_among_others_changes_nothing() -> None:
+    empty = "<ScontoMaggiorazione><Tipo>MG</Tipo></ScontoMaggiorazione>"
+    price = _price_of(_cascade(_sconto("SC", amount="10.00") + empty, "49000.00"))
+
+    assert (price.item_price_discount, price.item_net_price) == (D("10.00"), D("490.00"))
+
+
+@pytest.mark.parametrize("adjustments", [_CASO_1, _CASO_2, _CASO_3])
+def test_a_document_the_sdi_accepts_reads_and_writes_back_to_one_it_accepts(adjustments: str) -> None:
+    data = _cascade(adjustments, _CASO_TOTALS[adjustments])
+    assert [f for f in sdi.check(_xml.parse(data)) if f.rule_id == "00423"] == []
+
+    (result,) = parse_all(data)
+    written_back = to_xml(result.invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
+
+    assert [f for f in sdi.check(_xml.parse(written_back)) if f.rule_id == "00423"] == []
 
 
 def test_a_second_reason_of_the_same_kind_stays_an_attribute() -> None:
