@@ -124,7 +124,7 @@ def _read_body(root: etree._Element, body: etree._Element) -> ParseResult:
     kind = _document_type(cursor, document)
     allowances, stamp = _stamp_duty(cursor, document, kind is TipoDocumento.TD04)
     goods = cursor.one(body, "DatiBeniServizi")
-    vat = summaries(cursor, goods)
+    vat = summaries(cursor, goods, integration=kind is TipoDocumento.TD16)
     charges = (*funds(cursor, document, vat), *stamp)
     invoice_lines = lines(cursor, goods, vat)
     groups = breakdown(vat, body, [("Z", _ZERO)] if allowances or stamp else ())

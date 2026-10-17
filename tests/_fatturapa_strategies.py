@@ -19,8 +19,10 @@ from euinvoice.model import (
     Seller,
     SellerPostalAddress,
 )
+from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.it import (
     CondizioniPagamento,
+    ItalianLineExtension,
     ItalianPayment,
     ModalitaPagamento,
     Natura,
@@ -66,8 +68,13 @@ def _lines(draw: st.DrawFn) -> tuple[LineDraft, ...]:
         category, rate, nature = draw(st.sampled_from(_VAT))
         # BT-154 joins BT-153 in Descrizione (#149); the reader gives the joined text as BT-153.
         item = ItemInformation(name="Biglietto evento", description=draw(st.none() | st.just("ingresso unico")))
+        quantity, price = draw(_QUANTITIES), draw(_PRICES)
+        changes: dict[str, t.Any] = {}
+        exact = quantity * price  # PrezzoTotale: up to 7 decimals, Amount8DecimalType (#132 item 1)
+        if exact != quantize_amount(exact) and draw(st.booleans()):
+            changes["it"] = ItalianLineExtension(nature=nature, total_price=exact)
         lines.append(
-            it_line(str(number), str(draw(_QUANTITIES)), str(draw(_PRICES)), category, rate, nature=nature, item=item)
+            it_line(str(number), str(quantity), str(price), category, rate, nature=nature, item=item, **changes)
         )
     return tuple(lines)
 

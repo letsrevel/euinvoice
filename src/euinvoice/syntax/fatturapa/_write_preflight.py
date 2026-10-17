@@ -20,6 +20,7 @@ import typing as t
 from decimal import Decimal
 
 from euinvoice.model import Invoice
+from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, SoggettoEmittente, TipoDocumento
 from euinvoice.report import Finding, Severity
@@ -36,6 +37,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     DOCUMENT_TYPE,
     EXTENSION,
     ISSUER,
+    LINE_TOTAL,
     NAME,
     NATURA,
     PAYMENT,
@@ -83,6 +85,7 @@ def preflight(invoice: Invoice, transmission: Transmission | None = None) -> tup
         *_names(invoice, it),
         *_required(invoice),
         *_natura(invoice),
+        *_line_total(invoice),
         *_payment(invoice, it),
         *structure(invoice, it, transmission),
         *summary_findings,
@@ -185,7 +188,27 @@ def _natura(invoice: Invoice) -> t.Iterator[Finding]:
         elif CATEGORY_OF_NATURA.get(nature) != category:
             expected = CATEGORY_OF_NATURA.get(nature)
             reason = "is not in the App. 5.1 table" if expected is None else f"is VAT category {expected} in App. 5.1"
-            yield finding(NATURA, location, f"Natura {nature} {reason}, but BT-151 is {category}")
+            detail = ""
+            if category is VatCategory.STANDARD_RATED and expected is not None and line.vat_information.rate:
+                detail = (
+                    "; the reader gives a Natura with a rate that category (S at that rate) on a TD16 only (Allegato A "
+                    "1.9.1, checks 00401 and 00430), and the v1 writer does not emit TD16"
+                )
+            yield finding(NATURA, location, f"Natura {nature} {reason}, but BT-151 is {category}{detail}")
+
+
+def _line_total(invoice: Invoice) -> t.Iterator[Finding]:
+    """2.2.1.11 PrezzoTotale as declared (``it.total_price``) must round half up to BT-131, or it would be lost."""
+    for index, line in enumerate(invoice.lines):
+        exact = None if line.it is None else line.it.total_price
+        if exact is not None and quantize_amount(exact) != line.net_amount:
+            yield finding(
+                LINE_TOTAL,
+                f"lines[{index}].it.total_price",
+                f"it.total_price {format(exact, 'f')} (2.2.1.11 PrezzoTotale) rounds half up to "
+                f"{format(quantize_amount(exact), 'f')}, not to BT-131 {format(line.net_amount, 'f')}; unset it or "
+                "make them agree",
+            )
 
 
 def _payment(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:

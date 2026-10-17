@@ -201,11 +201,6 @@ REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
         "Natura N4 (VAT category E, App. 5.1) with AliquotaIVA 22.00",
     ),
     (
-        "PrezzoTotale with 3 decimals",
-        document(body(lines=line(total="100.001"))),
-        "2.2.1.11 PrezzoTotale 100.001 has more than two decimals",
-    ),
-    (
         "generic Natura N2",
         document(body(lines=line(rate="0.00", natura="N2"), summaries=summary("0.00", "100.00", "0.00", natura="N2"))),
         "generic code N2 has no VAT category",

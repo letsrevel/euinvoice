@@ -35,6 +35,8 @@ UNMAPPED: t.Final = re.compile(
     r"/p:FatturaElettronica/FatturaElettronicaHeader/DatiTrasmissione"  # the Transmission, not invoice data
     # SpeseAccessorie, the sum of the AC lines, derived from them (App. 4.1 row 2.2.2.3)
     r"|/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi/DatiRiepilogo(\[\d+\])?/SpeseAccessorie"
+    # a PrezzoTotale beyond two decimals, rounded to BT-131 and kept exact in it.total_price (#132 item 1)
+    r"|/p:FatturaElettronica/FatturaElettronicaBody/DatiBeniServizi/DettaglioLinee(\[\d+\])?/PrezzoTotale/text\(\)"
 )
 """What the reader lists as unmapped in a written document: the transmission header and the derived SpeseAccessorie."""
 

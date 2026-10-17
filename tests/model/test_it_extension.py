@@ -53,6 +53,7 @@ EXPECTED_IDS: t.Final = {
     (ItalianExtension, "buyer_last_name"): "1.4.1.3.3",
     (ItalianLineExtension, "supply_type"): "2.2.1.2",
     (ItalianLineExtension, "nature"): "2.2.1.14",
+    (ItalianLineExtension, "total_price"): "2.2.1.11",
     (ItalianVatSummary, "rate"): "2.2.2.1",
     (ItalianVatSummary, "nature"): "2.2.2.2",
     (ItalianVatSummary, "vat_chargeability"): "2.2.2.7",

@@ -41,7 +41,7 @@ from pydantic.fields import FieldInfo
 
 from euinvoice.errors import ModelError
 from euinvoice.model._base import EuInvoiceModel
-from euinvoice.model.amounts import Percentage
+from euinvoice.model.amounts import Percentage, UnitPriceAmount
 from euinvoice.model.datatypes import Text
 from euinvoice.model.it.codes import (
     CondizioniPagamento,
@@ -150,6 +150,10 @@ class ItalianLineExtension(EuInvoiceModel):
     nature: t.Annotated[Natura | None, fatturapa("2.2.1.14")] = None
     """``Natura`` <0.1>: why the line carries no VAT. App. 4.1 carries it in an ITEM ATTRIBUTE (BT-160 "Natura")
     or, cross-border, derives it from BT-151 (App. 5.1); the category alone cannot tell N2.2 from N4."""
+    total_price: t.Annotated[UnitPriceAmount | None, fatturapa("2.2.1.11")] = None
+    """``PrezzoTotale`` <1.1> as declared, when it has more than two decimals (``Amount8DecimalType``: 2 to 8). BT-131
+    is an EN amount (at most two decimals, BR-DEC-23), so the reader sets it to this value rounded half up (D11) and
+    keeps the exact value here; the writer writes it back when rounding it gives BT-131. Leave it unset otherwise."""
 
 
 class ItalianVatSummary(EuInvoiceModel):
