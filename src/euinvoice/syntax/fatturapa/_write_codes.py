@@ -14,6 +14,8 @@ __all__ = [
     "CATEGORY_OF_NATURA",
     "CHARGEABILITY_OF_VAT_POINT",
     "DOCUMENT_TYPES",
+    "INSTRUMENT_NOT_DEFINED",
+    "METHODS_WITHOUT_MEANS",
     "PAYMENT_METHOD_OF_MEANS",
     "VATEX_OF_NATURA",
 ]
@@ -112,3 +114,13 @@ PAYMENT_METHOD_OF_MEANS: t.Final[t.Mapping[str, ModalitaPagamento]] = types.Mapp
 )  # fmt: skip
 """App. 5.6: ModalitaPagamento from the payment means type code BT-81, many to one. Codes 69 and 98 of the UNTDID 4461
 list (BR-CL-16) have no row."""
+
+INSTRUMENT_NOT_DEFINED: t.Final = "1"
+"""UNTDID 4461 "Instrument not defined", the BT-81 the reader gives a method App. 5.6 has no row for (#136)."""
+
+METHODS_WITHOUT_MEANS: t.Final[frozenset[ModalitaPagamento]] = frozenset(
+    set(ModalitaPagamento) - set(PAYMENT_METHOD_OF_MEANS.values())
+)
+"""The ModalitaPagamento codes no App. 5.6 row maps to (MP07, MP09, MP10, MP11, MP14, MP16, MP20, MP21). Only for these
+may BT-81 be :data:`INSTRUMENT_NOT_DEFINED` next to an explicit ``it.payment.method``: App. 5.6 maps BT-81 "1" to MP01,
+so "1" next to any other method with a row would contradict the table (#136, option b)."""

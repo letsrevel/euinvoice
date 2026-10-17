@@ -393,6 +393,17 @@ def test_payment_method_and_bic() -> None:
     assert detail.findtext("BIC") == "AAAADEBBXXX"
 
 
+@pytest.mark.parametrize("method", ["MP07", "MP09", "MP10", "MP11", "MP14", "MP16", "MP20", "MP21"])
+def test_a_method_without_an_app_5_6_row_is_written_next_to_bt_81_1(method: str) -> None:
+    invoice = it_invoice(
+        it=italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento(method))),
+        payment_instructions=PaymentInstructions(payment_means_type_code="1"),
+    )
+
+    detail = _find(written(invoice), f"{PAYMENT}/DettaglioPagamento")
+    assert detail.findtext("ModalitaPagamento") == method
+
+
 def test_payment_without_bg_16_uses_the_method() -> None:
     invoice = it_invoice(
         it=italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento.MP01))

@@ -12,9 +12,17 @@ from euinvoice.model import (
     PaymentInstructions,
     SellerPostalAddress,
 )
-from euinvoice.model.it import CondizioniPagamento, ItalianPayment, Natura, SoggettoEmittente, TipoDocumento
+from euinvoice.model.it import (
+    CondizioniPagamento,
+    ItalianPayment,
+    ModalitaPagamento,
+    Natura,
+    SoggettoEmittente,
+    TipoDocumento,
+)
 from euinvoice.report import Severity
 from euinvoice.syntax.fatturapa import preflight
+from euinvoice.syntax.fatturapa._write_codes import METHODS_WITHOUT_MEANS
 from euinvoice.syntax.fatturapa._write_rules import (
     CATEGORY,
     DOCUMENT_TYPE,
@@ -134,3 +142,35 @@ def test_modalita_pagamento_needs_a_source(instructions: PaymentInstructions | N
 
     assert [(f.rule_id, f.location) for f in findings] == [(PAYMENT, "it.payment.method")]
     assert found in findings[0].message
+
+
+UNMAPPED_METHODS: t.Final = ("MP07", "MP09", "MP10", "MP11", "MP14", "MP16", "MP20", "MP21")
+
+
+def test_the_methods_without_an_app_5_6_row_are_the_eight_of_136() -> None:
+    assert sorted(METHODS_WITHOUT_MEANS) == sorted(ModalitaPagamento(m) for m in UNMAPPED_METHODS)
+
+
+@pytest.mark.parametrize("method", UNMAPPED_METHODS)
+def test_bt_81_1_carries_a_method_app_5_6_has_no_row_for(method: str) -> None:
+    """#136 option b: App. 5.6 gives no BT-81 for these 8 codes, so "1" (instrument not defined) accompanies them."""
+    it = italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento(method)))
+
+    assert preflight(it_invoice(it=it, payment_instructions=PaymentInstructions(payment_means_type_code="1"))) == ()
+
+
+@pytest.mark.parametrize("method", ["MP02", "MP05", "MP19"])
+def test_bt_81_1_stays_refused_with_a_method_app_5_6_maps_elsewhere(method: str) -> None:
+    """App. 5.6 maps "1" to MP01, so "1" next to another method that has a row is inconsistent."""
+    it = italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento(method)))
+    findings = preflight(it_invoice(it=it, payment_instructions=PaymentInstructions(payment_means_type_code="1")))
+
+    assert [(f.rule_id, f.location) for f in findings] == [(PAYMENT, "payment_instructions.payment_means_type_code")]
+
+
+@pytest.mark.parametrize("means", ["10", "30", "ZZZ"])
+def test_other_bt_81_stays_refused_with_a_method_app_5_6_has_no_row_for(means: str) -> None:
+    it = italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=ModalitaPagamento.MP07))
+    findings = preflight(it_invoice(it=it, payment_instructions=PaymentInstructions(payment_means_type_code=means)))
+
+    assert [(f.rule_id, f.location) for f in findings] == [(PAYMENT, "payment_instructions.payment_means_type_code")]
