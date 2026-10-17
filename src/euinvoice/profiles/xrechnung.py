@@ -12,18 +12,19 @@ the XSD, then the CEN Schematron, then the XRechnung Schematron, and never the P
 KoSIT's ``customLevel`` severity overrides leave the findings' official flags unchanged; ``validate()`` applies them
 only to the separate KoSIT verdict, ``ValidationReport.kosit`` (issue #49, :mod:`euinvoice.validation.kosit`).
 
-No BT-23 default: the XRechnung rule set re-asserts PEPPOL-EN16931-R001 (fatal; ``XRechnung-UBL-validation.sch``
-line 198, ``XRechnung-CII-validation.sch`` lines 173-175), so BT-23 must be present, but no pinned
-artifact fixes its value. All 86 instances of the pinned testsuite (2026-08-31) carry
-``urn:fdc:peppol.eu:2017:poacc:billing:01:1.0``; that is usage, not a rule, so the caller sets BT-23
-(needs-human #67). The pre-flight reports a missing BT-23 under PEPPOL-EN16931-R001.
+BT-23 default: XRechnung 3.0.2 "Spezifikation Standard XRechnung, CIUS und Extension, Version 3.0.2,
+Veröffentlicht 20.06.2024" (KoSIT), §11.27 "Gruppe PROCESS CONTROL" p. 57, sha256
+2e10f3330e79bcd34a4084f2cb3e40e5011403f5df02eb6ecbfb9a5a70658220: "Wurde keine Vorgabe zur Befüllung des
+zu übermittelnden Feldes gemacht, kann als Default-Wert „urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
+übermittelt werden." The profiles set this default; the pre-flight checks that it is provided when the caller
+sets none. All 86 instances of the pinned testsuite (2026-08-31) carry this value.
 
 BT-119 on a "Not subject to VAT" (O) breakdown: BR-DE-14 requires BT-119 on every VAT breakdown, while EN 16931
 lets an O breakdown leave it out (BR-48) and ``calc.complete`` does. So :meth:`~euinvoice.profiles.Profile.prepare`
 writes BT-119 = 0 there, as the official instance ``standard/01.04a-INVOICE_ubl.xml`` does (issue #75).
 
 Pre-flight checks (each profile's :attr:`~euinvoice.profiles.Profile.preflight`) mirror fatal BR-DE-* rules
-(and the re-asserted PEPPOL-EN16931-R001) of the pinned XRechnung Schematron 2.6.0
+of the pinned XRechnung Schematron 2.6.0
 (``schematron/ubl/XRechnung-UBL-validation.sch`` and ``schematron/cii/XRechnung-CII-validation.sch``,
 line numbers below as UBL / CII). A pre-flight finding is
 fatal under the official id exactly when the official rule fires on the output of the writer for the given
@@ -40,6 +41,7 @@ from collections.abc import Iterator
 from euinvoice.model import Invoice, PaymentInstructions
 from euinvoice.model.datatypes import normalize_space
 from euinvoice.profiles._base import SYNTAXES, Profile
+from euinvoice.profiles.peppol import BILLING_PROCESS
 from euinvoice.report import Finding, Severity
 from euinvoice.syntax import Syntax
 
@@ -305,7 +307,7 @@ def _document(invoice: Invoice) -> Iterator[Finding]:
         yield _fatal(
             "PEPPOL-EN16931-R001",
             "process_control.business_process_type",
-            "Business process (BT-23) must be provided; the XRechnung profiles set no default (#67).",
+            "Business process (BT-23) must be provided. The XRechnung profiles set a default when prepare() is called.",
         )
     # BR-DE-15: UBL lines 329-331 / CII lines 336-338.
     if _blank(invoice.buyer_reference):
@@ -426,6 +428,7 @@ XRECHNUNG: t.Final = Profile(
     specification_identifier=_CIUS_ID,  # XR-CIUS-ID, common.sch line 7
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
+    business_process_type=BILLING_PROCESS,
     preflight=_preflight,
     requires_vat_breakdown_rate=_always,
 )
@@ -438,6 +441,7 @@ XRECHNUNG_EXTENSION: t.Final = Profile(
     specification_identifier=f"{_CIUS_ID}#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0",
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
+    business_process_type=BILLING_PROCESS,
     preflight=_preflight,
     requires_vat_breakdown_rate=_always,
 )
@@ -450,6 +454,7 @@ XRECHNUNG_CVD: t.Final = Profile(
     specification_identifier=f"{_CIUS_ID}#compliant#urn:xeinkauf.de:kosit:xrechnung:cvd_0.9",
     syntaxes=_SYNTAXES,
     rule_sets=_RULE_SETS,
+    business_process_type=BILLING_PROCESS,
     preflight=_cvd_preflight,
     requires_vat_breakdown_rate=_always,
 )
