@@ -302,8 +302,8 @@ def _allowances_and_charges(invoice: Invoice, it: ItalianExtension) -> t.Iterato
             yield finding(
                 ALLOWANCE_CHARGE,
                 f"{path}.amount",
-                f"{group}: a stamp duty charged to the buyer is not written; its amount would be in the VAT "
-                "BREAKDOWN, which DatiRiepilogo cannot carry (SdI 00422), and BR-IT-DC-480 sets it to 0 (#133)",
+                f"{group}: BT-99 of the stamp duty is 0 (BR-IT-DC-480; a duty in the VAT BREAKDOWN is refused, "
+                "SdI 00422): give a duty charged to the buyer as Invoice.it.stamp_duty_amount (2.1.1.6.2 ImportoBollo, #165)",
             )
         if reason is not None and reason != STAMP_DUTY_REASON:
             yield finding(

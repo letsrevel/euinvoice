@@ -67,6 +67,7 @@ __all__ = [
 _ELEMENT_ID = re.compile(r"[1-9][0-9]*(?:\.[1-9][0-9]*)*")
 _RATE_MAX = Decimal(100)
 _CENT = Decimal("0.01")
+_AMOUNT2_MAX = Decimal("99999999999.99")
 
 
 def fatturapa(ident: str) -> FieldInfo:
@@ -227,17 +228,24 @@ class ItalianExtension(EuInvoiceModel):
     buyer_last_name: t.Annotated[Latin60Text | None, fatturapa("1.4.1.3.3")] = None
     """``Cognome`` of the buyer; see :attr:`buyer_first_name`."""
     stamp_duty_amount: t.Annotated[Amount | None, fatturapa("2.1.1.6.2")] = None
-    """``ImportoBollo`` of ``DatiBollo``, the stamp duty charged to the buyer, >= 0. Regole tecniche v2.6 App. 4.1 row
-    2.1.1.6.2 (p. 83): "Valorizzare a zero in caso di mancato addebito al cessionario-committente", so a non-zero value
-    marks a charged duty; ``None`` writes 0.00. The EN side stays BT-99 = 0 / category Z (BR-IT-DC-480, p. 62) and the
-    library generates no line: the recharge is ordinary consideration (Interpello 428/2022, p. 4), which the caller
-    models as an ordinary invoice line. Requires the zero SAE (credit note: 95) marker, else the writer refuses."""
+    """``ImportoBollo`` of ``DatiBollo``, the stamp duty charged to the buyer: above 0 and at most 99999999999.99
+    (``Amount2DecimalType``, XSD 1.2.3; the XSD type is signed, the sign is euinvoice's policy, #165). Regole tecniche
+    v2.6 App. 4.1 row 2.1.1.6.2 (printed p. 84) says "Valorizzare a zero in caso di mancato addebito al
+    cessionario-committente", which reads as a non-zero value for a charged duty; AdE FAQ 48 (compendium 22/12/2022,
+    p. 19) fills DatiBollo "con l'importo dell'imposta". ``None`` (not charged) writes 0.00. For the EN-derived
+    mapping the library follows the App. 4.1 row: BT-99 stays 0 / category Z (BR-IT-DC-480, p. 62) and no line is
+    generated; the recharge is ordinary consideration (Interpello 428/2022, p. 4), which the caller models as an
+    ordinary invoice line. Requires the zero SAE (credit note: 95) marker, else the writer refuses."""
 
     @pydantic.field_validator("stamp_duty_amount")
     @classmethod
-    def _stamp_duty_not_negative(cls, value: Decimal | None) -> Decimal | None:
-        if value is not None and value < 0:
-            raise ModelError("2.1.1.6.2 ImportoBollo (stamp_duty_amount) is not negative (Decimal2Type, XSD 1.2.3)")
+    def _stamp_duty_charged(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and not 0 < value <= _AMOUNT2_MAX:
+            raise ModelError(
+                "2.1.1.6.2 ImportoBollo (stamp_duty_amount) is above 0 and at most 99999999999.99 "
+                "(Amount2DecimalType, XSD 1.2.3; the lower bound is euinvoice's policy): use None for a duty not "
+                "charged (row 2.1.1.6.2 writes 0.00)"
+            )
         return value
 
     @pydantic.model_validator(mode="after")

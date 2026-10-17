@@ -336,7 +336,9 @@ post code is required and must be five digits.
 `DatiBollo` (2.1.1.6) is written from the zero stamp duty marker: a document level charge with BT-105 = `SAE` on an
 invoice, an allowance with BT-98 = `95` on a credit note, amount 0 (BR-IT-DC-480). Set `Invoice.it.stamp_duty_amount`
 (2.1.1.6.2 `ImportoBollo`) to the duty when it is charged to the buyer: Regole tecniche v2.6 App. 4.1 row 2.1.1.6.2
-says to write zero when it is not, so a non-zero value marks a charged duty. The field needs the marker (preflight
+(printed p. 84) says to write zero when it is not, which reads as a non-zero value for a charged duty, and AdE FAQ 48
+(compendium 22/12/2022, p. 19) fills `DatiBollo` "con l'importo dell'imposta". Use `None`, not 0, for a duty not charged;
+the value must be above 0. For the EN-derived mapping euinvoice follows the App. 4.1 row. The field needs the marker (preflight
 refuses it otherwise), leaves BT-99 and every total as they are, and the reader fills it from a non-zero
 `ImportoBollo`.
 

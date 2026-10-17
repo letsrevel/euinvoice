@@ -365,9 +365,9 @@ def test_without_extensions_clears_hooks_in_nested_models_and_tuples() -> None:
     assert plain.items[0] is outer.items[0]
 
 
-def test_stamp_duty_amount_is_a_non_negative_two_decimal_amount() -> None:
+def test_stamp_duty_amount_is_a_positive_two_decimal_amount() -> None:
     assert _it(stamp_duty_amount="2.00").stamp_duty_amount == Decimal("2")
     assert _it().stamp_duty_amount is None
-    for bad in ("-0.01", "2.001"):
+    for bad in ("-0.01", "0", "0.00", "2.001", "100000000000.00"):
         with pytest.raises(pydantic.ValidationError):
             _it(stamp_duty_amount=bad)
