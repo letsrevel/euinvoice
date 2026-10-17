@@ -187,6 +187,7 @@ REPORTED: t.Final[list[tuple[str, bytes, tuple[str, ...]]]] = [
 ]
 """(name, document, the unmapped paths besides DatiTrasmissione): content with no model home is reported."""
 
+
 REFUSED: t.Final[list[tuple[str, bytes, str]]] = [
     (
         "a Natura with a rate",

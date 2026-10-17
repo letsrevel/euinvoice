@@ -248,3 +248,51 @@ def test_without_extensions_clears_what_extension_paths_lists() -> None:
 def test_the_writers_name_without_extensions() -> None:
     with pytest.raises(ModelError, match=r"euinvoice\.model\.without_extensions\(\)"):
         ubl.write(parse(FULL))
+
+
+def test_denominazione_beside_nome_and_cognome_leaves_the_split_unset_and_reports_them() -> None:
+    anagrafica = (
+        "<Anagrafica><Denominazione>Example Srl</Denominazione><Nome>Mario</Nome><Cognome>Rossi</Cognome></Anagrafica>"
+    )
+    data = document(buyer_name=anagrafica)
+    path = f"{ROOT}/FatturaElettronicaHeader/CessionarioCommittente/DatiAnagrafici/Anagrafica"
+
+    result = parse_detailed(data)
+
+    assert result.invoice.buyer.name == "Example Srl"
+    assert result.invoice.it is not None
+    assert (result.invoice.it.buyer_first_name, result.invoice.it.buyer_last_name) == (None, None)
+    assert result.unmapped[1:] == (f"{path}/Nome", f"{path}/Cognome")
+
+
+def _person(*parts: str) -> str:
+    return f"<Anagrafica>{''.join(parts)}</Anagrafica>"
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        (document(buyer_name=_person("<Nome>Mario</Nome>")), "1.4.1.3.3 Cognome: missing; AnagraficaType takes Nome"),
+        (
+            document(seller_name=_person("<Cognome>Verdi</Cognome>")),
+            "1.2.1.3.2 Nome: missing; AnagraficaType takes Nome and Cognome together",
+        ),
+        (
+            document(buyer_name=_person(f"<Nome>{'x' * 61}</Nome>", "<Cognome>Rossi</Cognome>")),
+            "1.4.1.3.2 Nome: Value error, must be 1 to 60 characters",
+        ),
+        (
+            document(seller_name=_person("<Nome>Łukasz</Nome>", "<Cognome>Verdi</Cognome>")),
+            "1.2.1.3.2 Nome: Value error, must be 1 to 60 characters",
+        ),
+        (
+            document(buyer_name=_person("<Nome/>", "<Cognome>Rossi</Cognome>")),
+            "1.4.1.3.2 Nome: Value error, must be 1 to 60 characters",
+        ),
+    ],
+    ids=["lone Nome", "lone Cognome", "61 characters", "outside Latin-1", "empty Nome"],
+)
+def test_a_name_part_the_xsd_refuses_is_a_parse_error_with_its_element_id(data: bytes, message: str) -> None:
+    # these documents are XSD-invalid, so not in REFUSED (checked against the XSD)
+    with pytest.raises(ParseError, match=re.escape(message)):
+        parse(data)

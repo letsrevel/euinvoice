@@ -104,6 +104,16 @@ How the writer treats the terms that FatturaPA carries differently (maintainer d
   `CodiceDestinatario` of the `Transmission`, compared by value whatever its scheme id (pass it to `preflight(invoice, transmission)`), and otherwise refused.
   A Peppol-shaped invoice can therefore be written, and is read back without those terms.
 
+A party is written as `Denominazione` = BT-27 / BT-44 by default. Allegato A 1.9.1 (pp. 33 and 38: seller and buyer) reserves `Denominazione`
+for a "persona non fisica" and asks for `Nome` and `Cognome` for a natural person, so for a person (a consumer, a sole
+trader) set the name split on `Invoice.it`: `seller_first_name` / `seller_last_name` (1.2.1.3.2-3) and
+`buyer_first_name` / `buyer_last_name` (1.4.1.3.2-3), each pair together or not at all, each part 1 to 60 Latin-1
+characters (`String60LatinType`). The writer then emits `Nome` and `Cognome` instead of `Denominazione`. BT-27 / BT-44
+must stay `Nome Cognome` (the two parts joined by one space: App. 4.1 folds them into the BT with `&` or `#` and a CIUS-IT marker, and the single space is the reader's own form, #132 item 2a),
+or the pre-flight reports `EUINVOICE-FATTURAPA-NAME`: a different BT would be read back as another name. Reading a
+natural person fills the split, so FPR12 to model to FPR12 keeps `Nome` and `Cognome`. `Titolo`, if present, is still
+listed as unmapped.
+
 ## 2. Write FPR12
 
 The transmission header (`DatiTrasmissione`) describes one transmission to SdI, not the invoice, so it is a writer

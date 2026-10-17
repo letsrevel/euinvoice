@@ -394,6 +394,18 @@ def samples() -> dict[str, Sample]:
                 recipient_code="ABCDEF1",
             ),
         ),
+        "TD01 natural persons": Sample(
+            it_invoice(
+                seller=seller(name="Anna Verdi"),
+                buyer=buyer(name="Mario De Rossi"),
+                it=italian(
+                    seller_first_name="Anna",
+                    seller_last_name="Verdi",
+                    buyer_first_name="Mario",
+                    buyer_last_name="De Rossi",
+                ),
+            )
+        ),
         "TD01 stamp duty": Sample(_stamp_duty()),
         "TD01 exempt and split payment": Sample(_exempt_and_split()),
         "TD01 rich line": Sample(_rich_line()),

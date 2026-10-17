@@ -95,22 +95,41 @@ _FOREIGN_SELLER: t.Final = Seller(
 )
 
 
+# Nome / Cognome (String60LatinType): printable Latin-1 without spaces, so "Nome Cognome" splits back on read.
+_NAME_PART = st.text(
+    alphabet=st.characters(min_codepoint=0x21, max_codepoint=0xFF, exclude_categories=["Cc"]), min_size=1, max_size=30
+)
+_PERSON = st.none() | st.tuples(_NAME_PART, _NAME_PART)
+
+
 @st.composite
 def v1_invoices(draw: st.DrawFn) -> Invoice:
-    """A completed TD01, TD04, TD24 or TD17 with 1 to 5 lines of the v1 subset."""
+    """A completed TD01, TD04, TD24 or TD17 with 1 to 5 lines of the v1 subset.
+
+    The seller (not a TD17's foreign one) and the buyer are each a company (Denominazione) or a natural person
+    (Nome, Cognome).
+    """
     tipo = draw(st.sampled_from([TipoDocumento.TD01, TipoDocumento.TD04, TipoDocumento.TD24, TipoDocumento.TD17]))
+    seller_person = draw(_PERSON) if tipo is not TipoDocumento.TD17 else None
+    buyer_person = draw(_PERSON)
+    split: dict[str, str] = {}
+    for party, person in (("seller", seller_person), ("buyer", buyer_person)):
+        if person is not None:
+            split |= {f"{party}_first_name": person[0], f"{party}_last_name": person[1]}
     changes: dict[str, t.Any] = {
         "type_code": "381" if tipo is TipoDocumento.TD04 else "380",
-        "it": italian(document_type=tipo),
+        "it": italian(document_type=tipo, **split),
         "issue_date": draw(st.dates(min_value=datetime.date(1970, 1, 1), max_value=datetime.date(2099, 12, 31))),
     }
+    if seller_person is not None:
+        changes["seller"] = seller(name=" ".join(seller_person))
     buyer_: Buyer = draw(
         st.sampled_from([buyer(), buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)])
     )
     if tipo is TipoDocumento.TD17:  # the buyer integrates a foreign supplier's invoice (SdI 00473, 00475)
         changes |= {
             "seller": _FOREIGN_SELLER,
-            "it": italian(document_type=tipo, issuer=SoggettoEmittente.CC, tax_regime=RegimeFiscale.RF18),
+            "it": italian(document_type=tipo, issuer=SoggettoEmittente.CC, tax_regime=RegimeFiscale.RF18, **split),
         }
         buyer_ = buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)
     payment, instructions = draw(st.one_of(st.just((None, None)), _payments()))
@@ -128,6 +147,8 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
         changes["payment_terms"] = draw(
             st.sampled_from([None, f"{payment.conditions}", f"{payment.conditions} 0", f"{payment.conditions} 999"])
         )
+    if buyer_person is not None:
+        buyer_ = buyer_.model_copy(update={"name": " ".join(buyer_person)})
     draft = it_draft(*draw(_lines()), buyer=buyer_, **changes)
     # BT-121 where App. 5.1 gives every Natura of the category one VATEX code (Natura carries it); none otherwise.
     codes: dict[str, set[str]] = {}

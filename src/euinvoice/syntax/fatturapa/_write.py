@@ -77,7 +77,7 @@ def serialize(invoice: Invoice, transmission: Transmission) -> bytes:
     header = child(root, "FatturaElettronicaHeader")
     _transmission(header, transmission)
     write_seller(header, invoice, it)
-    write_buyer(header, invoice)
+    write_buyer(header, invoice, it)
     if it.issuer is not None:
         child(header, "SoggettoEmittente", it.issuer)
     body = child(root, "FatturaElettronicaBody")

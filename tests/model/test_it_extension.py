@@ -47,6 +47,10 @@ EXPECTED_IDS: t.Final = {
     (ItalianExtension, "document_type"): "2.1.1.1",
     (ItalianExtension, "vat_summaries"): "2.2.2",
     (ItalianExtension, "payment"): "2.4",
+    (ItalianExtension, "seller_first_name"): "1.2.1.3.2",
+    (ItalianExtension, "seller_last_name"): "1.2.1.3.3",
+    (ItalianExtension, "buyer_first_name"): "1.4.1.3.2",
+    (ItalianExtension, "buyer_last_name"): "1.4.1.3.3",
     (ItalianLineExtension, "supply_type"): "2.2.1.2",
     (ItalianLineExtension, "nature"): "2.2.1.14",
     (ItalianVatSummary, "rate"): "2.2.2.1",
@@ -282,6 +286,33 @@ class TestLineExtension:
     def test_unknown_nature_is_refused(self) -> None:
         with pytest.raises(pydantic.ValidationError, match="nature"):
             ItalianLineExtension.model_validate({"nature": "N8"})
+
+
+class TestPersonNames:
+    def test_a_pair_is_accepted(self) -> None:
+        it = _it(seller_first_name="Anna", seller_last_name="Verdi", buyer_first_name="Mario", buyer_last_name="Rossi")
+        assert (it.seller_first_name, it.buyer_last_name) == ("Anna", "Rossi")
+
+    @pytest.mark.parametrize(
+        ("changes", "party"),
+        [
+            ({"seller_first_name": "Anna"}, "seller"),
+            ({"seller_last_name": "Verdi"}, "seller"),
+            ({"buyer_first_name": "Mario"}, "buyer"),
+            ({"buyer_last_name": "Rossi"}, "buyer"),
+        ],
+    )
+    def test_both_or_neither(self, changes: dict[str, str], party: str) -> None:
+        with pytest.raises(pydantic.ValidationError, match=f"{party}_first_name and {party}_last_name"):
+            _it(**changes)
+
+    @pytest.mark.parametrize("value", ["", "x" * 61, "Łukasz"])
+    def test_string60_latin(self, value: str) -> None:
+        with pytest.raises(pydantic.ValidationError, match="String60LatinType"):
+            _it(buyer_first_name=value, buyer_last_name="Rossi")
+
+    def test_sixty_latin_1_characters_fit(self) -> None:
+        assert _it(seller_first_name="é" * 60, seller_last_name="ÿ").seller_first_name == "é" * 60
 
 
 class TestPlumbing:
