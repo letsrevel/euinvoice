@@ -48,6 +48,9 @@ NORMALIZED: t.Final = re.compile(
     r"|\.vat_point_date_code"  # BT-8 3/35 → EsigibilitaIVA I in it.vat_summaries; D → BT-8 432
     r"|\.vat_breakdown\[\d+\]\.exemption_reason(_code)?"  # BT-120/121 as App. 4.1 / 5.1 build them from Natura
     r"|\.(seller|buyer)\.legal_registration_identifier\.(value|scheme_id)"  # "CF:x" → x with scheme 0210
+    # a foreign post code that is not five digits → CAP 00000 → none (AdE FAQ n. 63 / n. 74); _assert_round_trip
+    # narrows it to a non-Italian address whose code is not five digits
+    r"|\.(seller|buyer)\.postal_address\.post_code"
 )
 """The paths where a read-back invoice may differ from the one written, each an App. 4.1 / 5 normalization."""
 
@@ -87,6 +90,13 @@ def _assert_round_trip(invoice: Invoice, transmission: Transmission = TRANSMISSI
     assert all(UNMAPPED.fullmatch(path) for path in result.unmapped if not _is_total(path)), result.unmapped
     assert [path for path in _diff(invoice, result.invoice) if not NORMALIZED.fullmatch(path)] == []
     assert _write(result.invoice, transmission) == data
+    for party in ("seller", "buyer"):  # the one lossy normalization of an address, and only for what it replaces
+        before, after = getattr(invoice, party).postal_address, getattr(result.invoice, party).postal_address
+        if before.post_code != after.post_code:
+            assert before.country_code != "IT"
+            assert before.post_code is not None
+            assert before.post_code == "00000" or re.fullmatch(r"[0-9]{5}", before.post_code) is None
+            assert after.post_code is None
 
 
 @pytest.mark.parametrize("name", list(samples()))

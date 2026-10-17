@@ -31,6 +31,7 @@ from _fatturapa_write import (
 from euinvoice import _xml, calc
 from euinvoice.errors import ModelError
 from euinvoice.model import (
+    BuyerPostalAddress,
     CreditTransfer,
     Identifier,
     InvoiceLinePeriod,
@@ -155,6 +156,30 @@ def test_seller_address_contacts_and_buyer_accounting_reference() -> None:
         ("Email", "fatture@example.com"),
     ]
     assert party.findtext("RiferimentoAmministrazione") == "RIF-1"
+
+
+@pytest.mark.parametrize(
+    ("post_code", "cap"),
+    [("10115", "10115"), ("SW1A 1AA", "00000"), ("1011 AB", "00000"), ("123456", "00000"), (None, "00000")],
+)
+def test_a_foreign_post_code_that_is_not_five_digits_is_written_as_00000(post_code: str | None, cap: str) -> None:
+    # AdE FAQ n. 63 / n. 74: CAP 00000 outside Italy; a five-digit foreign code is kept
+    invoice = it_invoice(
+        seller=seller(
+            postal_address=SellerPostalAddress(
+                address_line_1="Strasse 1", city="Berlin", post_code=post_code, country_code="DE"
+            )
+        ),
+        buyer=buyer(
+            postal_address=BuyerPostalAddress(
+                address_line_1="Rue 1", city="Paris", post_code=post_code, country_code="FR"
+            )
+        ),
+    )
+    root = written(invoice)
+
+    assert root.findtext(f"{SELLER}/Sede/CAP") == cap
+    assert root.findtext(f"{BUYER}/Sede/CAP") == cap
 
 
 def test_buyer_maps_bt_48_47_44_and_bg_8() -> None:

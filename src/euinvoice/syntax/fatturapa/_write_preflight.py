@@ -32,6 +32,7 @@ from euinvoice.syntax.fatturapa._write_codes import (
     PAYMENT_METHOD_OF_MEANS,
 )
 from euinvoice.syntax.fatturapa._write_lines import Block, summarize
+from euinvoice.syntax.fatturapa._write_parties import FOREIGN_CAP, ITALY, post_code_replaced
 from euinvoice.syntax.fatturapa._write_refuse import structure
 from euinvoice.syntax.fatturapa._write_rules import (
     DOCUMENT_TYPE,
@@ -40,6 +41,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     NAME,
     NATURA,
     PAYMENT,
+    POST_CODE,
     REQUIRED,
     TOTAL_PRICE,
     TOTALS,
@@ -84,6 +86,7 @@ def preflight(invoice: Invoice, transmission: Transmission | None = None) -> tup
         *_document(invoice, it),
         *_names(invoice, it),
         *_required(invoice),
+        *_post_codes(invoice),
         *_natura(invoice),
         *_total_price(invoice),
         *_payment(invoice, it),
@@ -149,11 +152,13 @@ def _required(invoice: Invoice) -> t.Iterator[Finding]:
         (seller.vat_identifier, "seller.vat_identifier", "BT-31: 1.2.1.1 IdFiscaleIVA of the cedente/prestatore"),
         (seller.postal_address.address_line_1, "seller.postal_address.address_line_1", "BT-35: 1.2.2.1 Indirizzo"),
         (seller.postal_address.city, "seller.postal_address.city", "BT-37: 1.2.2.4 Comune"),
-        (seller.postal_address.post_code, "seller.postal_address.post_code", "BT-38: 1.2.2.3 CAP"),
         (buyer.postal_address.address_line_1, "buyer.postal_address.address_line_1", "BT-50: 1.4.2.1 Indirizzo"),
         (buyer.postal_address.city, "buyer.postal_address.city", "BT-52: 1.4.2.4 Comune"),
-        (buyer.postal_address.post_code, "buyer.postal_address.post_code", "BT-53: 1.4.2.3 CAP"),
     ]
+    # 1.2.2.3 / 1.4.2.3 CAP is required too; outside Italy an absent post code is written as 00000 (_post_codes).
+    for party, prefix, term in ((seller, "seller", "BT-38: 1.2.2.3"), (buyer, "buyer", "BT-53: 1.4.2.3")):
+        if party.postal_address.country_code == ITALY:
+            needed.append((party.postal_address.post_code, f"{prefix}.postal_address.post_code", f"{term} CAP"))
     for index, line in enumerate(invoice.lines):
         if VatCategory(line.vat_information.category_code) in UNSUPPORTED_CATEGORIES:
             continue  # reported by structure()
@@ -163,6 +168,22 @@ def _required(invoice: Invoice) -> t.Iterator[Finding]:
     for value, location, what in needed:
         if value is None:
             yield finding(REQUIRED, location, f"{what} is required by the FatturaPA XSD 1.2.3 (minOccurs 1)")
+
+
+def _post_codes(invoice: Invoice) -> t.Iterator[Finding]:
+    """A foreign post code that is not five digits is written as 00000 and its value is not carried (FAQ n. 63 / 74)."""
+    for party, prefix, term in ((invoice.seller, "seller", "BT-38"), (invoice.buyer, "buyer", "BT-53")):
+        address = party.postal_address
+        if post_code_replaced(address):
+            yield finding(
+                POST_CODE,
+                f"{prefix}.postal_address.post_code",
+                f"{term} {address.post_code!r} is not carried: outside Italy only a five-digit code other than "
+                f"00000 is written as it is, so CAP {FOREIGN_CAP} is written for the address in "
+                f"{address.country_code} (AdE FAQ n. 63 and n. 74, compendium 22/12/2022), which the reader reads "
+                "as no post code",
+                Severity.WARNING,
+            )
 
 
 def _natura(invoice: Invoice) -> t.Iterator[Finding]:

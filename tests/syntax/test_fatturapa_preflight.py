@@ -31,6 +31,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     NAME,
     NATURA,
     PAYMENT,
+    POST_CODE,
     PREFLIGHT_SOURCE,
     REQUIRED,
 )
@@ -206,3 +207,22 @@ def test_other_bt_81_stays_refused_with_a_method_app_5_6_has_no_row_for(means: s
     findings = preflight(it_invoice(it=it, payment_instructions=PaymentInstructions(payment_means_type_code=means)))
 
     assert [(f.rule_id, f.location) for f in findings] == [(PAYMENT, "payment_instructions.payment_means_type_code")]
+
+
+def test_an_absent_post_code_is_required_only_in_italy() -> None:
+    abroad = SellerPostalAddress(address_line_1="A", city="Berlin", country_code="DE")
+
+    assert _found(seller=seller(postal_address=abroad)) == []
+
+
+def test_a_replaced_foreign_post_code_is_a_warning() -> None:
+    abroad = BuyerPostalAddress(address_line_1="A", city="London", post_code="SW1A 1AA", country_code="GB")
+    zeros = BuyerPostalAddress(address_line_1="A", city="Paris", post_code="00000", country_code="FR")
+    kept = BuyerPostalAddress(address_line_1="A", city="Paris", post_code="75001", country_code="FR")
+
+    assert _found(buyer=buyer(postal_address=abroad)) == [
+        (POST_CODE, "buyer.postal_address.post_code", Severity.WARNING)
+    ]
+    assert _found(buyer=buyer(postal_address=zeros)) == _found(buyer=buyer(postal_address=abroad))
+    assert _found(buyer=buyer(postal_address=kept)) == []
+    assert "00000" in preflight(it_invoice(buyer=buyer(postal_address=abroad)))[0].message

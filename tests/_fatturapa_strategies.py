@@ -10,6 +10,7 @@ from _fatturapa_write import BUYER_VAT, buyer, it_draft, it_line, italian, selle
 from euinvoice import calc
 from euinvoice.model import (
     Buyer,
+    BuyerPostalAddress,
     Identifier,
     Invoice,
     InvoiceLineAllowance,
@@ -140,13 +141,19 @@ def _payments(draw: st.DrawFn) -> tuple[ItalianPayment | None, PaymentInstructio
     return payment, None if code is None else PaymentInstructions(payment_means_type_code=code)
 
 
-_FOREIGN_SELLER: t.Final = Seller(
-    name="Example Hosting GmbH",
-    vat_identifier="DE000000000",
-    postal_address=SellerPostalAddress(
-        address_line_1="Beispielstrasse 1", city="Berlin", post_code="10115", country_code="DE"
-    ),
-)
+# Foreign post codes: five digits are kept, anything else (and none) is written as CAP 00000 and reads back as none
+# (AdE FAQ n. 63 / n. 74, #158).
+_FOREIGN_POST_CODES: t.Final = st.sampled_from(["10115", "SW1A 1AA", "1011 AB", "123456", "A-1010", "00000", None])
+
+
+def _foreign_seller(post_code: str | None) -> Seller:
+    return Seller(
+        name="Example Hosting GmbH",
+        vat_identifier="DE000000000",
+        postal_address=SellerPostalAddress(
+            address_line_1="Beispielstrasse 1", city="Berlin", post_code=post_code, country_code="DE"
+        ),
+    )
 
 
 # Nome / Cognome (String60LatinType): printable Latin-1 without spaces, so "Nome Cognome" splits back on read.
@@ -154,6 +161,23 @@ _NAME_PART = st.text(
     alphabet=st.characters(min_codepoint=0x21, max_codepoint=0xFF, exclude_categories=["Cc"]), min_size=1, max_size=30
 )
 _PERSON = st.none() | st.tuples(_NAME_PART, _NAME_PART)
+
+
+@st.composite
+def _buyers(draw: st.DrawFn) -> Buyer:
+    """An Italian buyer (by codice fiscale or partita IVA) or one abroad, whose post code may need CAP 00000."""
+    abroad = BuyerPostalAddress(
+        address_line_1="Rue Exemple 1", city="Paris", post_code=draw(_FOREIGN_POST_CODES), country_code="FR"
+    )
+    return draw(
+        st.sampled_from(
+            [
+                buyer(),
+                buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None),
+                buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None, postal_address=abroad),
+            ]
+        )
+    )
 
 
 @st.composite
@@ -177,12 +201,10 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
     }
     if seller_person is not None:
         changes["seller"] = seller(name=" ".join(seller_person))
-    buyer_: Buyer = draw(
-        st.sampled_from([buyer(), buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)])
-    )
+    buyer_: Buyer = draw(_buyers())
     if tipo is TipoDocumento.TD17:  # the buyer integrates a foreign supplier's invoice (SdI 00473, 00475)
         changes |= {
-            "seller": _FOREIGN_SELLER,
+            "seller": _foreign_seller(draw(_FOREIGN_POST_CODES)),
             "it": italian(document_type=tipo, issuer=SoggettoEmittente.CC, tax_regime=RegimeFiscale.RF18, **split),
         }
         buyer_ = buyer(vat_identifier=BUYER_VAT, legal_registration_identifier=None)

@@ -25,6 +25,16 @@ ITALY: t.Final = "IT"
 _COUNTRY: t.Final = "[A-Z]{2}"  # NazioneType
 _CODICE_FISCALE: t.Final = "[A-Z0-9]{11,16}"  # CodiceFiscaleType
 _CAP: t.Final = "[0-9]{5}"  # CAPType
+FOREIGN_CAP: t.Final = "00000"
+"""The generic CAP for an address outside Italy whose post code is not five digits.
+
+CAPType is ``[0-9]{5}`` and the technical rules have no foreign-address rule; Agenzia delle Entrate states the
+convention in its FAQ compendium "Risposte alle domande più frequenti sulla fatturazione elettronica, aggiornato al
+22 dicembre 2022" (sha256 763eec5617275d45b64fe35c6f99f8434649df5645abc0e38b63cc2d6b6a1862): FAQ n. 63 (pp. 27-28)
+"il campo CAP andrà compilato con il valore generico 00000. Si potrà utilizzare l'indirizzo per indicare il CAP
+straniero", and FAQ n. 74 (pp. 33-34) "si consiglia di utilizzare il codice convenzionale". A five-digit foreign code
+is kept (the FAQ does not forbid it). The reader maps ``00000`` outside Italy back to no post code.
+"""
 _PROVINCIA: t.Final = "[A-Z]{2}"  # ProvinciaType
 _EMAIL: t.Final = re.compile(r"[^\n\r]+@[^\n\r]+[.]+[^\n\r]+")  # EmailContattiType .+@.+[.]+.+ (XSD '.': no CR/LF)
 
@@ -68,6 +78,15 @@ def _anagrafica(parent: etree._Element, it: ItalianExtension, *, party: str, nam
     child(anagrafica, "Cognome", text(last, f"it.{party}_last_name", "Cognome (String60LatinType)", maximum=60))
 
 
+def post_code_replaced(address: SellerPostalAddress | BuyerPostalAddress) -> bool:
+    """Whether the writer replaces a post code of the address with :data:`FOREIGN_CAP` and so drops its value."""
+    code = address.post_code
+    # a genuine foreign 00000 reads back as no post code, so it counts as replaced too
+    return (
+        address.country_code != ITALY and code is not None and (code == FOREIGN_CAP or re.fullmatch(_CAP, code) is None)
+    )
+
+
 def _address(
     parent: etree._Element, address: SellerPostalAddress | BuyerPostalAddress, ids: tuple[str, ...], prefix: str
 ) -> None:
@@ -100,9 +119,15 @@ def _address(
                 charset=BASIC,
             ),
         )
-    # ponytail: CAPType is five digits for every country; the sources give no convention for a foreign post code
-    # (#133), so one that does not fit is refused.
-    child(sede, "CAP", matching(address.post_code or "", _CAP, f"{post_code} ({prefix}.post_code)", "CAP (CAPType)"))
+    # Outside Italy a post code that is not five digits (or is absent) becomes 00000 (FAQ n. 63 / n. 74, see
+    # FOREIGN_CAP). ponytail: the real code is not carried in Indirizzo (the FAQ says "si potrà", and a suffix in a
+    # 60-character free-text line cannot be told from the street on the way back); the pre-flight warns instead.
+    # Upgrade path: a post-code field on Invoice.it.
+    if address.country_code != ITALY and (address.post_code is None or post_code_replaced(address)):
+        cap = FOREIGN_CAP
+    else:
+        cap = matching(address.post_code or "", _CAP, f"{post_code} ({prefix}.post_code)", "CAP (CAPType)")
+    child(sede, "CAP", cap)
     child(sede, "Comune", text(address.city or "", f"{city} ({prefix}.city)", "Comune (String60LatinType)", maximum=60))
     if address.country_subdivision is not None:
         term = f"{subdivision} ({prefix}.country_subdivision)"

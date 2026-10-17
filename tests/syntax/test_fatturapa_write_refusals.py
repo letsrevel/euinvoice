@@ -64,7 +64,7 @@ def _address(**changes: str) -> SellerPostalAddress:
             {
                 "buyer": buyer(
                     postal_address=BuyerPostalAddress(
-                        address_line_1="A", city="London", post_code="SW1A 1AA", country_code="GB"
+                        address_line_1="A", city="Roma", post_code="1234", country_code="IT"
                     )
                 )
             },
