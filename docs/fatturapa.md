@@ -83,7 +83,26 @@ terms do not determine a summary: an EsigibilitaIVA that BT-8 and the VAT catego
 BT-8 3 or 35 gives I, 432 gives D, category B gives S), or a RiferimentoNormativo the writer cannot take from BT-120
 (row 2.2.2.8), because the VAT breakdown has several DatiRiepilogo. Set `Invoice.it.payment` when the invoice has
 payment instructions (BG-16), a due date (BT-9) or a payee (BG-10): FatturaPA then needs CondizioniPagamento, which has
-no business term.
+no business term. ModalitaPagamento comes from `it.payment.method` or, without it, from BT-81 through App. 5.6. App. 5.6
+maps BT-81 to a code many to one and gives no BT-81 to MP07, MP09, MP10, MP11, MP14, MP16, MP20 and MP21, so for these
+eight set `it.payment.method` and give BT-81 `1` (UNTDID 4461, "Instrument not defined"), which is what the reader
+produces. `1` next to any other method is refused, because App. 5.6 maps `1` to MP01; so is any BT-81 whose App. 5.6
+row is not the explicit method.
+
+How the writer treats the terms that FatturaPA carries differently (maintainer decisions on #133, built in #149):
+
+- **BT-153 and BT-154** become one `Descrizione` (row 2.2.1.4), `BT-153 - BT-154`. Above 1000 characters (the XSD's
+  `String1000LatinType`) the pre-flight refuses. A reader gives the joined text back as BT-153.
+- **BT-20** is carried when it is the CondizioniPagamento code, optionally followed by a space and the days
+  (`TP02 30`, 0 to 999, the reader's form). The days go to `GiorniTerminiPagamento` (row 2.4.2.4). Any other BT-20
+  text is refused.
+- **BT-120** on a VAT breakdown split by Natura is written into every `DatiRiepilogo` that has no
+  `legal_reference` (row 2.2.2.8). A `DatiRiepilogo` with a Natura and no `RiferimentoNormativo` at all gets a
+  `warning` finding from the pre-flight (Allegato A 1.9.1, DatiRiepilogo: the element is mandatory for operations
+  with a Natura, no SdI code checks it). A warning does not block `to_xml`.
+- **BT-23 and BT-34** are accepted like BT-24 and not written; **BT-49** is accepted only when it equals the
+  `CodiceDestinatario` of the `Transmission`, compared by value whatever its scheme id (pass it to `preflight(invoice, transmission)`), and otherwise refused.
+  A Peppol-shaped invoice can therefore be written, and is read back without those terms.
 
 ## 2. Write FPR12
 
@@ -247,12 +266,10 @@ Where the sources do not settle a mapping, euinvoice does the most conservative 
 guessed. The open questions wait for a maintainer decision (`needs-human`):
 
 - [#133](https://github.com/letsrevel/euinvoice/issues/133), writer: for example generic document level allowances
-  and charges (only a zero stamp duty is written), VAT categories O, L and M, BT-154, and payment data without
+  and charges (only a zero stamp duty is written), VAT categories O, L and M, and payment data without
   `Invoice.it.payment`.
 - [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example `PrezzoTotale` with more than two
   decimals, the generic Natura N2, N3 and N6, and the BT-81 of each ModalitaPagamento.
-- [#136](https://github.com/letsrevel/euinvoice/issues/136): the ModalitaPagamento codes App. 5.6 gives no BT-81
-  (MP07, MP09-MP11, MP14, MP16, MP20, MP21) read, but the writer refuses the read invoice.
 - [#130](https://github.com/letsrevel/euinvoice/issues/130): the SdI checks Allegato A leaves partly open (see
   above).
 

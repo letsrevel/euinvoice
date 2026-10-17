@@ -17,6 +17,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- FatturaPA writer policies for the Peppol-shaped and text-heavy terms ([#149](https://github.com/letsrevel/euinvoice/issues/149),
+  part of [#133](https://github.com/letsrevel/euinvoice/issues/133)): `Descrizione` is BT-153 + `" - "` + BT-154
+  (refused above 1000 characters, `String1000LatinType`); a BT-20 of the form `TP02 30` is carried as
+  CondizioniPagamento and `GiorniTerminiPagamento`; BT-120 is written into every `DatiRiepilogo` of a breakdown split
+  by Natura that has no `legal_reference`; BT-23 and BT-34 are accepted (not written), BT-49 only when it equals the
+  transmission's `CodiceDestinatario`, so a Peppol-shaped invoice can be written; a Natura `DatiRiepilogo` without
+  `RiferimentoNormativo` gives a non-blocking `warning` finding (Allegato A 1.9.1). `fatturapa.preflight` takes an
+  optional `transmission` for the BT-49 check.
+
 - `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged
@@ -142,6 +151,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The FPR12 writer accepts BT-81 `1` (UNTDID 4461, "Instrument not defined") next to an explicit `it.payment.method`
+  of MP07, MP09, MP10, MP11, MP14, MP16, MP20 or MP21, the codes App. 5.6 gives no BT-81, which the reader reads as
+  `1`; so FPR12 → model → FPR12 is lossless for all 23 ModalitaPagamento codes. `1` with any other method, and any
+  other BT-81 that App. 5.6 does not map to the method, are still refused with `EUINVOICE-FATTURAPA-PAYMENT`
+  ([#153](https://github.com/letsrevel/euinvoice/issues/153), [#136](https://github.com/letsrevel/euinvoice/issues/136)).
 - `profiles._base.SYNTAXES`, the syntaxes a profile can support, is now `{UBL, CII}` explicitly, no longer every
   `Syntax`. Every profile still supports what it did, and `convert --to` still offers `ubl` and `cii` (#121).
 - `convert --to` offers `fatturapa` too, and a `convert` refused by the FatturaPA checks says "FatturaPA pre-flight

@@ -183,6 +183,7 @@ def _stamp_duty() -> Invoice:
             ),
         ),
         lines=(it_line(rate="0", category="E", nature=Natura.N4),),
+        it=italian(vat_summaries=(ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="Art. 10"),)),
     )
 
 
@@ -358,7 +359,13 @@ def every_written_term() -> Invoice:
             ),
         ),
         payee=Payee(name="Esempio Incassi S.p.A."),
-        it=italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02)),
+        payment_terms="TP02 30",
+        it=italian(
+            payment=ItalianPayment(conditions=CondizioniPagamento.TP02),
+            vat_summaries=(
+                ItalianVatSummary(rate=Decimal(0), nature=Natura.N3_2, legal_reference="Art. 8 DPR 633/72"),
+            ),
+        ),
     )
 
 

@@ -18,12 +18,18 @@ from hypothesis import given, settings
 
 from _fatturapa import CASES
 from _fatturapa_strategies import v1_invoices
-from _fatturapa_write import TRANSMISSION, samples
+from _fatturapa_write import TEST_IBAN, TRANSMISSION, it_invoice, italian, samples
 from euinvoice import parse_all, to_xml
 from euinvoice.errors import ModelError, ParseError, PreflightError
-from euinvoice.model import Invoice
+from euinvoice.model import CreditTransfer, Invoice, PaymentInstructions
+from euinvoice.model.it import CondizioniPagamento, ItalianPayment, ModalitaPagamento
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import Transmission
+from euinvoice.syntax.fatturapa._write_codes import (
+    INSTRUMENT_NOT_DEFINED,
+    METHODS_WITHOUT_MEANS,
+    PAYMENT_METHOD_OF_MEANS,
+)
 
 UNMAPPED: t.Final = re.compile(
     r"/p:FatturaElettronica/FatturaElettronicaHeader/DatiTrasmissione"  # the Transmission, not invoice data
@@ -34,6 +40,8 @@ UNMAPPED: t.Final = re.compile(
 
 NORMALIZED: t.Final = re.compile(
     r"\.payment_terms"  # BT-20: None → the CondizioniPagamento code (App. 4.1 row 2.4.1)
+    r"|\.process_control\.business_process_type|\.seller\.electronic_address"  # BT-23, BT-34: accepted, not written
+    r"|\.lines\[\d+\]\.item\.(name|description)"  # BT-153 and BT-154 joined in Descrizione (#133 item 3)
     r"|\.payment_instructions(\.payment_means_type_code)?"  # BT-81 ↔ ModalitaPagamento, App. 5.6 many-to-one
     r"|\.it\.payment\.method"  # ModalitaPagamento derived from BT-81 becomes explicit
     r"|\.it\.vat_summaries"  # one entry per DatiRiepilogo (Natura, EsigibilitaIVA, RiferimentoNormativo)
@@ -84,6 +92,28 @@ def test_the_maximal_sample_reads_back_unnormalized_where_written() -> None:
     assert result.invoice.seller.postal_address == invoice.seller.postal_address
     assert result.invoice.buyer == invoice.buyer
     assert result.invoice.charges == invoice.charges
+
+
+@pytest.mark.parametrize("with_iban", [False, True], ids=["no IBAN", "IBAN"])
+@pytest.mark.parametrize("method", list(ModalitaPagamento))
+def test_every_modalita_pagamento_round_trips(method: ModalitaPagamento, with_iban: bool) -> None:
+    """FPR12 → model → FPR12 for all 23 codes, the 8 with no App. 5.6 row (#136) included."""
+    it = italian(payment=ItalianPayment(conditions=CondizioniPagamento.TP02, method=method))
+    means = (
+        INSTRUMENT_NOT_DEFINED
+        if method in METHODS_WITHOUT_MEANS
+        else next(code for code, mapped in PAYMENT_METHOD_OF_MEANS.items() if mapped is method)
+    )
+    instructions = PaymentInstructions(
+        payment_means_type_code=means, credit_transfers=(CreditTransfer(payment_account_identifier=TEST_IBAN),)
+    )
+    data = _write(it_invoice(it=it, payment_instructions=instructions if with_iban else None))
+    (read,) = parse_all(data)
+
+    assert read.invoice.it is not None
+    assert read.invoice.it.payment is not None
+    assert read.invoice.it.payment.method is method
+    assert _write(read.invoice) == data
 
 
 @settings(max_examples=60)
