@@ -27,7 +27,7 @@ from euinvoice.model import Invoice, InvoiceLine, VatBreakdown
 from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import EsigibilitaIVA, ItalianExtension, ItalianVatSummary, Natura, TipoCessionePrestazione
-from euinvoice.report import Finding
+from euinvoice.report import Finding, Severity
 from euinvoice.syntax.fatturapa._exemption import exemption_reason
 from euinvoice.syntax.fatturapa._write_codes import CHARGEABILITY_OF_VAT_POINT, VATEX_OF_NATURA
 from euinvoice.syntax.fatturapa._write_format import (
@@ -42,7 +42,7 @@ from euinvoice.syntax.fatturapa._write_format import (
     rate,
     text,
 )
-from euinvoice.syntax.fatturapa._write_refuse import is_stamp_duty_group
+from euinvoice.syntax.fatturapa._write_refuse import DESCRIPTION_SEPARATOR, DESCRIZIONE_MAX, is_stamp_duty_group
 from euinvoice.syntax.fatturapa._write_rules import SUMMARY, UNSUPPORTED_CATEGORIES, finding
 
 __all__ = ["Block", "summarize", "write_goods"]
@@ -63,6 +63,13 @@ def _line_number(identifier: str, term: str) -> str:
     return identifier
 
 
+def _description(line: InvoiceLine) -> str:
+    """2.2.1.4 Descrizione: BT-153, then ``" - "`` and BT-154 when there is one (App. 4.1 concatenates them; #133)."""
+    if line.item.description is None:
+        return line.item.name
+    return f"{line.item.name}{DESCRIPTION_SEPARATOR}{line.item.description}"
+
+
 def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
     """One DettaglioLinee (rows 2.2.1.1-2.2.1.15)."""
 
@@ -78,7 +85,12 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
     child(
         element,
         "Descrizione",
-        text(line.item.name, term("BT-153", "item.name"), "2.2.1.4 Descrizione (String1000LatinType)", maximum=1000),
+        text(
+            _description(line),
+            term("BT-153", "item.name"),
+            "2.2.1.4 Descrizione (String1000LatinType)",
+            maximum=DESCRIZIONE_MAX,
+        ),
     )
     child(
         element, "Quantita", quantity(line.invoiced_quantity, term("BT-129", "invoiced_quantity"), "2.2.1.5 Quantita")
@@ -327,7 +339,17 @@ def _reference(reason: str, mine: list[Block]) -> str | None:
     if len(natures) == len(mine) and reason == exemption_reason(natures):
         return None  # carried by Natura and RiferimentoNormativo (App. 4.1 rows 2.2.2.2, 2.2.2.8)
     if len(mine) != 1:
-        return f"its VAT BREAKDOWN has {len(mine)} DatiRiepilogo, not one"
+        # Split by Natura (#133 item 11c): BT-120 goes into every DatiRiepilogo that has no RiferimentoNormativo.
+        missing = [block for block in mine if block.legal_reference is None]
+        if not missing:
+            if any(block.legal_reference == reason for block in mine):
+                return None
+            return "every one of its DatiRiepilogo already has another RiferimentoNormativo in it.vat_summaries"
+        if not fits(reason, maximum=100):
+            return "String100LatinType takes 1 to 100 Latin-1 characters without tab or line break"
+        for block in missing:
+            block.legal_reference = reason
+        return None
     given = mine[0].legal_reference
     if given is not None:
         return None if given == reason else f"it.vat_summaries sets RiferimentoNormativo {given!r} for that summary"
@@ -344,8 +366,9 @@ def _exemption_reasons(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterato
       2.2.2.2 <Natura> e 2.2.2.8 <RiferimentoNormativo>"). Equal to that concatenation of what is written (the
       reader's form, :func:`~euinvoice.syntax.fatturapa._exemption.exemption_reason`) it is carried. Otherwise it is
       written into the group's DatiRiepilogo when the group has exactly one and ``it.vat_summaries`` gives it no
-      ``legal_reference``; equal to that ``legal_reference`` it is already written. Otherwise it would be lost: an
-      ``error``.
+      ``legal_reference``; equal to that ``legal_reference`` it is already written. A group split by Natura gets it in
+      every DatiRiepilogo that has no ``legal_reference`` (#133 item 11c; the reader then joins them as above).
+      Otherwise it would be lost: an ``error``.
     * BT-121 is carried by Natura when it is the code App. 5.1 gives every Natura of the group (``VATEX-EU-132`` for
       N2.x, N4, N5; ``-G`` for N3.1, N3.3-N3.5; ``-IC`` for N3.2, N3.6; ``-AE`` for N6.x; ``-151`` for N7).
       Otherwise: an ``error``.
@@ -371,6 +394,26 @@ def _exemption_reasons(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterato
                 )
 
 
+def _natura_references(invoice: Invoice, blocks: dict[_Key, Block]) -> t.Iterator[Finding]:
+    """A ``warning`` for each Natura DatiRiepilogo left without RiferimentoNormativo (#133 addendum).
+
+    Allegato A 1.9.1, DatiRiepilogo: 2.2.2.8 RiferimentoNormativo is "obbligatorio nei casi di operazioni di cui
+    all'elemento Natura". No SdI check covers it (outside the D8 oracle), and the XSD makes it optional, so it
+    does not block the write.
+    """
+    for index, group in enumerate(invoice.vat_breakdown):
+        for block in blocks.values():
+            if block.nature is not None and block.legal_reference is None and _of_group(group, block):
+                yield finding(
+                    SUMMARY,
+                    f"vat_breakdown[{index}]",
+                    f"the DatiRiepilogo of Natura {block.nature} at rate {format(block.rate, 'f')} has no "
+                    "2.2.2.8 RiferimentoNormativo, which Allegato A 1.9.1 (DatiRiepilogo) requires for operations "
+                    "with a Natura; set BT-120 or it.vat_summaries[].legal_reference",
+                    Severity.WARNING,
+                )
+
+
 def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list[Finding]]:
     """The DatiRiepilogo blocks of an invoice and the pre-flight findings that keep them from being written.
 
@@ -388,6 +431,7 @@ def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list
         *_split_and_ordinary(invoice, blocks),
         *_chargeability(invoice, blocks),
         *_exemption_reasons(invoice, blocks),
+        *_natura_references(invoice, blocks),
     ]
     return list(blocks.values()), findings
 

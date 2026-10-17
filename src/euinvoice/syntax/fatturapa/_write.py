@@ -28,7 +28,7 @@ from euinvoice.syntax.fatturapa._write_format import BASIC, amount2, child, date
 from euinvoice.syntax.fatturapa._write_lines import summarize, write_goods
 from euinvoice.syntax.fatturapa._write_parties import write_buyer, write_seller
 from euinvoice.syntax.fatturapa._write_preflight import preflight
-from euinvoice.syntax.fatturapa._write_refuse import stamp_duty
+from euinvoice.syntax.fatturapa._write_refuse import payment_days, stamp_duty
 from euinvoice.syntax.fatturapa.transmission import Transmission
 
 __all__ = ["FORMAT", "serialize", "write"]
@@ -55,7 +55,7 @@ def write(invoice: Invoice, transmission: Transmission) -> bytes:
             type (length, characters, decimals, CAP, Provincia, line number, IBAN, …); that message starts with the
             business term and its model path.
     """
-    blocking = [f for f in preflight(invoice) if f.severity in (Severity.FATAL, Severity.ERROR)]
+    blocking = [f for f in preflight(invoice, transmission) if f.severity in (Severity.FATAL, Severity.ERROR)]
     if blocking:
         raise ModelError(
             "invoice fails the FatturaPA pre-flight: "
@@ -176,7 +176,7 @@ def _method(invoice: Invoice, payment: ItalianPayment) -> ModalitaPagamento:
 def _payment(body: etree._Element, invoice: Invoice, payment: ItalianPayment) -> None:
     """2.4 DatiPagamento with one DettaglioPagamento.
 
-    Rows 2.4.1, 2.4.2.1, 2.4.2.2, 2.4.2.5, 2.4.2.6, 2.4.2.13, 2.4.2.16 and 2.4.2.21.
+    Rows 2.4.1, 2.4.2.1, 2.4.2.2, 2.4.2.4, 2.4.2.5, 2.4.2.6, 2.4.2.13, 2.4.2.16 and 2.4.2.21.
     """
     data = child(body, "DatiPagamento")
     child(data, "CondizioniPagamento", payment.conditions)
@@ -188,6 +188,9 @@ def _payment(body: etree._Element, invoice: Invoice, payment: ItalianPayment) ->
             text(invoice.payee.name, "BT-59 (payee.name)", "2.4.2.1 Beneficiario (String200LatinType)", maximum=200),
         )
     child(detail, "ModalitaPagamento", _method(invoice, payment))
+    days = payment_days(invoice, t.cast(ItalianExtension, invoice.it))  # BT-20 "TP02 30" (row 2.4.2.4; #133 item 11)
+    if days is not None:
+        child(detail, "GiorniTerminiPagamento", days)
     if invoice.payment_due_date is not None:
         child(
             detail,

@@ -8,6 +8,15 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- FatturaPA writer policies for the Peppol-shaped and text-heavy terms ([#149](https://github.com/letsrevel/euinvoice/issues/149),
+  part of [#133](https://github.com/letsrevel/euinvoice/issues/133)): `Descrizione` is BT-153 + `" - "` + BT-154
+  (refused above 1000 characters, `String1000LatinType`); a BT-20 of the form `TP02 30` is carried as
+  CondizioniPagamento and `GiorniTerminiPagamento`; BT-120 is written into every `DatiRiepilogo` of a breakdown split
+  by Natura that has no `legal_reference`; BT-23 and BT-34 are accepted (not written), BT-49 only when it equals the
+  transmission's `CodiceDestinatario`, so a Peppol-shaped invoice can be written; a Natura `DatiRiepilogo` without
+  `RiferimentoNormativo` gives a non-blocking `warning` finding (Allegato A 1.9.1). `fatturapa.preflight` takes an
+  optional `transmission` for the BT-49 check.
+
 - `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged

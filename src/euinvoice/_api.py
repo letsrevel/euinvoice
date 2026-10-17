@@ -215,7 +215,7 @@ def _to_fatturapa(invoice: Invoice, profile: profiles.Profile | None, options: f
         )
     if options is None:
         raise ValueError("writing FatturaPA needs fatturapa_transmission=euinvoice.syntax.fatturapa.Transmission(...)")
-    findings = fatturapa.preflight(invoice)
+    findings = fatturapa.preflight(invoice, options)
     if not ValidationReport(findings).ok:
         raise PreflightError(Syntax.FATTURAPA, Syntax.FATTURAPA, findings)
     data = serialize(invoice, options)

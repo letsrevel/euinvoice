@@ -41,7 +41,12 @@ def _found(**changes: t.Any) -> list[tuple[str, str | None, Severity]]:
 
 @pytest.mark.parametrize("name", list(samples()))
 def test_samples_have_no_finding(name: str) -> None:
-    assert preflight(samples()[name].invoice) == ()
+    # The one exempt sample whose N2.1 summary has no RiferimentoNormativo has only that warning (#149).
+    expected = ["vat_breakdown[1]"] if name == "TD01 exempt and split payment" else []
+    sample = samples()[name]
+    findings = preflight(sample.invoice, sample.options)
+    assert [f.location for f in findings if f.severity is not Severity.WARNING] == []
+    assert [f.location for f in findings if f.severity is Severity.WARNING] == expected
 
 
 def test_findings_come_from_the_preflight() -> None:

@@ -40,7 +40,6 @@ from euinvoice.model import (
     PaymentCardInformation,
     PaymentInstructions,
     PriceDetails,
-    ProcessControl,
     SellerContact,
     SellerPostalAddress,
     SellerTaxRepresentative,
@@ -56,7 +55,7 @@ from euinvoice.model.it import (
     Natura,
     TipoDocumento,
 )
-from euinvoice.report import Severity
+from euinvoice.report import Finding, Severity
 from euinvoice.syntax.fatturapa import preflight, write
 from euinvoice.syntax.fatturapa._write_refuse import WRITTEN
 from euinvoice.syntax.fatturapa._write_rules import (
@@ -67,6 +66,10 @@ from euinvoice.syntax.fatturapa._write_rules import (
     TOTALS,
     UNWRITTEN,
 )
+
+
+def _errors(invoice: Invoice) -> list[Finding]:
+    return [f for f in preflight(invoice, TRANSMISSION) if f.severity is not Severity.WARNING]
 
 
 def _reported(invoice: Invoice, rule: str, location: str, match: str) -> None:
@@ -86,22 +89,12 @@ UNWRITTEN_TERMS: t.Final[dict[str, tuple[dict[str, t.Any], str, str]]] = {
     "BT-14": ({"sales_order_reference": "S"}, "sales_order_reference", r"^BT-14 "),
     "BT-16": ({"despatch_advice_reference": "D"}, "despatch_advice_reference", r"^BT-16 "),
     "BT-21": ({"notes": (InvoiceNote(subject_code="AAI", note="x"),)}, "notes[0].subject_code", r"^BT-21 "),
-    "BT-23": (
-        {"process_control": ProcessControl(business_process_type="P1", specification_identifier="urn:x")},
-        "process_control.business_process_type",
-        r"^BT-23 cannot be written in FatturaPA: App\. 4\.1 maps no FatturaPA element",
-    ),
     "BT-28": ({"seller": seller(trading_name="Brand")}, "seller.trading_name", r"^BT-28 "),
-    "BT-34": (
-        {"seller": seller(electronic_address=Identifier(value="x@example.com", scheme_id="EM"))},
-        "seller.electronic_address",
-        r"^BT-34 ",
-    ),
     "BT-41": ({"seller": seller(contact=SellerContact(contact_point="Desk"))}, "seller.contact.contact_point", "BT-41"),
     "BT-49": (
         {"buyer": buyer(electronic_address=Identifier(value="ABCDEF1", scheme_id="0205"))},
         "buyer.electronic_address",
-        r"the SdI routing .* Transmission.*BR-IT-190/200",
+        r"accepted only when it equals Transmission\.recipient_code.*BR-IT-190/200",
     ),
     "BG-9": ({"buyer": buyer(contact=BuyerContact(email="b@example.com"))}, "buyer.contact", r"^BG-9 "),
     "BG-11": (
@@ -143,11 +136,6 @@ UNWRITTEN_TERMS: t.Final[dict[str, tuple[dict[str, t.Any], str, str]]] = {
         r"^BT-85 ",
     ),
     "BT-127": ({"lines": (it_line(note="n"),)}, "lines[0].note", r"^BT-127 "),
-    "BT-154": (
-        {"lines": (it_line(item=ItemInformation(name="A", description="B")),)},
-        "lines[0].item.description",
-        r"App\. 4\.1 concatenates",
-    ),
     "BG-32": (
         {"lines": (it_line(item=ItemInformation(name="A", attributes=(ItemAttribute(name="N", value="V"),))),)},
         "lines[0].item.attributes",
@@ -441,7 +429,7 @@ def test_exemption_reason_as_app_4_1_concatenates_it_is_carried() -> None:
     reason = calc.ExemptionReason(text="N2.1; N4 Art. 10")
     invoice = _exempt(Natura.N2_1, Natura.N4, reason=reason, it=italian(vat_summaries=(summary,)))
 
-    assert preflight(invoice) == ()
+    assert _errors(invoice) == []
     assert _riferimento(invoice) == [None, "Art. 10"]
 
 
@@ -473,11 +461,19 @@ def test_exemption_reason_equal_to_the_legal_reference_is_written_once() -> None
     ("natures", "summaries", "text", "match"),
     [
         ((Natura.N4,), (ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="A"),), "B", "sets"),
-        ((Natura.N4, Natura.N2_1), (), "A", "has 2 DatiRiepilogo, not one"),
+        (
+            (Natura.N4, Natura.N2_1),
+            (
+                ItalianVatSummary(rate=Decimal(0), nature=Natura.N4, legal_reference="B"),
+                ItalianVatSummary(rate=Decimal(0), nature=Natura.N2_1, legal_reference="C"),
+            ),
+            "A",
+            "already has another RiferimentoNormativo",
+        ),
         ((Natura.N4,), (), "x" * 101, "String100LatinType"),
         ((Natura.N4,), (), "€", "String100LatinType"),
     ],
-    ids=["other legal reference", "several summaries", "too long", "not Latin-1"],
+    ids=["other legal reference", "every summary has another reference", "too long", "not Latin-1"],
 )
 def test_exemption_reason_that_cannot_be_written(
     natures: tuple[Natura, ...], summaries: tuple[ItalianVatSummary, ...], text: str, match: str
@@ -500,7 +496,7 @@ def test_exemption_reason_code_carried_by_natura(natures: tuple[Natura, ...], ca
     lines = [it_line(str(i), "1", "10", category, "0", nature=n) for i, n in enumerate(natures, 1)]
     invoice = it_invoice(*lines, exemption_reasons={category: calc.ExemptionReason(code=code)})
 
-    assert preflight(invoice) == ()
+    assert _errors(invoice) == []
     write(invoice, TRANSMISSION)
 
 

@@ -6,9 +6,19 @@ from decimal import Decimal
 
 from hypothesis import strategies as st
 
-from _fatturapa_write import BUYER_VAT, buyer, it_draft, it_line, italian
+from _fatturapa_write import BUYER_VAT, buyer, it_draft, it_line, italian, seller
 from euinvoice import calc
-from euinvoice.model import Buyer, Invoice, LineDraft, PaymentInstructions, Seller, SellerPostalAddress
+from euinvoice.model import (
+    Buyer,
+    Identifier,
+    Invoice,
+    ItemInformation,
+    LineDraft,
+    PaymentInstructions,
+    ProcessControl,
+    Seller,
+    SellerPostalAddress,
+)
 from euinvoice.model.it import (
     CondizioniPagamento,
     ItalianPayment,
@@ -54,7 +64,11 @@ def _lines(draw: st.DrawFn) -> tuple[LineDraft, ...]:
     lines = []
     for number in range(1, count + 1):
         category, rate, nature = draw(st.sampled_from(_VAT))
-        lines.append(it_line(str(number), str(draw(_QUANTITIES)), str(draw(_PRICES)), category, rate, nature=nature))
+        # BT-154 joins BT-153 in Descrizione (#149); the reader gives the joined text as BT-153.
+        item = ItemInformation(name="Biglietto evento", description=draw(st.none() | st.just("ingresso unico")))
+        lines.append(
+            it_line(str(number), str(draw(_QUANTITIES)), str(draw(_PRICES)), category, rate, nature=nature, item=item)
+        )
     return tuple(lines)
 
 
@@ -102,6 +116,18 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
     payment, instructions = draw(st.one_of(st.just((None, None)), _payments()))
     if payment is not None:
         changes |= {"it": changes["it"].model_copy(update={"payment": payment}), "payment_instructions": instructions}
+    # BT-23 and BT-34 are accepted and not written; BT-20 with days is carried by 2.4.1 and 2.4.2.4 (#149).
+    changes["process_control"] = ProcessControl(
+        business_process_type=draw(st.none() | st.just("urn:example.com:process:01")),
+        specification_identifier="urn:cen.eu:en16931:2017",
+    )
+    changes["seller"] = changes.get("seller", seller()).model_copy(
+        update={"electronic_address": draw(st.none() | st.just(Identifier(value="seller@example.com", scheme_id="EM")))}
+    )
+    if payment is not None:
+        changes["payment_terms"] = draw(
+            st.sampled_from([None, f"{payment.conditions}", f"{payment.conditions} 0", f"{payment.conditions} 999"])
+        )
     draft = it_draft(*draw(_lines()), buyer=buyer_, **changes)
     # BT-121 where App. 5.1 gives every Natura of the category one VATEX code (Natura carries it); none otherwise.
     codes: dict[str, set[str]] = {}

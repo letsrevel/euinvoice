@@ -9,6 +9,7 @@ not fill (e.g. BT-29 through "REA:" / "ALBO:" prefixes, BG-13 through DatiTraspo
 reported like the ones it marks "Mappatura non considerabile" or does not list at all.
 """
 
+import re
 import typing as t
 from decimal import Decimal
 
@@ -26,6 +27,7 @@ from euinvoice.syntax.fatturapa._write_rules import (
     UNWRITTEN,
     finding,
 )
+from euinvoice.syntax.fatturapa.transmission import Transmission
 
 __all__ = [
     "CODICE_FISCALE_PREFIX",
@@ -36,6 +38,7 @@ __all__ = [
     "WRITTEN",
     "codice_fiscale",
     "is_stamp_duty_group",
+    "payment_days",
     "stamp_duty",
     "structure",
 ]
@@ -50,18 +53,26 @@ STAMP_DUTY_ALLOWANCE: t.Final = "95"
 """BT-98 of the document level allowance that is the stamp duty of a credit note (App. 4.1 row 2.1.1.6)."""
 STAMP_DUTY_REASON: t.Final = "BOLLO"
 """The reason text BR-IT-DC-480 of the Regole tecniche v2.6 (App. 2) gives the stamp duty charge."""
+DESCRIPTION_SEPARATOR: t.Final = " - "
+"""Between BT-153 and BT-154 in 2.2.1.4 Descrizione (maintainer decision on #133 item 3, #149)."""
+DESCRIZIONE_MAX: t.Final = 1000
+"""``String1000LatinType`` (XSD 1.2.3) of 2.2.1.4 Descrizione."""
+
+_DAYS = re.compile(r"0|[1-9][0-9]{0,2}")  # GiorniTerminePagamentoType: xs:integer 0..999, in its canonical form
 
 WRITTEN: t.Final = frozenset(
     {
         # Document (App. 4.1 rows 2.1.1.2-2.1.1.11, 2.1.2-2.1.6, 2.2.2.7, 2.4.2.5); BT-3 selects nothing, it is
-        # checked against TipoDocumento (App. 5.4); BT-24 identifies an EN 16931 syntax and has no FatturaPA
-        # counterpart. BT-20 is accepted only as the CondizioniPagamento code it carries (structure(); #133 item 11).
+        # checked against TipoDocumento (App. 5.4); BT-23 and BT-24 identify an EN 16931 process and syntax and have no
+        # FatturaPA counterpart (#133 item 15). BT-20 is accepted only as the CondizioniPagamento code, with the
+        # days after it, that it carries (structure(); #133 item 11).
         *("BT-1", "BT-2", "BT-3", "BT-5", "BT-8", "BT-9", "BT-12", "BT-13", "BT-15", "BT-19", "BT-20"),
-        *("BG-1", "BT-22", "BG-2", "BT-24", "BG-3", "BT-25", "BT-26"),
-        # Seller and buyer (rows 1.2, 1.4)
-        *("BG-4", "BT-27", "BT-30", "BT-31", "BG-5", "BT-35", "BT-36", "BT-37", "BT-38", "BT-39", "BT-40"),
+        *("BG-1", "BT-22", "BG-2", "BT-23", "BT-24", "BG-3", "BT-25", "BT-26"),
+        # Seller and buyer (rows 1.2, 1.4); BT-34 is not written (#133 item 15) and BT-49 only checked against the
+        # transmission's CodiceDestinatario (structure(); #133 item 13)
+        *("BG-4", "BT-27", "BT-30", "BT-31", "BT-34", "BG-5", "BT-35", "BT-36", "BT-37", "BT-38", "BT-39", "BT-40"),
         *("BG-6", "BT-42", "BT-43"),
-        *("BG-7", "BT-44", "BT-47", "BT-48", "BG-8", "BT-50", "BT-51", "BT-52", "BT-53", "BT-54", "BT-55"),
+        *("BG-7", "BT-44", "BT-47", "BT-48", "BT-49", "BG-8", "BT-50", "BT-51", "BT-52", "BT-53", "BT-54", "BT-55"),
         # Payment (rows 2.4.2.1, 2.4.2.2, 2.4.2.13, 2.4.2.16, 2.4.2.21)
         *("BG-10", "BT-59", "BG-16", "BT-81", "BT-83", "BG-17", "BT-84", "BT-86"),
         # Stamp duty only (row 2.1.1.6); every other allowance or charge is reported by _allowances_and_charges.
@@ -75,7 +86,7 @@ WRITTEN: t.Final = frozenset(
         *("BG-23", "BT-116", "BT-117", "BT-118", "BT-119", "BT-120", "BT-121"),
         # Lines (2.2.1); BT-151 is checked against Natura (App. 5.1) and becomes EsigibilitaIVA S for B.
         *("BG-25", "BT-126", "BT-129", "BT-130", "BT-131", "BT-133", "BG-26", "BT-134", "BT-135"),
-        *("BG-29", "BT-146", "BT-147", "BT-148", "BG-30", "BT-151", "BT-152", "BG-31", "BT-153"),
+        *("BG-29", "BT-146", "BT-147", "BT-148", "BG-30", "BT-151", "BT-152", "BG-31", "BT-153", "BT-154"),
     }
 )
 """Every business term and group the writer maps or derives. A group listed here is entered; its own terms are
@@ -84,13 +95,12 @@ checked one by one."""
 _REASONS: t.Final[t.Mapping[str, str]] = {
     "BT-6": "FatturaPA has one currency, Divisa (2.1.1.2); App. 4.1 maps no element to BT-6",
     "BT-20": "App. 4.1 builds it from 2.4.1 CondizioniPagamento and 2.4.2.4 GiorniTerminiPagamento, which are codes "
-    "and a number with no place for free text: only the CondizioniPagamento code of it.payment is carried "
-    "(#133 item 11)",
-    "BT-23": "App. 4.1 maps no FatturaPA element to the business process (#133)",
-    "BT-34": "App. 4.1 maps no FatturaPA element to the seller's electronic address (#133)",
+    "and a number with no place for free text: only the CondizioniPagamento code of it.payment, optionally followed "
+    "by a space and the days (0 to 999), is carried (#133 item 11)",
     "BT-49": "the SdI routing (CodiceDestinatario, PECDestinatario) comes from Transmission, not from the model "
-    "(plan M11.3); CIUS-IT BR-IT-190/200 make BT-49 the 6-character IPA code, which FPR12 refuses (SdI 00427)",
-    "BT-154": "App. 4.1 concatenates BT-153 and BT-154 into 2.2.1.4 Descrizione without saying how (#133)",
+    "(plan M11.3): BT-49 is accepted only when it equals Transmission.recipient_code, the CodiceDestinatario "
+    "App. 4.1 row 1.1.4 takes from it (#133 item 13); CIUS-IT BR-IT-190/200 make BT-49 the 6-character IPA code, "
+    "which FPR12 refuses (SdI 00427)",
     "BG-11": "1.3 RappresentanteFiscale has no address, so the tax representative's BG-12 would be lost",
     "BG-27": "2.2.1.10 ScontoMaggiorazione has no place for the reason (BT-139/BT-140, BR-42) or base amount (#133)",
     "BG-28": "2.2.1.10 ScontoMaggiorazione has no place for the reason (BT-144/BT-145, BR-44) or base amount (#133)",
@@ -126,12 +136,13 @@ def _unwritable(term: str, path: str, reason: str) -> Finding:
     return finding(UNWRITTEN, path, f"{term} cannot be written in FatturaPA: {reason}")
 
 
-def structure(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
+def structure(invoice: Invoice, it: ItalianExtension, transmission: Transmission | None = None) -> t.Iterator[Finding]:
     """Report every part of the invoice that FPR12 cannot carry, one ``error`` finding each.
 
     Args:
         invoice: The invoice.
         it: Its ``Invoice.it``.
+        transmission: The transmission header, against whose CodiceDestinatario BT-49 is checked.
 
     Yields:
         ``UNWRITTEN``, ``CATEGORY`` and ``ALLOWANCE_CHARGE`` findings, located by model path.
@@ -149,10 +160,15 @@ def structure(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
                 f"only a codice fiscale is written (CodiceFiscale, rows 1.2.1.2 / 1.4.1.2): scheme "
                 f"{CODICE_FISCALE_SCHEME} or the prefix {CODICE_FISCALE_PREFIX!r}; got scheme {identifier.scheme_id!r}",
             )
-    # BT-20 is carried only when it is what App. 4.1 builds from the elements written: the CondizioniPagamento code
-    # (GiorniTerminiPagamento is not written), in the reader's form (#120). Any other text would be lost.
+    # BT-49 is accepted when it is the CodiceDestinatario the transmission carries (row 1.1.4; #133 item 13).
+    address = invoice.buyer.electronic_address
+    if address is not None and (transmission is None or address.value != transmission.recipient_code):
+        yield _unwritable("BT-49", "buyer.electronic_address", _REASONS["BT-49"])
+    # BT-20 is carried only when it is what App. 4.1 builds from the elements written: the CondizioniPagamento code,
+    # alone or followed by the days of 2.4.2.4 GiorniTerminiPagamento, in the reader's form (#120, #133 item 11).
+    # Any other text would be lost.
     carried = None if it.payment is None else str(it.payment.conditions)
-    if invoice.payment_terms is not None and invoice.payment_terms != carried:
+    if invoice.payment_terms is not None and invoice.payment_terms != carried and payment_days(invoice, it) is None:
         yield _unwritable("BT-20", "payment_terms", _REASONS["BT-20"])
     instructions = invoice.payment_instructions
     if instructions is not None and len(instructions.credit_transfers) > 1:
@@ -171,8 +187,31 @@ def structure(invoice: Invoice, it: ItalianExtension) -> t.Iterator[Finding]:
     yield from _allowances_and_charges(invoice, it)
 
 
+def payment_days(invoice: Invoice, it: ItalianExtension) -> str | None:
+    """2.4.2.4 GiorniTerminiPagamento: the days of a BT-20 of the form ``<CondizioniPagamento> <days>``, or ``None``.
+
+    That is the form the reader gives BT-20 (rows 2.4.1 and 2.4.2.4: "In BT-20 vengono concatenati"); the days are an
+    integer from 0 to 999 (``GiorniTerminePagamentoType``, XSD 1.2.3) in canonical form, so they read back unchanged.
+    """
+    if invoice.payment_terms is None or it.payment is None:
+        return None
+    prefix = f"{it.payment.conditions} "
+    days = invoice.payment_terms.removeprefix(prefix) if invoice.payment_terms.startswith(prefix) else ""
+    return days if _DAYS.fullmatch(days) else None
+
+
 def _lines(invoice: Invoice) -> t.Iterator[Finding]:
     for index, line in enumerate(invoice.lines):
+        description = line.item.description
+        if description is not None:
+            joined = len(line.item.name) + len(DESCRIPTION_SEPARATOR) + len(description)
+            if joined > DESCRIZIONE_MAX:
+                yield _unwritable(
+                    "BT-154",
+                    f"lines[{index}].item.description",
+                    f"2.2.1.4 Descrizione is BT-153{DESCRIPTION_SEPARATOR!r}BT-154, {joined} characters; "
+                    f"String1000LatinType (XSD 1.2.3) takes at most {DESCRIZIONE_MAX} (#133 item 3)",
+                )
         category = VatCategory(line.vat_information.category_code)
         if category in UNSUPPORTED_CATEGORIES:
             yield finding(
