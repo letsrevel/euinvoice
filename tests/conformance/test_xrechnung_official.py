@@ -77,8 +77,10 @@ def test_empty_purchase_order_reference(syntax: Syntax, blocking: set[str]) -> N
 
 
 @pytest.mark.parametrize("syntax", list(WRITERS))
-@pytest.mark.parametrize("rule_id", list(VIOLATIONS))
+@pytest.mark.parametrize("rule_id", [r for r in VIOLATIONS if r != "PEPPOL-EN16931-R001"])
 def test_each_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) -> None:
+    # PEPPOL-EN16931-R001 (missing BT-23) is no longer a violation after prepare() since the XRechnung
+    # profiles now default BT-23 to the Peppol billing process (XRechnung 3.0.2 §11.27 p. 57).
     ids, _ = agreement(profiles.XRECHNUNG, VIOLATIONS[rule_id](), syntax)
 
     assert ids == {rule_id}
