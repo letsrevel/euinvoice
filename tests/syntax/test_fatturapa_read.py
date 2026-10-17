@@ -283,6 +283,21 @@ def test_a_foreign_seller_reads_with_the_core_bt_24() -> None:
     assert invoice.seller.vat_identifier == "DE00000000001"
 
 
+def test_cap_00000_is_no_post_code_outside_italy() -> None:
+    # AdE FAQ n. 63 / n. 74: the generic CAP of an address abroad; Italy keeps its value, 5-digit foreign codes too
+    abroad = "<Sede><Indirizzo>Strasse 1</Indirizzo><CAP>{}</CAP><Comune>Berlin</Comune><Nazione>{}</Nazione></Sede>"
+
+    def seller_post_code(cap: str, country: str) -> str | None:
+        data = document(body(tipo="TD17"), seller_address=abroad.format(cap, country))
+        result = parse_detailed(data)
+        assert result.unmapped[1:] == ()
+        return result.invoice.seller.postal_address.post_code
+
+    assert seller_post_code("00000", "DE") is None
+    assert seller_post_code("10115", "DE") == "10115"
+    assert seller_post_code("00000", "IT") == "00000"
+
+
 def test_quantity_absent_is_one_and_units_default_to_c62() -> None:
     data = VARIANTS["no quantity"]
 
