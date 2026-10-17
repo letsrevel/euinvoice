@@ -58,7 +58,14 @@ def test_declares_its_identifiers(
     assert profile.facturx_filename == filename
     assert profile.rule_sets == rule_sets
     assert profile.syntaxes == frozenset({Syntax.CII})  # Factur-X embeds CII only (plan §1)
-    assert profile.business_process_type is None
+    # FACTURX_XRECHNUNG inherits BT-23 default from XRECHNUNG (XRechnung 3.0.2 §11.27 p. 57);
+    # other Factur-X profiles have no BT-23 default.
+    if profile.id == "facturx-xrechnung":
+        from euinvoice.profiles.peppol import BILLING_PROCESS
+
+        assert profile.business_process_type == BILLING_PROCESS
+    else:
+        assert profile.business_process_type is None
 
 
 def test_levels_lists_every_level_once() -> None:

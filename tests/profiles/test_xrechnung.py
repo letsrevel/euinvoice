@@ -56,8 +56,11 @@ class TestDeclarations:
         assert profile.rule_sets == ("cen", "xrechnung")
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
-    def test_no_bt23_default(self, profile: profiles.Profile) -> None:
-        assert profile.business_process_type is None
+    def test_has_bt23_default(self, profile: profiles.Profile) -> None:
+        # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process.
+        from euinvoice.profiles.peppol import BILLING_PROCESS
+
+        assert profile.business_process_type == BILLING_PROCESS
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
     def test_prepare_keeps_each_claim(self, profile: profiles.Profile) -> None:
@@ -99,8 +102,10 @@ class TestPreflight:
         assert rule_ids(profile, profile.prepare(xrechnung_invoice())) == set()
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
-    @pytest.mark.parametrize("rule_id", list(VIOLATIONS))
+    @pytest.mark.parametrize("rule_id", [r for r in VIOLATIONS if r != "PEPPOL-EN16931-R001"])
     def test_each_violation_fires_exactly_its_rule(self, profile: profiles.Profile, rule_id: str) -> None:
+        # PEPPOL-EN16931-R001 (missing BT-23) is no longer a violation after prepare() since the XRechnung
+        # profiles now default BT-23 to the Peppol billing process (XRechnung 3.0.2 §11.27 p. 57).
         findings = profile.preflight(profile.prepare(VIOLATIONS[rule_id]()), Syntax.CII)
 
         ids = {f.rule_id for f in findings} - set(CVD_VIOLATIONS)
@@ -157,6 +162,19 @@ class TestPreflightEdges:
         invoice = xrechnung_invoice(seller=seller(vat_identifier=None), seller_tax_representative=representative)
         assert rule_ids(profiles.XRECHNUNG, invoice) == set()
 
-    def test_bt23_is_left_to_the_caller(self) -> None:
+    def test_bt23_default_is_filled_when_unset(self) -> None:
+        # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process when unset.
+        from euinvoice.profiles.peppol import BILLING_PROCESS
+
         invoice = xrechnung_invoice(process_control=ProcessControl(specification_identifier=CIUS))
-        assert profiles.XRECHNUNG.prepare(invoice).process_control.business_process_type is None
+        prepared = profiles.XRECHNUNG.prepare(invoice)
+        assert prepared.process_control.business_process_type == BILLING_PROCESS
+
+    def test_bt23_caller_value_is_not_overwritten(self) -> None:
+        # The profile default does not override a caller-provided BT-23.
+        custom_process = "urn:example:custom:process"
+        invoice = xrechnung_invoice(
+            process_control=ProcessControl(business_process_type=custom_process, specification_identifier=CIUS)
+        )
+        prepared = profiles.XRECHNUNG.prepare(invoice)
+        assert prepared.process_control.business_process_type == custom_process
