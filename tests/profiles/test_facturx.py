@@ -8,32 +8,36 @@ from euinvoice.errors import UnsupportedDocumentError
 from euinvoice.model import Invoice
 from euinvoice.profiles import facturx
 from euinvoice.profiles._base import FACTURX_RULE_SET
+from euinvoice.profiles.peppol import BILLING_PROCESS
 from euinvoice.syntax import Syntax, cii
 
 CORE = "urn:cen.eu:en16931:2017"
 XRECHNUNG = "urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0"
 
-# (profile, BT-24, XMP fx:ConformanceLevel, embedded file name, rule sets): the evidence is cited per value in
-# src/euinvoice/profiles/facturx.py; tests/conformance/test_facturx_corpus.py checks it against the corpus PDFs.
+# (profile, BT-24, XMP fx:ConformanceLevel, embedded file name, rule sets, BT-23 default): the evidence is
+# cited per value in src/euinvoice/profiles/facturx.py; tests/conformance/test_facturx_corpus.py checks it
+# against the corpus PDFs. BT-23 is None for all except FACTURX_XRECHNUNG (XRechnung 3.0.2 §11.27 p. 57).
 DECLARED = [
-    (profiles.FACTURX_MINIMUM, "urn:factur-x.eu:1p0:minimum", "MINIMUM", "factur-x.xml", (FACTURX_RULE_SET,)),
-    (profiles.FACTURX_BASIC_WL, "urn:factur-x.eu:1p0:basicwl", "BASIC WL", "factur-x.xml", (FACTURX_RULE_SET,)),
+    (profiles.FACTURX_MINIMUM, "urn:factur-x.eu:1p0:minimum", "MINIMUM", "factur-x.xml", (FACTURX_RULE_SET,), None),
+    (profiles.FACTURX_BASIC_WL, "urn:factur-x.eu:1p0:basicwl", "BASIC WL", "factur-x.xml", (FACTURX_RULE_SET,), None),
     (
         profiles.FACTURX_BASIC,
         "urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic",
         "BASIC",
         "factur-x.xml",
         (FACTURX_RULE_SET,),
+        None,
     ),
-    (profiles.FACTURX_EN16931, CORE, "EN 16931", "factur-x.xml", ("cen",)),
+    (profiles.FACTURX_EN16931, CORE, "EN 16931", "factur-x.xml", ("cen",), None),
     (
         profiles.FACTURX_EXTENDED,
         "urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended",
         "EXTENDED",
         "factur-x.xml",
         (FACTURX_RULE_SET,),
+        None,
     ),
-    (profiles.FACTURX_XRECHNUNG, XRECHNUNG, "XRECHNUNG", "xrechnung.xml", ("cen", "xrechnung")),
+    (profiles.FACTURX_XRECHNUNG, XRECHNUNG, "XRECHNUNG", "xrechnung.xml", ("cen", "xrechnung"), BILLING_PROCESS),
 ]
 _IDS = [row[0].id for row in DECLARED]
 SHARED_BT24 = (profiles.FACTURX_EN16931, profiles.FACTURX_XRECHNUNG)
@@ -49,16 +53,21 @@ def _cii(bt24: str) -> bytes:
     ).encode()
 
 
-@pytest.mark.parametrize(("profile", "bt24", "level", "filename", "rule_sets"), DECLARED, ids=_IDS)
+@pytest.mark.parametrize(("profile", "bt24", "level", "filename", "rule_sets", "expected_bt23"), DECLARED, ids=_IDS)
 def test_declares_its_identifiers(
-    profile: profiles.Profile, bt24: str, level: str, filename: str, rule_sets: tuple[str, ...]
+    profile: profiles.Profile,
+    bt24: str,
+    level: str,
+    filename: str,
+    rule_sets: tuple[str, ...],
+    expected_bt23: str | None,
 ) -> None:
     assert profile.specification_identifier == bt24
     assert profile.facturx_conformance_level == level
     assert profile.facturx_filename == filename
     assert profile.rule_sets == rule_sets
     assert profile.syntaxes == frozenset({Syntax.CII})  # Factur-X embeds CII only (plan §1)
-    assert profile.business_process_type is None
+    assert profile.business_process_type == expected_bt23
 
 
 def test_levels_lists_every_level_once() -> None:

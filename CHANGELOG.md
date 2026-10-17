@@ -32,6 +32,9 @@ All notable changes to this project are documented here. The format follows
   pre-flight reports `EUINVOICE-FATTURAPA-NAME` unless BT-27 / BT-44 is `Nome Cognome`. The reader fills the pair
   from `Nome` / `Cognome` (BT-27 / BT-44 stay `Nome Cognome`) and no longer lists those elements as unmapped, so
   FPR12 to model to FPR12 is lossless for natural persons.
+- XRechnung profiles (XRECHNUNG, XRECHNUNG_EXTENSION, XRECHNUNG_CVD) now default BT-23 (business process type) to the
+  Peppol billing process `urn:fdc:peppol.eu:2017:poacc:billing:01:1.0` per XRechnung 3.0.2 §11.27 p. 57. Callers can
+  still provide a custom BT-23, which is not overwritten ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
 - `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged
@@ -413,7 +416,7 @@ generated, parsed and validated per profile is in the README table; the open que
   (e.g. 2 of the 6 official Extension instances get fatal findings KoSIT downgrades). No *conforming* CVD invoice
   can be built or read. `validate()` rejects every CVD document: BR-CL-13 when it carries the `CVD` item
   classification, BR-DE-CVD-03 (fatal) when it does not (`XRechnung-UBL-validation.sch` lines 560-562, CEN
-  `EN16931-UBL-codes.sch` lines 67-68). No default BT-23 for XRechnung ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
+  `EN16931-UBL-codes.sch` lines 67-68).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
 
 [Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...HEAD

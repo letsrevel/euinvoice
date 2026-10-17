@@ -174,8 +174,6 @@ Open questions waiting for a maintainer decision (`needs-human`):
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
 - [#69](https://github.com/letsrevel/euinvoice/issues/69): Factur-X MINIMUM and BASIC WL cannot be read into the
   model.
-- [#67](https://github.com/letsrevel/euinvoice/issues/67): the XRechnung profiles set no default BT-23; the caller
-  must provide it (the pre-flight reports PEPPOL-EN16931-R001 otherwise).
 - FatturaPA: [#133](https://github.com/letsrevel/euinvoice/issues/133) (the writer refuses what the SdI rules do
   not settle, e.g. generic document level allowances and charges and VAT categories O, L, M),
   [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses

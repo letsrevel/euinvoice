@@ -13,7 +13,7 @@ import pytest
 
 from _xrechnung_cases import CVD_VIOLATIONS, EDGES, VIOLATIONS, xrechnung_invoice, xrechnung_o_invoice
 from euinvoice import profiles
-from euinvoice.model import Invoice
+from euinvoice.model import Invoice, ProcessControl
 from euinvoice.profiles import xrechnung
 from euinvoice.report import Severity, ValidationReport
 from euinvoice.syntax import Syntax, cii, ubl
@@ -77,8 +77,10 @@ def test_empty_purchase_order_reference(syntax: Syntax, blocking: set[str]) -> N
 
 
 @pytest.mark.parametrize("syntax", list(WRITERS))
-@pytest.mark.parametrize("rule_id", list(VIOLATIONS))
+@pytest.mark.parametrize("rule_id", [r for r in VIOLATIONS if r != "PEPPOL-EN16931-R001"])
 def test_each_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) -> None:
+    # PEPPOL-EN16931-R001 (missing BT-23) is no longer a violation after prepare() since the XRechnung
+    # profiles now default BT-23 to the Peppol billing process (XRechnung 3.0.2 §11.27 p. 57).
     ids, _ = agreement(profiles.XRECHNUNG, VIOLATIONS[rule_id](), syntax)
 
     assert ids == {rule_id}
@@ -91,6 +93,50 @@ def test_each_cvd_preflight_rule_fires_officially(rule_id: str, syntax: Syntax) 
 
     # No model invoice satisfies BR-DE-CVD-03 (see cvd_invoice), so it accompanies the other CVD rules.
     assert ids == {rule_id, "BR-DE-CVD-03"}
+
+
+# CVD needs BT-12/BT-17 to reach its rules, and no model invoice satisfies BR-DE-CVD-03 (see cvd_invoice),
+# so that rule accompanies R001 there, as in test_each_cvd_preflight_rule_fires_officially.
+R001_CASES: dict[str, tuple[profiles.Profile, dict[str, str], set[str]]] = {
+    profiles.XRECHNUNG.id: (profiles.XRECHNUNG, {}, {"PEPPOL-EN16931-R001"}),
+    profiles.XRECHNUNG_EXTENSION.id: (profiles.XRECHNUNG_EXTENSION, {}, {"PEPPOL-EN16931-R001"}),
+    profiles.XRECHNUNG_CVD.id: (
+        profiles.XRECHNUNG_CVD,
+        {"contract_reference": "C-1", "tender_or_lot_reference": "L-1"},
+        {"PEPPOL-EN16931-R001", "BR-DE-CVD-03"},
+    ),
+}
+
+
+@pytest.mark.parametrize("syntax", list(WRITERS))
+@pytest.mark.parametrize("case", list(R001_CASES))
+def test_peppol_en16931_r001_fires_on_unprepared_invoice(case: str, syntax: Syntax) -> None:
+    """R001 (missing BT-23) fires on an unprepared invoice, in the pre-flight and the official Schematron.
+
+    PEPPOL-EN16931-R001 is excluded from test_each_preflight_rule_fires_officially because prepare()
+    now fills BT-23 with the XRechnung default (§11.27). Here BT-23 is genuinely absent.
+    """
+    profile, fields, expected = R001_CASES[case]
+    invoice = xrechnung_invoice(
+        process_control=ProcessControl(specification_identifier=profile.specification_identifier), **fields
+    )
+    # Do NOT call prepare(); keep BT-23 unset and BT-24 as the profile's id so validate() detects the profile.
+    assert invoice.process_control.business_process_type is None
+    assert invoice.process_control.specification_identifier == profile.specification_identifier
+
+    # Write, validate, and check agreement between preflight and official findings.
+    report = validate(WRITERS[syntax](invoice))
+    assert all(f.source != EUINVOICE_SOURCE for f in report.findings), "fell back to EN 16931 core"
+    preflight = profile.preflight(invoice, syntax)
+    assert all(f.severity is Severity.FATAL for f in preflight)
+
+    ids = {f.rule_id for f in preflight}
+    official = {
+        f.rule_id
+        for f in report.findings
+        if f.source == XRECHNUNG_SOURCE and f.severity is Severity.FATAL and f.rule_id in xrechnung._RULES
+    }
+    assert ids == official == expected, (ids, official, report.findings)
 
 
 @pytest.mark.parametrize(

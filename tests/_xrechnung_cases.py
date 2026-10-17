@@ -34,8 +34,8 @@ from euinvoice.model import (
 from euinvoice.syntax import Syntax
 
 PEPPOL_BILLING_01: t.Final = "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
-"""BT-23 of every instance of the pinned XRechnung testsuite; PEPPOL-EN16931-R001 (in the XRechnung rule set)
-requires a BT-23."""
+"""BT-23 default for XRechnung profiles (XRechnung 3.0.2 §11.27); matches every instance of the pinned
+testsuite. PEPPOL-EN16931-R001 (in the XRechnung rule set) requires a BT-23."""
 
 _SELLER_ADDRESS: t.Final = SellerPostalAddress(city="Example City", post_code="10000", country_code="DE")
 _CONTACT: t.Final = SellerContact(contact_point="Sales", telephone="+49 000 000000", email="sales@example.com")

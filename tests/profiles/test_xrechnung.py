@@ -21,6 +21,7 @@ from euinvoice.model import (
     TaxRepresentativePostalAddress,
 )
 from euinvoice.profiles import xrechnung
+from euinvoice.profiles.peppol import BILLING_PROCESS
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
 
@@ -56,8 +57,9 @@ class TestDeclarations:
         assert profile.rule_sets == ("cen", "xrechnung")
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
-    def test_no_bt23_default(self, profile: profiles.Profile) -> None:
-        assert profile.business_process_type is None
+    def test_has_bt23_default(self, profile: profiles.Profile) -> None:
+        # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process.
+        assert profile.business_process_type == BILLING_PROCESS
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
     def test_prepare_keeps_each_claim(self, profile: profiles.Profile) -> None:
@@ -99,8 +101,10 @@ class TestPreflight:
         assert rule_ids(profile, profile.prepare(xrechnung_invoice())) == set()
 
     @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
-    @pytest.mark.parametrize("rule_id", list(VIOLATIONS))
+    @pytest.mark.parametrize("rule_id", [r for r in VIOLATIONS if r != "PEPPOL-EN16931-R001"])
     def test_each_violation_fires_exactly_its_rule(self, profile: profiles.Profile, rule_id: str) -> None:
+        # PEPPOL-EN16931-R001 (missing BT-23) is no longer a violation after prepare() since the XRechnung
+        # profiles now default BT-23 to the Peppol billing process (XRechnung 3.0.2 §11.27 p. 57).
         findings = profile.preflight(profile.prepare(VIOLATIONS[rule_id]()), Syntax.CII)
 
         ids = {f.rule_id for f in findings} - set(CVD_VIOLATIONS)
@@ -157,6 +161,32 @@ class TestPreflightEdges:
         invoice = xrechnung_invoice(seller=seller(vat_identifier=None), seller_tax_representative=representative)
         assert rule_ids(profiles.XRECHNUNG, invoice) == set()
 
-    def test_bt23_is_left_to_the_caller(self) -> None:
+    def test_bt23_default_is_filled_when_unset(self) -> None:
+        # XRechnung 3.0.2 §11.27 p. 57: default BT-23 to Peppol billing process when unset.
         invoice = xrechnung_invoice(process_control=ProcessControl(specification_identifier=CIUS))
-        assert profiles.XRECHNUNG.prepare(invoice).process_control.business_process_type is None
+        prepared = profiles.XRECHNUNG.prepare(invoice)
+        assert prepared.process_control.business_process_type == BILLING_PROCESS
+
+    def test_bt23_caller_value_is_not_overwritten(self) -> None:
+        # The profile default does not override a caller-provided BT-23.
+        custom_process = "urn:example:custom:process"
+        invoice = xrechnung_invoice(
+            process_control=ProcessControl(business_process_type=custom_process, specification_identifier=CIUS)
+        )
+        prepared = profiles.XRECHNUNG.prepare(invoice)
+        assert prepared.process_control.business_process_type == custom_process
+
+    @pytest.mark.parametrize("profile", XRECHNUNG_PROFILES, ids=lambda p: p.id)
+    def test_r001_still_fires_when_unprepared_invoice_lacks_bt23(self, profile: profiles.Profile) -> None:
+        # PEPPOL-EN16931-R001 (missing BT-23) must still be reported by preflight when called on an
+        # unprepared invoice (or one with BT-23 explicitly set to None). The pre-flight rule itself is
+        # the safeguard for cases where prepare() was not called or the invoice was malformed.
+        invoice = VIOLATIONS["PEPPOL-EN16931-R001"]()
+        findings = profile.preflight(invoice, Syntax.CII)
+
+        ids = {f.rule_id for f in findings} - set(CVD_VIOLATIONS)
+        assert "PEPPOL-EN16931-R001" in ids
+        finding = next(f for f in findings if f.rule_id == "PEPPOL-EN16931-R001")
+        assert (finding.severity, finding.source) == (Severity.FATAL, xrechnung.PREFLIGHT_SOURCE)
+        assert finding.message.startswith("[PEPPOL-EN16931-R001] ")
+        assert finding.location
