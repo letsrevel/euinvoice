@@ -87,7 +87,7 @@ def _write_line(goods: etree._Element, index: int, line: InvoiceLine) -> None:
         "Descrizione",
         text(
             _description(line),
-            term("BT-153", "item.name"),
+            term("BT-153 + BT-154", "item.name, item.description"),
             "2.2.1.4 Descrizione (String1000LatinType)",
             maximum=DESCRIZIONE_MAX,
         ),
@@ -431,6 +431,8 @@ def summarize(invoice: Invoice, it: ItalianExtension) -> tuple[list[Block], list
         *_split_and_ordinary(invoice, blocks),
         *_chargeability(invoice, blocks),
         *_exemption_reasons(invoice, blocks),
+        # Order matters: _exemption_reasons writes BT-120 into block.legal_reference (and _match_summaries sets the
+        # summaries' own), and _natura_references warns about the blocks still left without one.
         *_natura_references(invoice, blocks),
     ]
     return list(blocks.values()), findings

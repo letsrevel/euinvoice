@@ -70,6 +70,15 @@ def test_descrizione_above_1000_characters_is_refused() -> None:
         write(invoice, TRANSMISSION)
 
 
+@pytest.mark.parametrize("bad", ["a\tb", "a\nb", "a\u20acb"], ids=["tab", "line break", "not Latin-1"])
+def test_bad_character_in_bt_154_is_a_preflight_finding(bad: str) -> None:
+    invoice = _described("Biglietto", bad)
+
+    assert _errors(invoice) == [(UNWRITTEN, "lines[0].item.description")]
+    with pytest.raises(PreflightError):
+        _to_xml(invoice)
+
+
 def test_descrizione_reads_back_as_the_joined_name_and_is_a_fixed_point() -> None:
     data = _to_xml(_described("Biglietto", "ingresso unico"))
     (result,) = parse_all(data)

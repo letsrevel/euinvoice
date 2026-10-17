@@ -20,6 +20,7 @@ from euinvoice.model._base import bt_id, extension_of
 from euinvoice.model.codes import VatCategory
 from euinvoice.model.it import ItalianExtension, TipoDocumento
 from euinvoice.report import Finding
+from euinvoice.syntax.fatturapa._write_format import fits
 from euinvoice.syntax.fatturapa._write_rules import (
     ALLOWANCE_CHARGE,
     CATEGORY,
@@ -211,6 +212,13 @@ def _lines(invoice: Invoice) -> t.Iterator[Finding]:
                     f"lines[{index}].item.description",
                     f"2.2.1.4 Descrizione is BT-153{DESCRIPTION_SEPARATOR!r}BT-154, {joined} characters; "
                     f"String1000LatinType (XSD 1.2.3) takes at most {DESCRIZIONE_MAX} (#133 item 3)",
+                )
+            elif not fits(description, maximum=DESCRIZIONE_MAX):
+                yield _unwritable(
+                    "BT-154",
+                    f"lines[{index}].item.description",
+                    "2.2.1.4 Descrizione (String1000LatinType, XSD 1.2.3) takes Latin-1 characters without tab or "
+                    "line break",
                 )
         category = VatCategory(line.vat_information.category_code)
         if category in UNSUPPORTED_CATEGORIES:

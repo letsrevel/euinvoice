@@ -101,7 +101,7 @@ How the writer treats the terms that FatturaPA carries differently (maintainer d
   `warning` finding from the pre-flight (Allegato A 1.9.1, DatiRiepilogo: the element is mandatory for operations
   with a Natura, no SdI code checks it). A warning does not block `to_xml`.
 - **BT-23 and BT-34** are accepted like BT-24 and not written; **BT-49** is accepted only when it equals the
-  `CodiceDestinatario` of the `Transmission` (pass it to `preflight(invoice, transmission)`), and otherwise refused.
+  `CodiceDestinatario` of the `Transmission`, compared by value whatever its scheme id (pass it to `preflight(invoice, transmission)`), and otherwise refused.
   A Peppol-shaped invoice can therefore be written, and is read back without those terms.
 
 ## 2. Write FPR12
