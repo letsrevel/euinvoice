@@ -4,7 +4,7 @@
 to **UBL** or **CII**, validate them against the **official** rule sets, parse them back, and embed them
 in **Factur-X / ZUGFeRD** PDFs.
 
-> **Status: 0.1.0, not yet released.** The API can still change before the release; see
+> **Status: 0.2.0.** Pre-1.0: the API can still change; see
 > [`CHANGELOG.md`](CHANGELOG.md) and the [known limitations](#known-limitations).
 
 ## Why
@@ -19,7 +19,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 - **Framework-free and side-effect-free.** Bytes go in and bytes come out, with no Django, no network and no
   file system in the core.
 
-## What 0.1.0 supports
+## What 0.2.0 supports
 
 | Profile | Syntax | Generate | Parse | Validate |
 |---|---|---|---|---|
@@ -31,7 +31,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 | Factur-X 1.0 / ZUGFeRD 2.1+ EN 16931, XRECHNUNG | CII in PDF/A-3 | ✅ | ✅ | ⚠️ EN 16931 / XRechnung rules only |
 | Factur-X 1.0 / ZUGFeRD 2.1+ BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ EXTENDED-only content listed as unmapped | ❌ |
 | Factur-X 1.0 / ZUGFeRD 2.1+ MINIMUM, BASIC WL | CII in PDF/A-3 | ❌ | ❌ detected and extracted only | ❌ |
-| FatturaPA 1.2.3, Italy (unreleased, after 0.1.0) | FatturaPA XML, FPR12 / FPA12 | ✅ FPR12 only: TD01, TD04, TD24, TD17; one invoice per file; unsigned | ✅ FPR12 and FPA12, 1..n invoices (`parse_all`); Italian data in `Invoice.it` | ✅ XSD 1.2.3 + offline SdI checks; see below |
+| FatturaPA 1.2.3, Italy | FatturaPA XML, FPR12 / FPA12 | ✅ FPR12 only: TD01, TD04, TD24, TD17; one invoice per file; unsigned | ✅ FPR12 and FPA12, 1..n invoices (`parse_all`); Italian data in `Invoice.it` | ✅ XSD 1.2.3 + offline SdI checks; see below |
 | ZUGFeRD 2.0 MINIMUM, BASIC, EXTENDED | CII in PDF/A-3 | ❌ | ✅ BASIC, EXTENDED (EXTENDED-only content listed as unmapped; corpus EXTENDED samples with codes outside the CEN lists, ABK BR-CL-19 and 9958 BR-CL-25, raise `ParseError` like their 2.1 twins, [#69](https://github.com/letsrevel/euinvoice/issues/69)); ❌ MINIMUM | ❌ |
 
 - **Parse** means read into the EN 16931 model. Readers never drop input silently: every element or attribute
@@ -80,8 +80,6 @@ uv add euinvoice                    # model + UBL/CII serialize/parse
 uv add 'euinvoice[validate]'        # + official Schematron validation (SaxonC-HE)
 uv add 'euinvoice[pdf]'             # + Factur-X / ZUGFeRD PDF embedding
 ```
-
-Until 0.1.0 is on PyPI: `uv add 'euinvoice @ git+https://github.com/letsrevel/euinvoice'`.
 
 The official validation artifacts are **downloaded, not bundled**, because of their licences. Fetch them
 once (pinned and sha256-verified):
@@ -168,7 +166,7 @@ once the maintainer enables Pages for the repository and sets the repository var
 
 ## Known limitations
 
-Open questions waiting for a maintainer decision (`needs-human`):
+Limitations and open questions (some wait for a maintainer decision, `needs-human`):
 
 - [#42](https://github.com/letsrevel/euinvoice/issues/42): the Factur-X / ZUGFeRD XSD and Schematron have no
   pinnable official download, so Factur-X levels are not validated against Factur-X rules (see above).
@@ -176,10 +174,8 @@ Open questions waiting for a maintainer decision (`needs-human`):
   model.
 - FatturaPA: [#133](https://github.com/letsrevel/euinvoice/issues/133) (the writer refuses what the SdI rules do
   not settle, e.g. generic document level allowances and charges and VAT categories O, L, M),
-  [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses
-  the generic Natura N2, N3 and N6), [#136](https://github.com/letsrevel/euinvoice/issues/136) (eight
-  ModalitaPagamento codes do not round-trip) and [#130](https://github.com/letsrevel/euinvoice/issues/130) (SdI
-  checks Allegato A leaves partly open, e.g. 00424 is not checked).
+  and [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses
+  the generic Natura N2, N3 and N6).
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
 

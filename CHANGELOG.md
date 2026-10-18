@@ -6,14 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- SdI checks, following the "Elenco dei controlli" v2.0 pseudo-code where Allegato A is silent or ambiguous
-  ([#130](https://github.com/letsrevel/euinvoice/issues/130)): 00424 is now checked (a rate other than 0.00 below
-  1.00); 00423 applies the cascade, an absent `Quantita` counts as 1 and no line is skipped any more (a line without
-  `Quantita` is now checked as quantity 1); 00409 reports two TD04 with the same number and year and reads Art73 per
-  body (the full date is compared only when both carry SI); 00419 is a count of `DatiRiepilogo` against the distinct
-  rates. 00418, 00471 and the 00423 tolerance keep Allegato A's scope, which can report documents SdI accepts.
+## [0.2.0] - 2026-10-18
 
 ### Added
 
@@ -222,6 +215,15 @@ All notable changes to this project are documented here. The format follows
   [#147](https://github.com/letsrevel/euinvoice/issues/147) for review once adoption improves
   ([#142](https://github.com/letsrevel/euinvoice/issues/142)).
 
+### Fixed
+
+- SdI checks, following the "Elenco dei controlli" v2.0 pseudo-code where Allegato A is silent or ambiguous
+  ([#130](https://github.com/letsrevel/euinvoice/issues/130)): 00424 is now checked (a rate other than 0.00 below
+  1.00); 00423 applies the cascade, an absent `Quantita` counts as 1 and no line is skipped any more (a line without
+  `Quantita` is now checked as quantity 1); 00409 reports two TD04 with the same number and year and reads Art73 per
+  body (the full date is compared only when both carry SI); 00419 is a count of `DatiRiepilogo` against the distinct
+  rates. 00418, 00471 and the 00423 tolerance keep Allegato A's scope, which can report documents SdI accepts.
+
 ## [0.1.0] - 2026-10-06
 
 First release: the EN 16931 semantic model, totals and VAT calculation, UBL 2.1 and CII D16B writers and readers,
@@ -429,5 +431,6 @@ generated, parsed and validated per profile is in the README table; the open que
   `EN16931-UBL-codes.sch` lines 67-68).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
 
-[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/letsrevel/euinvoice/releases/tag/v0.1.0

@@ -4,8 +4,8 @@
 or **UN/CEFACT CII**, validate them against the **official** rule sets, parse them back, and embed them in
 **Factur-X / ZUGFeRD** PDFs.
 
-!!! warning "Pre-alpha"
-    The library is being built in the open towards v0.1.0. APIs can still change. See the
+!!! warning "Pre-1.0"
+    The library is at v0.2.0. APIs can still change. See the
     [changelog](https://github.com/letsrevel/euinvoice/blob/main/CHANGELOG.md).
 
 ## What it does

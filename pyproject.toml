@@ -1,6 +1,6 @@
 [project]
 name = "euinvoice"
-version = "0.1.0"
+version = "0.2.0"
 description = "EN 16931 e-invoicing for Python: build, serialize (UBL/CII), validate, parse and embed (Factur-X) European e-invoices."
 readme = "README.md"
 license = "MIT"
