@@ -6,14 +6,7 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-### Fixed
-
-- SdI checks, following the "Elenco dei controlli" v2.0 pseudo-code where Allegato A is silent or ambiguous
-  ([#130](https://github.com/letsrevel/euinvoice/issues/130)): 00424 is now checked (a rate other than 0.00 below
-  1.00); 00423 applies the cascade, an absent `Quantita` counts as 1 and no line is skipped any more (a line without
-  `Quantita` is now checked as quantity 1); 00409 reports two TD04 with the same number and year and reads Art73 per
-  body (the full date is compared only when both carry SI); 00419 is a count of `DatiRiepilogo` against the distinct
-  rates. 00418, 00471 and the 00423 tolerance keep Allegato A's scope, which can report documents SdI accepts.
+## [0.2.0] - 2026-10-18
 
 ### Added
 
@@ -45,6 +38,9 @@ All notable changes to this project are documented here. The format follows
 - XRechnung profiles (XRECHNUNG, XRECHNUNG_EXTENSION, XRECHNUNG_CVD) now default BT-23 (business process type) to the
   Peppol billing process `urn:fdc:peppol.eu:2017:poacc:billing:01:1.0` per XRechnung 3.0.2 §11.27 p. 57. Callers can
   still provide a custom BT-23, which is not overwritten ([#67](https://github.com/letsrevel/euinvoice/issues/67)).
+- `euinvoice.profiles.SYNTAXES` (in `profiles.__all__`) is the set of syntaxes a profile can support, `{UBL, CII}`;
+  `euinvoice.detection.refuse_signed` (in `detection.__all__`, next to `is_signed`) raises `UnsupportedDocumentError`
+  for a signed envelope.
 - `ArtifactsNotAvailableError` takes a keyword-only `fallback_profile_id` and exposes it, with `reason` (the message
   without the fallback hint), as attributes. The unpinned Factur-X / ZUGFeRD refusal sets it to `"en16931"`, and the
   CLI builds its `--profile` hint from it instead of rewriting the message; the messages are unchanged
@@ -78,8 +74,10 @@ All notable changes to this project are documented here. The format follows
   - `validate()` validates FatturaPA by syntax, not by profile: the pinned XSD 1.2.3, then the new
     `euinvoice.validation.sdi` checks. These are the offline-decidable SdI checks of Allegato A 1.9.1, Appendix 1,
     each an `error` finding whose `rule_id` is the SdI code (e.g. `00421`) and whose message quotes Allegato A.
-  - Registry, SdI-state, file-name, file-size, signature and compressed-file checks are out of scope (D8). The
-    ambiguous parts are tracked in [#130](https://github.com/letsrevel/euinvoice/issues/130).
+  - Registry, SdI-state, file-name, file-size, signature and compressed-file checks are out of scope (D8). Where
+    Allegato A is silent or ambiguous, the SdI "Elenco dei controlli" v2.0 settles the check
+    ([#130](https://github.com/letsrevel/euinvoice/issues/130), decided); where Allegato A is explicit its scope is kept, so `validate()` can report
+    00418 or 00471 for a document SdI accepts, and parts of 00472 and 00473 are not checked.
   - FPA12 gets the same checks, after an `information` finding `EUINVOICE-FATTURAPA-FPA12`.
   - Passing a profile for a FatturaPA document raises `UnsupportedDocumentError`.
   - The CLI `validate` command accepts FatturaPA.
@@ -96,8 +94,9 @@ All notable changes to this project are documented here. The format follows
   - `preflight(invoice)` reports, as `error` findings by model path, everything that keeps the invoice from being
     written: what FatturaPA needs and the invoice lacks (`Invoice.it`, TipoDocumento vs BT-3, required elements,
     Natura vs VAT category per App. 5.1, CondizioniPagamento / ModalitaPagamento); every business term FPR12
-    cannot carry (generic document level allowances and charges, VAT categories O, L and M, line allowances and
-    charges, BT-20, BT-154 and every term with no App. 4.1 row the writer fills); DatiRiepilogo that cannot be
+    cannot carry (generic document level allowances and charges, VAT categories O, L and M, and every term with
+    no App. 4.1 row the writer fills; line allowances and charges are written, #151, BT-154 is joined into
+    `Descrizione` and a BT-20 of the CondizioniPagamento form is carried, #149); DatiRiepilogo that cannot be
     built; and totals that disagree with the summaries written (BR-CO-10/13/14/15/16 through App. 4.1:
     ImportoTotaleDocumento, ImportoPagamento and the derived BT-106..BT-110). Every set term is written or reported:
     BT-120 becomes RiferimentoNormativo when its VAT breakdown has one summary, or is accepted when it is the App. 4.1
@@ -107,8 +106,7 @@ All notable changes to this project are documented here. The format follows
     App. 4.1 / 5 normalizations, and FPR12 → model → FPR12 is a fixed point wherever the writer supports the
     content (round-trip tests with the #120 reader). `write` raises `ModelError` for the errors and for values
     that do not fit their XSD type.
-    The policies behind the refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133)
-    (`needs-human`).
+    The policies behind the remaining refusals are open in [#133](https://github.com/letsrevel/euinvoice/issues/133) (`needs-human`).
   - DatiRiepilogo blocks are keyed by rate, Natura and split payment (category B → EsigibilitaIVA S) and filled
     from `Invoice.it.vat_summaries`. Split payment and ordinary VAT at one rate are refused: FatturaPA lines carry
     no EsigibilitaIVA, so a reader could not tell which line is which. ModalitaPagamento comes from `it.payment.method` or BT-81 through App. 5.6.
@@ -137,9 +135,11 @@ All notable changes to this project are documented here. The format follows
     intermediary, …), attachments, line-level document references and every "Mappatura non considerabile" row are
     listed in `ParseResult.unmapped`, never dropped.
   - Values the model cannot hold without rounding or guessing are refused with `ParseError` naming the element:
-    `PrezzoTotale` with more than two decimals, the generic Natura N2/N3/N6, a Natura with a rate other than 0,
-    several `ScontoMaggiorazione` on one line, rate 0 without Natura, split payment and ordinary VAT at the same
-    rate (a line has no EsigibilitaIVA). At different rates they read as categories B and S, as declared, and
+    the generic Natura N2/N3/N6, a Natura with a rate other than 0 (except on a TD16, where it reads as category S,
+    #152), rate 0 without Natura, split payment and ordinary VAT at the same rate (a line has no EsigibilitaIVA).
+    A `PrezzoTotale` with more than two decimals is read, rounded half up into BT-131 with the exact value in
+    `InvoiceLine.it.total_price` (#152), and several `ScontoMaggiorazione` on one line are folded into one BT-147
+    by the check 00423 cascade (#164). At different rates they read as categories B and S, as declared, and
     validation reports BR-B-02. The mapping-policy questions are in
     [#132](https://github.com/letsrevel/euinvoice/issues/132) (`needs-human`).
   - New `parse_all()`: one `ParseResult` per invoice. A FatturaPA lotto (several `FatturaElettronicaBody`) gives
@@ -154,8 +154,8 @@ All notable changes to this project are documented here. The format follows
 - FatturaPA documentation, CLI and README ([#122](https://github.com/letsrevel/euinvoice/issues/122)).
   - New docs page `docs/fatturapa.md`: the v1 scope, building an invoice with `Invoice.it` / `InvoiceLine.it`,
     writing with `Transmission`, `file_name` / `check_file`, reading with `parse` / `parse_all`, converting to UBL /
-    CII with `without_extensions`, what `validate()` checks and does not, the open policy issues (#130, #132, #133,
-    #136) and the compliance items outside the library (signing, delivery #114 / #124, SIAE ticketing and
+    CII with `without_extensions`, what `validate()` checks and does not, the open policy issues (#132, #133) and the
+    compliance items outside the library (signing, delivery #114 / #124, SIAE ticketing and
     corrispettivi telematici #125). Its examples run as doctests.
   - CLI `convert --to fatturapa` writes FPR12, with the transmission header from `--transmitter` (IdTrasmittente:
     country code and tax id), `--transmission-number` (ProgressivoInvio), `--recipient-code` (CodiceDestinatario,
@@ -181,6 +181,14 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Behaviour changes when upgrading from 0.1.0:
+  - Iterating `Syntax` now also yields `FATTURAPA`.
+  - `detect()`, `parse*()` and `validate()` on a FatturaPA root now succeed; 0.1.0 raised `UnsupportedDocumentError`.
+  - A signed `.p7m` now raises `UnsupportedDocumentError` (with the way to extract the XML); 0.1.0 raised `ParseError`
+    as malformed XML.
+  - The XRechnung profiles' `prepare()` now fills BT-23; without it a missing BT-23 was a PEPPOL-EN16931-R001
+    pre-flight error.
+  - `ValidationReport` equality under the XRechnung profiles now includes the new `kosit` field.
 - The FPR12 writer accepts BT-81 `1` (UNTDID 4461, "Instrument not defined") next to an explicit `it.payment.method`
   of MP07, MP09, MP10, MP11, MP14, MP16, MP20 or MP21, the codes App. 5.6 gives no BT-81, which the reader reads as
   `1`; so FPR12 → model → FPR12 is lossless for all 23 ModalitaPagamento codes. `1` with any other method, and any
@@ -221,6 +229,15 @@ All notable changes to this project are documented here. The format follows
   and the ecosystem (XRechnung 2.6.0, Peppol BIS) is built on 1.3.16. The hold is tracked in
   [#147](https://github.com/letsrevel/euinvoice/issues/147) for review once adoption improves
   ([#142](https://github.com/letsrevel/euinvoice/issues/142)).
+
+### Fixed
+
+- SdI checks, following the "Elenco dei controlli" v2.0 pseudo-code where Allegato A is silent or ambiguous
+  ([#130](https://github.com/letsrevel/euinvoice/issues/130)): 00424 is now checked (a rate other than 0.00 below
+  1.00); 00423 applies the cascade, an absent `Quantita` counts as 1 and no line is skipped any more (a line without
+  `Quantita` is now checked as quantity 1); 00409 reports two TD04 with the same number and year and reads Art73 per
+  body (the full date is compared only when both carry SI); 00419 is a count of `DatiRiepilogo` against the distinct
+  rates. 00418, 00471 and the 00423 tolerance keep Allegato A's scope, which can report documents SdI accepts.
 
 ## [0.1.0] - 2026-10-06
 
@@ -429,5 +446,6 @@ generated, parsed and validated per profile is in the README table; the open que
   `EN16931-UBL-codes.sch` lines 67-68).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
 
-[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/letsrevel/euinvoice/releases/tag/v0.1.0

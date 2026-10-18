@@ -1,5 +1,10 @@
+import pathlib
+import tomllib
+
 import euinvoice
 
 
 def test_version_is_exposed() -> None:
-    assert euinvoice.__version__ == "0.1.0"
+    pyproject = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
+    expected = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    assert euinvoice.__version__ == expected

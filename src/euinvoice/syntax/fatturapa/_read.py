@@ -8,8 +8,8 @@ the EXT rows outside the v1 extension, such as withholding, Art73 or the interme
 every "Mappatura non considerabile" row) is left unmarked, so it is listed in ``ParseResult.unmapped``: nothing is
 dropped silently. A ``PrezzoTotale`` with more than two decimals is rounded half up to BT-131, its exact value kept in
 ``.it.total_price`` and the rounding reported (#132 item 1). Where FatturaPA holds another value the model cannot (a
-generic Natura, several discounts on a line, …), the reader refuses with :class:`~euinvoice.errors.ParseError`
-instead of
+generic Natura, split payment and ordinary VAT at one rate, …), the reader refuses with
+:class:`~euinvoice.errors.ParseError` instead of
 rounding or guessing; the open policy questions are in https://github.com/letsrevel/euinvoice/issues/132.
 
 Declared amounts are read as declared (VAT breakdown in ``_read_lines.breakdown``, totals in :func:`_totals`), as the

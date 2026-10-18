@@ -356,8 +356,11 @@ guessed. The open questions wait for a maintainer decision (`needs-human`):
   `Invoice.it.payment`.
 - [#132](https://github.com/letsrevel/euinvoice/issues/132), reader: for example the generic Natura N2, N3 and N6,
   and the BT-81 of each ModalitaPagamento.
-- [#130](https://github.com/letsrevel/euinvoice/issues/130): the SdI checks Allegato A leaves partly open (see
-  above).
+
+Closed decision, [#130](https://github.com/letsrevel/euinvoice/issues/130) (decision 0): where Allegato A is silent
+or ambiguous, the pseudo-code of the "Elenco dei controlli" v2.0 settles the SdI check. Where Allegato A is explicit
+it wins, so `validate()` can report 00418 or 00471 for a document SdI accepts, and parts of 00472 and 00473 are not
+checked (see above).
 
 ## Outside euinvoice
 

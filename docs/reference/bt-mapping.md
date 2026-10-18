@@ -437,7 +437,7 @@ listed in `ParseResult.unmapped` (XPaths), never dropped and never an error:
 * Content the model cannot hold (e.g. a line-level `ram:ExemptionReason`, Factur-X EXTENDED elements, a second card)
   is unmapped. A model that cannot be built (a missing required term, a code outside its list) is a `ParseError`
   naming the BT/BG and located at the element being read. Factur-X MINIMUM / BASIC WL documents raise it too: they
-  carry no lines (BR-16), so in v0.1.0 they are detected and extracted but not parsed (#69).
+  carry no lines (BR-16), so they are detected and extracted but not parsed (#69).
 
 
 ### The UBL reader (#11)
