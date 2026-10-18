@@ -67,8 +67,9 @@ is a small, typed, MIT-licensed Python library with three principles:
   dropped with `euinvoice.model.without_extensions()`. `to_xml(invoice, syntax="fatturapa",
   fatturapa_transmission=...)` writes FPR12. `validate()` runs the XSD 1.2.3 and euinvoice's encoding of the
   offline SdI checks (Allegato A 1.9.1, the SdI code as `rule_id`). It does not run the registry, SdI-state,
-  file-name, file-size or signature checks, so SdI can still reject a file it accepts. Signing and sending to SdI
-  are out of scope. See [docs/fatturapa.md](docs/fatturapa.md).
+  file-name, file-size or signature checks, so SdI can still reject a file `validate()` accepts. Where Allegato A
+  is explicit its scope is kept, so `validate()` can also report 00418 or 00471 for a document SdI accepts
+  ([#130](https://github.com/letsrevel/euinvoice/issues/130)). Signing and sending to SdI are out of scope. See [docs/fatturapa.md](docs/fatturapa.md).
 
 Planned later: ebInterface, more national CIUSes (RO, HR, FR, DK, …), KSeF, Facturae, and clearance/transport
 integrations.
@@ -176,6 +177,9 @@ Limitations and open questions (some wait for a maintainer decision, `needs-huma
   not settle, e.g. generic document level allowances and charges and VAT categories O, L, M),
   and [#132](https://github.com/letsrevel/euinvoice/issues/132) (the reader's mapping policies, e.g. it refuses
   the generic Natura N2, N3 and N6).
+- FatturaPA SdI checks ([#130](https://github.com/letsrevel/euinvoice/issues/130), decided): `validate()` can report 00418 or 00471 for a document SdI
+  accepts (Allegato A's wider scope is kept where it is explicit), and parts of 00472 and 00473 are not checked. See
+  [docs/fatturapa.md](docs/fatturapa.md).
 - [#40](https://github.com/letsrevel/euinvoice/issues/40): the hardened parser rejects a single text node over
   10,000,000 bytes, i.e. a BT-125 attachment over about 7.5 MB.
 
