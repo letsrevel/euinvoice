@@ -11,6 +11,8 @@ from euinvoice import calc
 from euinvoice.model import (
     Buyer,
     BuyerPostalAddress,
+    DocumentLevelAllowance,
+    DocumentLevelCharge,
     Identifier,
     Invoice,
     InvoiceLineAllowance,
@@ -25,6 +27,7 @@ from euinvoice.model import (
 from euinvoice.model.amounts import quantize_amount
 from euinvoice.model.it import (
     CondizioniPagamento,
+    ItalianExtension,
     ItalianLineExtension,
     ItalianPayment,
     ModalitaPagamento,
@@ -180,6 +183,44 @@ def _buyers(draw: st.DrawFn) -> Buyer:
     )
 
 
+# Amount2DecimalType, above 0 (ItalianExtension.stamp_duty_amount, #165).
+_STAMP_DUTY_CHARGED = st.decimals(min_value=Decimal("0.01"), max_value=Decimal("99999.99"), places=2)
+
+
+@st.composite
+def _stamp_duty(draw: st.DrawFn, credit_note: bool, extension: ItalianExtension) -> dict[str, t.Any]:
+    """No stamp duty, the zero marker (SAE charge, or 95 allowance on a credit note) or the marker and an amount.
+
+    App. 4.1 row 2.1.1.6: the marker writes DatiBollo; ``Invoice.it.stamp_duty_amount`` needs it (#165).
+
+    It is drawn regardless of BR-IT-DC-480's conditions (seller in IT, document subject to stamp duty, total above
+    77.47 EUR) and on TD17: those rows are conditional mappings, not SdI checks, so the documents are accepted even
+    when the duty would not be due. The property tests acceptance and the round trip, not tax realism.
+    """
+    kind = draw(st.sampled_from(["none", "marker", "charged"]))
+    if kind == "none":
+        return {}
+    zero, category, rate = Decimal("0.00"), "Z", Decimal(0)
+    changes: dict[str, t.Any] = (
+        {
+            "allowances": (
+                DocumentLevelAllowance(amount=zero, vat_category_code=category, vat_rate=rate, reason_code="95"),
+            )
+        }
+        if credit_note
+        else {
+            "charges": (
+                DocumentLevelCharge(
+                    amount=zero, vat_category_code=category, vat_rate=rate, reason="BOLLO", reason_code="SAE"
+                ),
+            )
+        }
+    )
+    if kind == "charged":
+        changes["it"] = extension.model_copy(update={"stamp_duty_amount": draw(_STAMP_DUTY_CHARGED)})
+    return changes
+
+
 @st.composite
 def v1_invoices(draw: st.DrawFn) -> Invoice:
     """A completed TD01, TD04, TD24 or TD17 with 1 to 5 lines of the v1 subset.
@@ -225,6 +266,9 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
         )
     if buyer_person is not None:
         buyer_ = buyer_.model_copy(update={"name": " ".join(buyer_person)})
+    # Keep last among the "it" updates: _stamp_duty copies changes["it"] as it is here and `changes |=` replaces it.
+    # Drawn earlier, the TD17 block would drop stamp_duty_amount; computed before the payment merge, the payment.
+    changes |= draw(_stamp_duty(tipo is TipoDocumento.TD04, changes["it"]))
     draft = it_draft(*draw(_lines()), buyer=buyer_, **changes)
     # BT-121 where App. 5.1 gives every Natura of the category one VATEX code (Natura carries it); none otherwise.
     codes: dict[str, set[str]] = {}
