@@ -21,6 +21,7 @@ from euinvoice.model.it import ItalianLineExtension
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import preflight, write
+from euinvoice.syntax.fatturapa._read_lines import _trim
 from euinvoice.syntax.fatturapa._write_rules import LINE_TOTAL, UNWRITTEN
 from euinvoice.validation import sdi
 
@@ -404,35 +405,19 @@ def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
         D(discount),
         D(net),
     )
-    # Verify trailing zeros are stripped for computed BT-146 and BT-147
     assert price.item_price_discount is not None
     assert format(price.item_price_discount, "f") == discount
     assert format(price.item_net_price, "f") == net
 
 
-def test_caso_2_cascade_writes_to_ubl_with_no_trailing_zeros() -> None:
-    """After reading Caso 2 from FatturaPA, writing to UBL shows 420.9205875 not 420.92058750."""
-    data = _cascade(_CASO_2, "42092.05875")
-    (result,) = parse_all(data)
+def test_cascaded_prices_are_written_without_trailing_zeros() -> None:
+    """Caso 2's BT-146/147 print as computed, not at the arithmetic's scale, in UBL and in a write-back (#171)."""
+    (result,) = parse_all(_cascade(_CASO_2, "42092.05875"))
+    ubl = _xml.parse(to_xml(without_extensions(result.invoice), syntax=Syntax.UBL))
 
-    # Remove extensions to use standard UBL syntax
-    invoice = without_extensions(result.invoice)
-    ubl_data = to_xml(invoice, syntax=Syntax.UBL)
-
-    # Parse and check exact price amount text
-    ubl_doc = _xml.parse(ubl_data)
-    # UBL namespace: cac:Price/cbc:PriceAmount
-    namespaces = {
-        "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
-        "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
-    }
-    price_elem = ubl_doc.find(".//cac:Price/cbc:PriceAmount", namespaces)
-    assert price_elem is not None
-    assert price_elem.text == "420.9205875"
-    # Check price allowance amount as well
-    allowance_elem = ubl_doc.find(".//cac:AllowanceCharge/cbc:Amount", namespaces)
-    assert allowance_elem is not None
-    assert allowance_elem.text == "79.0794125"
+    assert ubl.xpath("string(//cac:Price/cbc:PriceAmount)", namespaces=_xml.UBL_NSMAP) == "420.9205875"
+    assert ubl.xpath("string(//cac:Price/cac:AllowanceCharge/cbc:Amount)", namespaces=_xml.UBL_NSMAP) == "79.0794125"
+    assert _sconti(result.invoice) == [("SC", "79.0794125")]
 
 
 @pytest.mark.parametrize(
@@ -449,8 +434,6 @@ def test_caso_2_cascade_writes_to_ubl_with_no_trailing_zeros() -> None:
     ],
 )
 def test_trim_strips_trailing_zeros_keeping_at_least_two_decimals(value: Decimal, expected_fmt: str) -> None:
-    from euinvoice.syntax.fatturapa._read_lines import _trim
-
     result = _trim(value)
     assert format(result, "f") == expected_fmt
     assert result == D("0.00") if value == 0 else result == value
@@ -518,22 +501,6 @@ def test_a_document_the_sdi_accepts_reads_and_writes_back_to_one_it_accepts(adju
     (result,) = parse_all(data)
     written_back = to_xml(result.invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
 
-    assert [f for f in sdi.check(_xml.parse(written_back)) if f.rule_id == "00423"] == []
-
-
-def test_caso_2_cascade_to_model_and_back_preserves_format() -> None:
-    """When Caso 2 is read from FatturaPA and converted to model, the trimmed values are preserved."""
-    data = _cascade(_CASO_2, "42092.05875")
-    (result,) = parse_all(data)
-
-    # Verify the model has trimmed trailing zeros
-    line = result.invoice.lines[0]
-    assert line.price_details.item_price_discount is not None
-    assert format(line.price_details.item_price_discount, "f") == "79.0794125"
-    assert format(line.price_details.item_net_price, "f") == "420.9205875"
-
-    # When read and written back, it still validates
-    written_back = to_xml(result.invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
     assert [f for f in sdi.check(_xml.parse(written_back)) if f.rule_id == "00423"] == []
 
 

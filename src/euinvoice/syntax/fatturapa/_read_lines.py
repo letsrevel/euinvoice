@@ -46,7 +46,11 @@ _REFERENCES: t.Final = ("RiferimentoTesto", "RiferimentoNumero", "RiferimentoDat
 
 
 def _trim(value: Decimal) -> Decimal:
-    """Normalize a Decimal to strip trailing zeros, keeping at least 2 decimals; convert -0.00 to 0.00."""
+    """A computed BT-146 / BT-147 without the scale of the cascade's arithmetic (#171), at least 2 decimals.
+
+    The value never changes (the wide context keeps every digit); a zero, also the ``-0.00`` of a negative price
+    with no net discount, becomes ``0.00``.
+    """
     if value == 0:
         return _ZERO
     with localcontext(prec=MAX_PREC):
