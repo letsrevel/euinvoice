@@ -193,9 +193,9 @@ def _stamp_duty(draw: st.DrawFn, credit_note: bool, extension: ItalianExtension)
 
     App. 4.1 row 2.1.1.6: the marker writes DatiBollo; ``Invoice.it.stamp_duty_amount`` needs it (#165).
 
-    It is drawn regardless of BR-IT-DC-480's conditions (seller in IT, total above 77.47 EUR) and on TD17: those rows
-    are conditional mappings, not SdI checks, so the documents are accepted even when the duty would not be due. The
-    property tests acceptance and the round trip, not tax realism.
+    It is drawn regardless of BR-IT-DC-480's conditions (seller in IT, document subject to stamp duty, total above
+    77.47 EUR) and on TD17: those rows are conditional mappings, not SdI checks, so the documents are accepted even
+    when the duty would not be due. The property tests acceptance and the round trip, not tax realism.
     """
     kind = draw(st.sampled_from(["none", "marker", "charged"]))
     if kind == "none":
@@ -266,8 +266,8 @@ def v1_invoices(draw: st.DrawFn) -> Invoice:
         )
     if buyer_person is not None:
         buyer_ = buyer_.model_copy(update={"name": " ".join(buyer_person)})
-    # Keep after the payment merge: `changes |=` replaces "it", and _stamp_duty builds on changes["it"] as it is here
-    # (reordering would silently drop the payment).
+    # Keep last among the "it" updates: _stamp_duty copies changes["it"] as it is here and `changes |=` replaces it.
+    # Drawn earlier, the TD17 block would drop stamp_duty_amount; computed before the payment merge, the payment.
     changes |= draw(_stamp_duty(tipo is TipoDocumento.TD04, changes["it"]))
     draft = it_draft(*draw(_lines()), buyer=buyer_, **changes)
     # BT-121 where App. 5.1 gives every Natura of the category one VATEX code (Natura carries it); none otherwise.
