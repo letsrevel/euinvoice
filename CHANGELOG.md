@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- FatturaPA reader: strip trailing zeros from computed BT-146 (`item_net_price`) and BT-147
+  (`item_price_discount`) when `ScontoMaggiorazione` are folded into one BT-147 by the 00423 cascade,
+  keeping at least 2 decimals. The value is unchanged (equality holds); only the exponent is normalized
+  (e.g., `420.92058750000000` becomes `420.9205875`, `480.00` stays `480.00`), so the output from
+  `format(value, "f")` in UBL/CII is cleaner ([#171](https://github.com/letsrevel/euinvoice/issues/171)).
+
 ## [0.2.0] - 2026-10-18
 
 ### Added

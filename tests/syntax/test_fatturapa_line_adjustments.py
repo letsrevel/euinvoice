@@ -382,20 +382,55 @@ def _price_of(data: bytes) -> PriceDetails:
 
 
 @pytest.mark.parametrize(
-    ("adjustments", "total", "discount", "net"),
+    ("adjustments", "total", "discount", "net", "discount_fmt", "net_fmt"),
     [
-        (_CASO_1, "48000.00", "20.00", "480.00"),  # Caso 1: amounts add up
-        (_CASO_2, "42092.05875", "79.0794125", "420.9205875"),  # Caso 2: percentages cascade
-        (_CASO_3, "41056.12", "89.4388", "410.5612"),  # Caso 3: mixed; Importo wins over Percentuale
+        (_CASO_1, "48000.00", "20.00", "480.00", "20.00", "480.00"),  # Caso 1: amounts add up
+        (
+            _CASO_2,
+            "42092.05875",
+            "79.0794125",
+            "420.9205875",
+            "79.0794125",
+            "420.9205875",
+        ),  # Caso 2: percentages cascade
+        (
+            _CASO_3,
+            "41056.12",
+            "89.4388",
+            "410.5612",
+            "89.4388",
+            "410.5612",
+        ),  # Caso 3: mixed; Importo wins over Percentuale
         # MG and SC mixed: 500 * 1.10 = 550, then -50.
-        (_sconto("MG", percent="10.00") + _sconto("SC", amount="50.00"), "50000.00", "0.00", "500.00"),
+        (
+            _sconto("MG", percent="10.00") + _sconto("SC", amount="50.00"),
+            "50000.00",
+            "0.00",
+            "500.00",
+            "0.00",
+            "500.00",
+        ),
         # The order matters: a percentage applies to the running price.
-        (_sconto("SC", amount="50.00") + _sconto("SC", percent="10.00"), "40500.00", "95.00", "405.00"),
-        (_sconto("SC", percent="10.00") + _sconto("SC", amount="50.00"), "40000.00", "100.00", "400.00"),
+        (
+            _sconto("SC", amount="50.00") + _sconto("SC", percent="10.00"),
+            "40500.00",
+            "95.00",
+            "405.00",
+            "95.00",
+            "405.00",
+        ),
+        (
+            _sconto("SC", percent="10.00") + _sconto("SC", amount="50.00"),
+            "40000.00",
+            "100.00",
+            "400.00",
+            "100.00",
+            "400.00",
+        ),
     ],
 )
 def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
-    adjustments: str, total: str, discount: str, net: str
+    adjustments: str, total: str, discount: str, net: str, discount_fmt: str, net_fmt: str
 ) -> None:
     price = _price_of(_cascade(adjustments, total))
 
@@ -404,6 +439,27 @@ def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
         D(discount),
         D(net),
     )
+    # Verify trailing zeros are stripped for computed BT-146 and BT-147
+    if price.item_price_discount is not None:
+        assert format(price.item_price_discount, "f") == discount_fmt
+    assert format(price.item_net_price, "f") == net_fmt
+
+
+def test_caso_2_cascade_writes_to_ubl_with_no_trailing_zeros() -> None:
+    """After reading Caso 2 from FatturaPA, writing to UBL shows 420.9205875 not 420.92058750."""
+    from euinvoice.model import without_extensions
+
+    data = _cascade(_CASO_2, "42092.05875")
+    (result,) = parse_all(data)
+
+    # Remove extensions to use standard UBL syntax
+    invoice = without_extensions(result.invoice)
+    ubl_data = to_xml(invoice, syntax=Syntax.UBL)
+
+    # Verify the values are in the UBL output without trailing zeros
+    assert b"420.9205875" in ubl_data
+    assert b"420.92058750" not in ubl_data
+    assert b"79.0794125" in ubl_data
 
 
 def test_a_percentage_next_to_an_importo_in_a_cascade_is_reported() -> None:

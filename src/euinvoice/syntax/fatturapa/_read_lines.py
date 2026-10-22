@@ -39,10 +39,27 @@ __all__ = [
 
 _CENT: t.Final = Decimal("0.01")
 _ZERO: t.Final = Decimal("0.00")
+_TWO_DECIMALS: t.Final = Decimal("0.01")
 _NO_EXEMPTION: t.Final = frozenset({"S", "B", "Z"})  # BR-S-10, BR-B-10, BR-Z-10: no BT-120 / BT-121
 _ONE_UNIT: t.Final = "C62"  # UN/ECE Rec 20 "one": BT-130 when UnitaMisura is absent or not a code (#132 item 5)
 _NO_PREFIX: t.Final = "Identificativo del prodotto"  # App. 4.1 row 2.2.1.3.1: CodiceTipo of a BT-155 without prefix
 _REFERENCES: t.Final = ("RiferimentoTesto", "RiferimentoNumero", "RiferimentoData")  # 2.2.1.16.2-4
+
+
+def _strip_trailing_zeros(value: Decimal) -> Decimal:
+    """Strip trailing zeros from a Decimal, keeping at least 2 decimals.
+
+    Used on computed BT-146 (item_net_price) and BT-147 (item_price_discount) after
+    ScontoMaggiorazione cascading, to ensure the value (equality) is unchanged while
+    the exponent strips unnecessary zeros. E.g., 420.92058750000000 becomes 420.9205875;
+    480.00 stays 480.00. The result's exponent is always between -N and -2.
+    """
+    normalized = value.normalize()
+    # normalize() can produce exponent notation for integers (e.g., 4.8E+2); ensure at least 2 decimals
+    exponent = t.cast(int, normalized.as_tuple().exponent)
+    if exponent > -2:
+        return value.quantize(_TWO_DECIMALS)
+    return normalized
 
 
 @dataclasses.dataclass(frozen=True)
@@ -343,7 +360,7 @@ def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[d
     to the price the entries before it left (a percentage next to an ``Importo`` is reported). An entry with neither
     is reported (SdI check 00438) and changes nothing. BT-148 = ``PrezzoUnitario``, BT-147 = the sum of the
     discounts (the changes, negated) and BT-146 = BT-148 - BT-147. Without one,
-    BT-146 = ``PrezzoUnitario``.
+    BT-146 = ``PrezzoUnitario``. Computed BT-146 and BT-147 have trailing zeros stripped, keeping at least 2 decimals.
 
     A negative ``PrezzoUnitario`` (``Amount8DecimalType`` is signed, ``QuantitaType`` is not, XSD 1.2.3) is how
     FatturaPA writes a discount or rebate line. BR-27 forbids a negative BT-146, but no CEN rule restricts the sign of
@@ -382,8 +399,8 @@ def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[d
     if not applied:
         return {"item_net_price": sign * unit_price}, sign < 0
     return {
-        "item_net_price": sign * (unit_price - discount),
-        "item_price_discount": sign * discount,
+        "item_net_price": _strip_trailing_zeros(sign * (unit_price - discount)),
+        "item_price_discount": _strip_trailing_zeros(sign * discount),
         "item_gross_price": sign * unit_price,
     }, sign < 0
 
