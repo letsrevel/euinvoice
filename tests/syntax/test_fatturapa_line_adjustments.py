@@ -16,11 +16,12 @@ from _fatturapa import adjustment
 from _fatturapa_write import GOODS, TRANSMISSION, it_invoice, it_line, written
 from euinvoice import _xml, parse_all, to_xml
 from euinvoice.errors import ModelError, ParseError
-from euinvoice.model import Invoice, InvoiceLineAllowance, InvoiceLineCharge, PriceDetails
+from euinvoice.model import Invoice, InvoiceLineAllowance, InvoiceLineCharge, PriceDetails, without_extensions
 from euinvoice.model.it import ItalianLineExtension
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
 from euinvoice.syntax.fatturapa import preflight, write
+from euinvoice.syntax.fatturapa._read_lines import _trim
 from euinvoice.syntax.fatturapa._write_rules import LINE_TOTAL, UNWRITTEN
 from euinvoice.validation import sdi
 
@@ -404,6 +405,38 @@ def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
         D(discount),
         D(net),
     )
+    assert price.item_price_discount is not None
+    assert format(price.item_price_discount, "f") == discount
+    assert format(price.item_net_price, "f") == net
+
+
+def test_cascaded_prices_are_written_without_trailing_zeros() -> None:
+    """Caso 2's BT-146/147 print as computed, not at the arithmetic's scale, in UBL and in a write-back (#171)."""
+    (result,) = parse_all(_cascade(_CASO_2, "42092.05875"))
+    ubl = _xml.parse(to_xml(without_extensions(result.invoice), syntax=Syntax.UBL))
+
+    assert ubl.xpath("string(//cac:Price/cbc:PriceAmount)", namespaces=_xml.UBL_NSMAP) == "420.9205875"
+    assert ubl.xpath("string(//cac:Price/cac:AllowanceCharge/cbc:Amount)", namespaces=_xml.UBL_NSMAP) == "79.0794125"
+    assert _sconti(result.invoice) == [("SC", "79.0794125")]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_fmt"),
+    [
+        (D("0"), "0.00"),
+        (D("-0.00"), "0.00"),
+        (D("-5.50"), "-5.50"),
+        (D("1E+3"), "1000.00"),
+        (D("480.5"), "480.50"),
+        (D("420.92058750000000"), "420.9205875"),
+        # High-precision value: trailing zeros stripped but value unchanged
+        (D("1.123456789012345678901234567890"), "1.12345678901234567890123456789"),
+    ],
+)
+def test_trim_strips_trailing_zeros_keeping_at_least_two_decimals(value: Decimal, expected_fmt: str) -> None:
+    result = _trim(value)
+    assert format(result, "f") == expected_fmt
+    assert result == D("0.00") if value == 0 else result == value
 
 
 def test_a_percentage_next_to_an_importo_in_a_cascade_is_reported() -> None:
@@ -433,6 +466,24 @@ def test_a_negative_unit_price_with_two_sconti_keeps_its_sign_on_the_quantity() 
     assert line.invoiced_quantity == D("-1.00")
     assert (line.price_details.item_gross_price, line.price_details.item_price_discount) == (D("100.00"), D("5.00"))
     assert line.price_details.item_net_price == D("95.00")
+
+
+def test_a_negative_price_cascade_with_percentages_strips_trailing_zeros() -> None:
+    """Negative-price discounts (cascade with percentages) also have trailing zeros stripped."""
+    # -500.00 with 8.50% and 5.15% cascaded discounts
+    adjustments = _sconto("SC", percent="8.50") + _sconto("SC", percent="5.15")
+    # Negative PrezzoUnitario: -500.00; cascade: -500 * (1 - 0.085) * (1 - 0.0515) = -433.93875
+    data = _cascade(adjustments, "-433.93875", unit="-500.00", quantity="1.00")
+    (result,) = parse_all(data)
+    line = result.invoice.lines[0]
+
+    # Sign flipped by the reader for BT-129, prices are positive
+    assert line.invoiced_quantity == D("-1.00")
+    assert line.price_details.item_gross_price == D("500.00")
+    assert line.price_details.item_price_discount is not None
+    # Trailing zeros should be stripped (e.g., not 66.06125000...)
+    assert format(line.price_details.item_price_discount, "f") == "66.06125"
+    assert format(line.price_details.item_net_price, "f") == "433.93875"
 
 
 def test_an_empty_sconto_among_others_changes_nothing() -> None:

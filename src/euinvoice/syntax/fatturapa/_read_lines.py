@@ -8,7 +8,7 @@ from the summaries and the lines (:func:`breakdown`).
 
 import dataclasses
 import typing as t
-from decimal import Decimal
+from decimal import MAX_PREC, Decimal, localcontext
 
 from lxml import etree
 
@@ -43,6 +43,20 @@ _NO_EXEMPTION: t.Final = frozenset({"S", "B", "Z"})  # BR-S-10, BR-B-10, BR-Z-10
 _ONE_UNIT: t.Final = "C62"  # UN/ECE Rec 20 "one": BT-130 when UnitaMisura is absent or not a code (#132 item 5)
 _NO_PREFIX: t.Final = "Identificativo del prodotto"  # App. 4.1 row 2.2.1.3.1: CodiceTipo of a BT-155 without prefix
 _REFERENCES: t.Final = ("RiferimentoTesto", "RiferimentoNumero", "RiferimentoData")  # 2.2.1.16.2-4
+
+
+def _trim(value: Decimal) -> Decimal:
+    """A computed BT-146 / BT-147 without the scale of the cascade's arithmetic (#171), at least 2 decimals.
+
+    The value never changes (the wide context keeps every digit); a zero, also the ``-0.00`` of a negative price
+    with no net discount, becomes ``0.00``.
+    """
+    if value == 0:
+        return _ZERO
+    with localcontext(prec=MAX_PREC):
+        trimmed = value.normalize()
+        exponent = t.cast(int, trimmed.as_tuple().exponent)
+        return trimmed if exponent <= -2 else trimmed.quantize(_CENT)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -382,8 +396,8 @@ def _price(cursor: Cursor, element: etree._Element, claimed: Claimed) -> tuple[d
     if not applied:
         return {"item_net_price": sign * unit_price}, sign < 0
     return {
-        "item_net_price": sign * (unit_price - discount),
-        "item_price_discount": sign * discount,
+        "item_net_price": _trim(sign * (unit_price - discount)),
+        "item_price_discount": _trim(sign * discount),
         "item_gross_price": sign * unit_price,
     }, sign < 0
 

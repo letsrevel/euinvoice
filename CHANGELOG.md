@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- FatturaPA reader: BT-146 and BT-147 computed from several `ScontoMaggiorazione` no longer carry
+  trailing zeros (`420.9205875`, not `420.92058750000000`), in UBL and CII output and in a FatturaPA
+  write-back (`Importo` `79.0794125`, not `79.07941250`); values are unchanged
+  ([#171](https://github.com/letsrevel/euinvoice/issues/171)).
+
 ## [0.2.0] - 2026-10-18
 
 ### Added
