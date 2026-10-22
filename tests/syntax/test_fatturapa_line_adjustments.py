@@ -16,7 +16,7 @@ from _fatturapa import adjustment
 from _fatturapa_write import GOODS, TRANSMISSION, it_invoice, it_line, written
 from euinvoice import _xml, parse_all, to_xml
 from euinvoice.errors import ModelError, ParseError
-from euinvoice.model import Invoice, InvoiceLineAllowance, InvoiceLineCharge, PriceDetails
+from euinvoice.model import Invoice, InvoiceLineAllowance, InvoiceLineCharge, PriceDetails, without_extensions
 from euinvoice.model.it import ItalianLineExtension
 from euinvoice.report import Severity
 from euinvoice.syntax import Syntax
@@ -382,55 +382,20 @@ def _price_of(data: bytes) -> PriceDetails:
 
 
 @pytest.mark.parametrize(
-    ("adjustments", "total", "discount", "net", "discount_fmt", "net_fmt"),
+    ("adjustments", "total", "discount", "net"),
     [
-        (_CASO_1, "48000.00", "20.00", "480.00", "20.00", "480.00"),  # Caso 1: amounts add up
-        (
-            _CASO_2,
-            "42092.05875",
-            "79.0794125",
-            "420.9205875",
-            "79.0794125",
-            "420.9205875",
-        ),  # Caso 2: percentages cascade
-        (
-            _CASO_3,
-            "41056.12",
-            "89.4388",
-            "410.5612",
-            "89.4388",
-            "410.5612",
-        ),  # Caso 3: mixed; Importo wins over Percentuale
+        (_CASO_1, "48000.00", "20.00", "480.00"),  # Caso 1: amounts add up
+        (_CASO_2, "42092.05875", "79.0794125", "420.9205875"),  # Caso 2: percentages cascade
+        (_CASO_3, "41056.12", "89.4388", "410.5612"),  # Caso 3: mixed; Importo wins over Percentuale
         # MG and SC mixed: 500 * 1.10 = 550, then -50.
-        (
-            _sconto("MG", percent="10.00") + _sconto("SC", amount="50.00"),
-            "50000.00",
-            "0.00",
-            "500.00",
-            "0.00",
-            "500.00",
-        ),
+        (_sconto("MG", percent="10.00") + _sconto("SC", amount="50.00"), "50000.00", "0.00", "500.00"),
         # The order matters: a percentage applies to the running price.
-        (
-            _sconto("SC", amount="50.00") + _sconto("SC", percent="10.00"),
-            "40500.00",
-            "95.00",
-            "405.00",
-            "95.00",
-            "405.00",
-        ),
-        (
-            _sconto("SC", percent="10.00") + _sconto("SC", amount="50.00"),
-            "40000.00",
-            "100.00",
-            "400.00",
-            "100.00",
-            "400.00",
-        ),
+        (_sconto("SC", amount="50.00") + _sconto("SC", percent="10.00"), "40500.00", "95.00", "405.00"),
+        (_sconto("SC", percent="10.00") + _sconto("SC", amount="50.00"), "40000.00", "100.00", "400.00"),
     ],
 )
 def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
-    adjustments: str, total: str, discount: str, net: str, discount_fmt: str, net_fmt: str
+    adjustments: str, total: str, discount: str, net: str
 ) -> None:
     price = _price_of(_cascade(adjustments, total))
 
@@ -440,15 +405,13 @@ def test_several_sconti_fold_into_one_bt_147_by_the_00423_cascade(
         D(net),
     )
     # Verify trailing zeros are stripped for computed BT-146 and BT-147
-    if price.item_price_discount is not None:
-        assert format(price.item_price_discount, "f") == discount_fmt
-    assert format(price.item_net_price, "f") == net_fmt
+    assert price.item_price_discount is not None
+    assert format(price.item_price_discount, "f") == discount
+    assert format(price.item_net_price, "f") == net
 
 
 def test_caso_2_cascade_writes_to_ubl_with_no_trailing_zeros() -> None:
     """After reading Caso 2 from FatturaPA, writing to UBL shows 420.9205875 not 420.92058750."""
-    from euinvoice.model import without_extensions
-
     data = _cascade(_CASO_2, "42092.05875")
     (result,) = parse_all(data)
 
@@ -456,10 +419,41 @@ def test_caso_2_cascade_writes_to_ubl_with_no_trailing_zeros() -> None:
     invoice = without_extensions(result.invoice)
     ubl_data = to_xml(invoice, syntax=Syntax.UBL)
 
-    # Verify the values are in the UBL output without trailing zeros
-    assert b"420.9205875" in ubl_data
-    assert b"420.92058750" not in ubl_data
-    assert b"79.0794125" in ubl_data
+    # Parse and check exact price amount text
+    ubl_doc = _xml.parse(ubl_data)
+    # UBL namespace: cac:Price/cbc:PriceAmount
+    namespaces = {
+        "cac": "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2",
+        "cbc": "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2",
+    }
+    price_elem = ubl_doc.find(".//cac:Price/cbc:PriceAmount", namespaces)
+    assert price_elem is not None
+    assert price_elem.text == "420.9205875"
+    # Check price allowance amount as well
+    allowance_elem = ubl_doc.find(".//cac:AllowanceCharge/cbc:Amount", namespaces)
+    assert allowance_elem is not None
+    assert allowance_elem.text == "79.0794125"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_fmt"),
+    [
+        (D("0"), "0.00"),
+        (D("-0.00"), "0.00"),
+        (D("-5.50"), "-5.50"),
+        (D("1E+3"), "1000.00"),
+        (D("480.5"), "480.50"),
+        (D("420.92058750000000"), "420.9205875"),
+        # High-precision value: trailing zeros stripped but value unchanged
+        (D("1.123456789012345678901234567890"), "1.12345678901234567890123456789"),
+    ],
+)
+def test_trim_strips_trailing_zeros_keeping_at_least_two_decimals(value: Decimal, expected_fmt: str) -> None:
+    from euinvoice.syntax.fatturapa._read_lines import _trim
+
+    result = _trim(value)
+    assert format(result, "f") == expected_fmt
+    assert result == D("0.00") if value == 0 else result == value
 
 
 def test_a_percentage_next_to_an_importo_in_a_cascade_is_reported() -> None:
@@ -491,6 +485,24 @@ def test_a_negative_unit_price_with_two_sconti_keeps_its_sign_on_the_quantity() 
     assert line.price_details.item_net_price == D("95.00")
 
 
+def test_a_negative_price_cascade_with_percentages_strips_trailing_zeros() -> None:
+    """Negative-price discounts (cascade with percentages) also have trailing zeros stripped."""
+    # -500.00 with 8.50% and 5.15% cascaded discounts
+    adjustments = _sconto("SC", percent="8.50") + _sconto("SC", percent="5.15")
+    # Negative PrezzoUnitario: -500.00; cascade: -500 * (1 - 0.085) * (1 - 0.0515) = -433.93875
+    data = _cascade(adjustments, "-433.93875", unit="-500.00", quantity="1.00")
+    (result,) = parse_all(data)
+    line = result.invoice.lines[0]
+
+    # Sign flipped by the reader for BT-129, prices are positive
+    assert line.invoiced_quantity == D("-1.00")
+    assert line.price_details.item_gross_price == D("500.00")
+    assert line.price_details.item_price_discount is not None
+    # Trailing zeros should be stripped (e.g., not 66.06125000...)
+    assert format(line.price_details.item_price_discount, "f") == "66.06125"
+    assert format(line.price_details.item_net_price, "f") == "433.93875"
+
+
 def test_an_empty_sconto_among_others_changes_nothing() -> None:
     empty = "<ScontoMaggiorazione><Tipo>MG</Tipo></ScontoMaggiorazione>"
     price = _price_of(_cascade(_sconto("SC", amount="10.00") + empty, "49000.00"))
@@ -506,6 +518,22 @@ def test_a_document_the_sdi_accepts_reads_and_writes_back_to_one_it_accepts(adju
     (result,) = parse_all(data)
     written_back = to_xml(result.invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
 
+    assert [f for f in sdi.check(_xml.parse(written_back)) if f.rule_id == "00423"] == []
+
+
+def test_caso_2_cascade_to_model_and_back_preserves_format() -> None:
+    """When Caso 2 is read from FatturaPA and converted to model, the trimmed values are preserved."""
+    data = _cascade(_CASO_2, "42092.05875")
+    (result,) = parse_all(data)
+
+    # Verify the model has trimmed trailing zeros
+    line = result.invoice.lines[0]
+    assert line.price_details.item_price_discount is not None
+    assert format(line.price_details.item_price_discount, "f") == "79.0794125"
+    assert format(line.price_details.item_net_price, "f") == "420.9205875"
+
+    # When read and written back, it still validates
+    written_back = to_xml(result.invoice, syntax=Syntax.FATTURAPA, fatturapa_transmission=TRANSMISSION)
     assert [f for f in sdi.check(_xml.parse(written_back)) if f.rule_id == "00423"] == []
 
 
