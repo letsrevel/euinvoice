@@ -13,6 +13,13 @@ All notable changes to this project are documented here. The format follows
   write-back (`Importo` `79.0794125`, not `79.07941250`); values are unchanged
   ([#171](https://github.com/letsrevel/euinvoice/issues/171)).
 
+### Security
+
+- The `[pdf]` extra now requires `pypdf>=6.21.2`. Releases 6.20.0 to 6.21.2 limit the parsing work a crafted PDF can
+  cause (streams, cyclic trees, the xref table, repeated file loads) and fix the CVEs pip-audit reports for 6.19.0;
+  `facturx.extract` reads PDFs from untrusted senders. Dev-only `certifi` and `filelock` are updated in the lock
+  ([#169](https://github.com/letsrevel/euinvoice/issues/169)).
+
 ## [0.2.0] - 2026-10-18
 
 ### Added
