@@ -34,7 +34,7 @@ validate = [
 ]
 # Factur-X / ZUGFeRD PDF/A-3 embedding and extraction.
 pdf = [
-    "pypdf>=6.1",
+    "pypdf>=6.21.2",
 ]
 
 [project.urls]
