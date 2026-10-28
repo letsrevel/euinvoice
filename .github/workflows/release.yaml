@@ -4,7 +4,8 @@ name: Release
 #   1. validates branch version == pyproject version == top CHANGELOG section,
 #   2. builds sdist + wheel,
 #   3. tags + creates the GitHub release (notes = curated CHANGELOG section),
-#   4. publishes to PyPI via Trusted Publishing (OIDC; no API token stored anywhere).
+#   4. publishes to PyPI via Trusted Publishing (OIDC; no API token stored anywhere),
+#   5. dispatches the docs deploy for the tag.
 # Unlike revel-backend there is no separate publish workflow, so no GitHub App token is needed:
 # everything happens in one run, and the GITHUB_TOKEN's "no downstream workflows" rule is moot.
 #
@@ -92,3 +93,17 @@ jobs:
         with: { version: "0.11.18" }
       - name: Publish to PyPI (trusted publishing)
         run: uv publish --trusted-publishing always dist/*
+
+  docs:
+    needs: [build, github-release]
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+    steps:
+      # The GITHUB_TOKEN may trigger workflow_dispatch (unlike push events). docs.yaml runs on main, the only ref the
+      # github-pages environment allows, and checks out the tag.
+      - name: Dispatch the docs deploy for the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: gh workflow run docs.yaml --repo "$GITHUB_REPOSITORY" --ref main -f ref="v${VERSION}"

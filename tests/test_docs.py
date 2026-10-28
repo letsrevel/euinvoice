@@ -5,6 +5,7 @@
 
 import os
 import re
+import tomllib
 
 import _docs
 import _markdown_doctest
@@ -90,3 +91,21 @@ def test_artifacts_page_is_current() -> None:
     assert current == expected, (
         "docs/reference/artifacts.md is stale: run EUINVOICE_REGEN_DOCS=1 pytest tests/test_docs.py"
     )
+
+
+COMPLIANCE_PAGE = _docs.DOCS / "compliance.md"
+
+
+def test_compliance_page_states_the_released_version() -> None:
+    """The release PR's version bump fails this until docs/compliance.md has been reviewed (#185)."""
+    pyproject = _docs.DOCS.parent / "pyproject.toml"
+    version = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    stated = re.findall(r"Status as of euinvoice \*\*v(\d+\.\d+\.\d+)\*\*", COMPLIANCE_PAGE.read_text(encoding="utf-8"))
+    assert stated == [version], "review docs/compliance.md, then update its status line"
+
+
+def test_compliance_page_issue_links_are_well_formed() -> None:
+    text = COMPLIANCE_PAGE.read_text(encoding="utf-8")
+    links = re.findall(r"https://github\.com/\S*?issues\S*?(?=[)\s]|$)", text)
+    assert links
+    assert all(re.fullmatch(r"https://github\.com/letsrevel/euinvoice/issues/\d+", link) for link in links), links
