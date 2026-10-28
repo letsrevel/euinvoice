@@ -71,8 +71,9 @@ is a small, typed, MIT-licensed Python library with three principles:
   is explicit its scope is kept, so `validate()` can also report 00418 or 00471 for a document SdI accepts
   ([#130](https://github.com/letsrevel/euinvoice/issues/130)). Signing and sending to SdI are out of scope. See [docs/fatturapa.md](docs/fatturapa.md).
 
-Planned later: a French reform profile ([#178](https://github.com/letsrevel/euinvoice/issues/178)), more national CIUSes (RO, HR, DK, …), KSeF, Facturae, and clearance/transport
-integrations.
+Planned later: a French reform profile ([#178](https://github.com/letsrevel/euinvoice/issues/178)), more national
+CIUSes (RO, HR, DK, …), KSeF, Facturae, and clearance/transport integrations. What Germany, France and Austria
+require, and what is covered, is on [docs/countries.md](docs/countries.md).
 
 ## Install
 
