@@ -190,10 +190,11 @@ def test_peppol_vefa_unit_tests_hold(path: Path) -> None:
 
 def test_parametrized_corpora_are_complete() -> None:
     # Fetches (the parametrization above never does), then checks that collection saw every input.
-    # 1033 vefa expectations is the spec-auditor's reference count on Peppol 3.0.21 (issue #16), so a
+    # 1038 vefa expectations is the count on Peppol 3.0.21 at its tag (1033 at the earlier commit 806866bd;
+    # issues #16, #176), so a
     # cold cache, a glob or a parsing slip cannot silently shrink the suite.
     artifacts.fetch(["cen-ubl", "cen-cii", "peppol-bis"])
     assert (len(examples("cen-ubl")), len(examples("cen-cii"))) == (19, 15)
     total = sum(len(expectations(t)) for p in vefa_files() for t in _xml.parse(p.read_bytes()).iter(f"{VEFA}test"))
-    assert total == 1033
+    assert total == 1038
     assert (len(CEN_UBL_EXAMPLES), len(CEN_CII_EXAMPLES), len(VEFA_FILES)) == (19, 15, len(vefa_files()))

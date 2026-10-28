@@ -16,7 +16,7 @@ manifest for the upstream repository.
 |---|---|---|---|
 | `cen-ubl` | 1.3.16 | EUPL-1.2 | <https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-1.3.16/en16931-ubl-1.3.16.zip> |
 | `cen-cii` | 1.3.16 | EUPL-1.2 | <https://github.com/ConnectingEurope/eInvoicing-EN16931/releases/download/validation-1.3.16/en16931-cii-1.3.16.zip> |
-| `peppol-bis` | 3.0.21 | none stated (repository has no licence file; fetch only, never redistribute) | <https://github.com/OpenPEPPOL/peppol-bis-invoice-3/archive/806866bd2bd91d7e9623b68f08164e8fbe9e67a0.zip> |
+| `peppol-bis` | 3.0.21 | none stated (repository has no licence file; fetch only, never redistribute) | <https://github.com/OpenPEPPOL/peppol-bis-invoice-3/archive/5df0eff7c8efafd7c79c0dacce55082d175db759.zip> |
 | `xrechnung-schematron` | 2.6.0 | Apache-2.0 | <https://github.com/itplr-kosit/xrechnung-schematron/releases/download/v2.6.0/xrechnung-3.0.2-schematron-2.6.0.zip> |
 | `xrechnung-testsuite` | 2026-08-31 | Apache-2.0 | <https://github.com/itplr-kosit/xrechnung-testsuite/releases/download/v2026-08-31/xrechnung-3.0.2-testsuite-2026-08-31.zip> |
 | `xrechnung-validator-configuration` | 2026-08-31 | Apache-2.0 | <https://github.com/itplr-kosit/validator-configuration-xrechnung/releases/download/v2026-08-31/xrechnung-3.0.2-validator-configuration-2026-08-31.zip> |

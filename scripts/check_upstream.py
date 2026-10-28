@@ -99,8 +99,8 @@ CHECKS: dict[str, tuple[Check, ...]] = {
     "xrechnung-schematron": _releases("itplr-kosit/xrechnung-schematron", "v"),
     "xrechnung-testsuite": _releases("itplr-kosit/xrechnung-testsuite", "v"),
     "xrechnung-validator-configuration": _releases("itplr-kosit/validator-configuration-xrechnung", "v"),
-    # Peppol releases are neither tagged nor merged to master reliably: 3.0.21 is an untagged commit on
-    # branch 2026-Q2-QA2 (manifest note; newest tag is v3.0.20), 3.0.22 is prepared the same way, and
+    # Peppol releases are neither tagged nor merged to master reliably: 3.0.21 was an untagged commit on
+    # branch 2026-Q2-QA2 until it was tagged on 2026-10-28, 3.0.22 is prepared the same way, and
     # hotfixes keep the version number. So the authoritative signal is the rule file published on
     # docs.peppol.eu: its sha256 must equal the pinned one. The newest release-notes heading and a tag
     # above the pinned version number are secondary signals ("latest tag != pin" would always fire).
@@ -108,9 +108,10 @@ CHECKS: dict[str, tuple[Check, ...]] = {
         Check(
             "published-sha256",
             url=f"{PEPPOL_DOCS}/files/PEPPOL-EN16931-UBL.sch",
-            # sha256 of rules/sch/PEPPOL-EN16931-UBL.sch at the pinned commit 806866bd, which equals
-            # the file published at the URL above (verified 2026-10-06). Bump together with manifest.toml.
-            sha256="62e5b67892f12755352d78b06f63229a02cc2eccc748677c56efbc8dbcb336e3",
+            # sha256 of rules/sch/PEPPOL-EN16931-UBL.sch at the pinned 3.0.21 tag (commit 5df0eff7).
+            # docs.peppol.eu still served the previous commit's file (62e5b678..., 806866bd) on 2026-10-28,
+            # so this reports DRIFT until the docs site publishes the tag's file. Bump together with manifest.toml.
+            sha256="9616cfffb418f349b532c1e25d3c831b8af6a47f4f5607ca0df4b1336f48e5f3",
         ),
         Check("release-notes", url=f"{PEPPOL_DOCS}/release-notes/"),
         Check("newer-tag", repo="OpenPEPPOL/peppol-bis-invoice-3"),

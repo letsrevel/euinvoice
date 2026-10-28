@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The pinned `peppol-bis` artifact (Peppol BIS Billing 3.0.21) now points at the upstream `3.0.21` tag (commit
+  `5df0eff7`) instead of the untagged commit `806866bd`. The only rule change is PEPPOL-EN16931-P0112 (invoice type
+  code 389 is German-only; 384 is also allowed when both parties are Slovak). Run `euinvoice artifacts fetch` to
+  update ([#176](https://github.com/letsrevel/euinvoice/issues/176)).
+
 ## [0.2.1] - 2026-10-27
 
 ### Fixed
