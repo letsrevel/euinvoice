@@ -18,11 +18,20 @@ unconfirmed.
   ([§14 Abs. 2 S. 2 Nr. 1 UStG](https://www.gesetze-im-internet.de/ustg_1980/__14.html)), except supplies exempt
   under §4 Nr. 8 to 29. Supplies to non-business legal persons need an invoice, not an E-Rechnung. Apart from
   land-related work (Nr. 3), there is no invoice duty towards private consumers.
-- Receiving E-Rechnungen has been required since 2025-01-01. Issuing is required from 2027-01-01 for issuers with
-  prior-year turnover above 800 000 EUR, and from 2028-01-01 for everyone else. Until then paper, or other
-  electronic formats with the recipient's consent, are allowed ([§27 Abs. 38 UStG](https://www.gesetze-im-internet.de/ustg_1980/__27.html)).
-- Invoices up to 250 EUR gross may stay "sonstige Rechnungen". The test applies to the whole invoice total
+- The E-Rechnung rules apply to supplies made since 2025-01-01, so receiving E-Rechnungen has been required since
+  then. Issuing is in transition, and each step requires the invoice to be sent by the end of the stated year
+  ([§27 Abs. 38 UStG](https://www.gesetze-im-internet.de/ustg_1980/__27.html)):
+    - supplies made in 2025 or 2026: paper, or another electronic format with the recipient's consent, if the
+      invoice is sent by 2026-12-31 (Nr. 1);
+    - supplies made in 2027: the same, if the invoice is sent by 2027-12-31, but only for issuers whose prior-year
+      Gesamtumsatz (§19 Abs. 2 UStG) was at most 800 000 EUR (Nr. 2). Any other issuer may use a
+      non-EN 16931 electronic format only via EDI (Recommendation 94/820/EC) and with the recipient's consent (Nr. 3);
+    - supplies made from 2028: E-Rechnung for everyone.
+- Invoices up to 250 EUR gross may stay "sonstige Rechnungen". The test applies to the whole invoice total. It
+  does not apply to supplies under §§3c, 6a and 13b UStG
   ([§33 UStDV](https://www.gesetze-im-internet.de/ustdv_1980/__33.html)).
+- Small businesses (Kleinunternehmer, §19 UStG) may always send their invoices for exempt supplies as "sonstige
+  Rechnungen", with no end date ([§34a UStDV](https://www.gesetze-im-internet.de/ustdv_1980/__34a.html)).
 - Federal public buyers: e-invoices are required, normally XRechnung (other EN 16931-conformant standards are
   allowed, §4 Abs. 1 ERechV) with a Leitweg-ID (§5); direct orders up to 1 000 EUR are exempt (§3 Abs. 3)
   ([ERechV](https://www.gesetze-im-internet.de/erechv/ERechV.pdf)). The Leitweg-ID goes in BT-10, Buyer reference
