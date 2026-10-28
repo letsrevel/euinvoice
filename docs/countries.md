@@ -24,10 +24,12 @@ unconfirmed.
 - Invoices up to 250 EUR gross may stay "sonstige Rechnungen". The test applies to the whole invoice total
   ([§33 UStDV](https://www.gesetze-im-internet.de/ustdv_1980/__33.html)).
 - Federal public buyers: e-invoices are required, normally XRechnung (other EN 16931-conformant standards are
-  allowed, §4 Abs. 1 ERechV), with a Leitweg-ID in BT-10 (§5). Direct orders up to 1 000 EUR are exempt (§3 Abs. 3)
-  ([ERechV](https://www.gesetze-im-internet.de/erechv/ERechV.pdf)). ZRE was merged into OZG-RE (final migration
-  2025-09-19, [e-rechnung-bund.de](https://e-rechnung-bund.de/en/platform-consolidation/)); OZG-RE is the federal
-  portal, though indirect federal bodies may run their own.
+  allowed, §4 Abs. 1 ERechV) with a Leitweg-ID (§5); direct orders up to 1 000 EUR are exempt (§3 Abs. 3)
+  ([ERechV](https://www.gesetze-im-internet.de/erechv/ERechV.pdf)). The Leitweg-ID goes in BT-10, Buyer reference
+  ([e-rechnung-bund.de](https://e-rechnung-bund.de/en/e-invoicing-for-invoice-issuers)). ZRE was merged into OZG-RE
+  (final migration 2025-09-19, [platform consolidation](https://e-rechnung-bund.de/en/platform-consolidation/));
+  OZG-RE is the federal portal, though indirect federal bodies may run their own
+  ([e-rechnung-bund.de](https://e-rechnung-bund.de/en/e-invoicing-for-invoice-issuers)).
 
 **Accepted formats.**
 
@@ -98,8 +100,7 @@ two French process ids in BT-23. Not covered:
   [#178](https://github.com/letsrevel/euinvoice/issues/178);
 - the Factur-X Schematron, which the French rule set pin also delivers:
   [#42](https://github.com/letsrevel/euinvoice/issues/42);
-- French CII: it is not
-  yet confirmed here: which CII version (D16B or D22B) XP Z12-012 requires, see
+- French CII: which CII version (D16B or D22B) XP Z12-012 requires is not yet confirmed, see
   [#179](https://github.com/letsrevel/euinvoice/issues/179). Our CII writer is D16B;
 - e-reporting, lifecycle statuses and the platform API client. These are outside the library.
 
