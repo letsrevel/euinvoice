@@ -5,7 +5,7 @@ name: Release
 #   2. builds sdist + wheel,
 #   3. tags + creates the GitHub release (notes = curated CHANGELOG section),
 #   4. publishes to PyPI via Trusted Publishing (OIDC; no API token stored anywhere),
-#   5. dispatches the docs deploy for the tag.
+#   5. once the package is on PyPI, dispatches the docs deploy for the tag.
 # Unlike revel-backend there is no separate publish workflow, so no GitHub App token is needed:
 # everything happens in one run, and the GITHUB_TOKEN's "no downstream workflows" rule is moot.
 #
@@ -95,7 +95,7 @@ jobs:
         run: uv publish --trusted-publishing always dist/*
 
   docs:
-    needs: [build, github-release]
+    needs: [build, pypi]
     runs-on: ubuntu-24.04
     permissions:
       actions: write
