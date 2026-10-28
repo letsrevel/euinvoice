@@ -8,10 +8,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Docs: a compliance status page with the per-country support table and what is next, kept current at each release
+  ([#185](https://github.com/letsrevel/euinvoice/issues/185)).
 - Docs: a countries page for Germany, France and Austria (mandates, formats, delivery, what euinvoice covers)
   ([#177](https://github.com/letsrevel/euinvoice/issues/177)).
 - Docs: the ticketing example no longer implies that 13 % is a general Austrian admission rate; it applies only to
   the §10 Abs. 3 UStG categories ([#177](https://github.com/letsrevel/euinvoice/issues/177)).
+
+### Changed
+
+- Docs site: deployed at each release (and on manual dispatch) instead of on every push to main, so it describes the
+  released version ([#185](https://github.com/letsrevel/euinvoice/issues/185)).
 
 ## [0.2.1] - 2026-10-27
 

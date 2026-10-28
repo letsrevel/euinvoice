@@ -35,6 +35,7 @@ python -m euinvoice artifacts fetch   # cache: $EUINVOICE_ARTIFACTS_DIR or ~/.ca
 
 ## Where to go next
 
+- [Compliance status](compliance.md): per-country support and what is next.
 - [Quickstart](quickstart.md): one invoice from draft to validated XML.
 - [Concepts](concepts.md): the model, business terms, profiles and syntaxes.
 - [Validation](validation.md): artifacts, `validate()` and findings.
