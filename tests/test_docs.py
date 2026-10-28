@@ -9,7 +9,7 @@ import tomllib
 
 import _docs
 import _markdown_doctest
-from euinvoice.validation import artifacts
+from euinvoice.validation import artifacts, sdi
 
 ARTIFACTS_PAGE = _docs.DOCS / "reference" / "artifacts.md"
 
@@ -105,7 +105,14 @@ def test_compliance_page_states_the_released_version() -> None:
 
 
 def test_compliance_page_issue_links_are_well_formed() -> None:
+    """Every GitHub issue link on the page points at letsrevel/euinvoice/issues/<n>."""
     text = COMPLIANCE_PAGE.read_text(encoding="utf-8")
     links = re.findall(r"https://github\.com/\S*?issues\S*?(?=[)\s]|$)", text)
     assert links
     assert all(re.fullmatch(r"https://github\.com/letsrevel/euinvoice/issues/\d+", link) for link in links), links
+
+
+def test_compliance_page_states_the_number_of_sdi_checks() -> None:
+    """The Italy row's count of SdI offline checks follows ``euinvoice.validation.sdi.DESCRIPTIONS``."""
+    stated = re.findall(r"(\d+) of SdI's offline checks", COMPLIANCE_PAGE.read_text(encoding="utf-8"))
+    assert stated == [str(len(sdi.DESCRIPTIONS))]

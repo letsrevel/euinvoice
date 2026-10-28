@@ -1,6 +1,6 @@
 # euinvoice
 
-[![CI](https://github.com/letsrevel/euinvoice/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/letsrevel/euinvoice/actions/workflows/ci.yaml) [![Nightly conformance](https://github.com/letsrevel/euinvoice/actions/workflows/nightly.yaml/badge.svg)](https://github.com/letsrevel/euinvoice/actions/workflows/nightly.yaml) [![PyPI](https://img.shields.io/pypi/v/euinvoice)](https://pypi.org/project/euinvoice/) [![Python versions](https://img.shields.io/pypi/pyversions/euinvoice)](https://pypi.org/project/euinvoice/) [![License](https://img.shields.io/pypi/l/euinvoice)](LICENSE) [![Docs](https://img.shields.io/badge/docs-letsrevel.github.io-blue)](https://letsrevel.github.io/euinvoice/) [![Compliance](https://img.shields.io/badge/compliance-DE%20%7C%20FR%20%7C%20AT%20%7C%20IT-informational)](https://letsrevel.github.io/euinvoice/compliance/)
+[![CI](https://github.com/letsrevel/euinvoice/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/letsrevel/euinvoice/actions/workflows/ci.yaml) [![Nightly conformance](https://github.com/letsrevel/euinvoice/actions/workflows/nightly.yaml/badge.svg)](https://github.com/letsrevel/euinvoice/actions/workflows/nightly.yaml) [![PyPI](https://img.shields.io/pypi/v/euinvoice)](https://pypi.org/project/euinvoice/) [![Python versions](https://img.shields.io/pypi/pyversions/euinvoice)](https://pypi.org/project/euinvoice/) [![License](https://img.shields.io/pypi/l/euinvoice)](LICENSE) [![Docs](https://img.shields.io/badge/docs-letsrevel.github.io-blue)](https://letsrevel.github.io/euinvoice/) [![Compliance](https://img.shields.io/badge/compliance-status%20by%20country-informational)](https://letsrevel.github.io/euinvoice/compliance/)
 
 **EN 16931 e-invoicing for Python.** You can build European e-invoices as typed models, serialize them
 to **UBL** or **CII**, validate them against the **official** rule sets, parse them back, and embed them
@@ -166,8 +166,7 @@ The [`docs/`](docs/index.md) folder holds the guide: [quickstart](docs/quickstar
 [concepts](docs/concepts.md), [validation](docs/validation.md), [Factur-X](docs/facturx.md),
 [FatturaPA](docs/fatturapa.md), a
 [mapping guide](docs/mapping/index.md) with synthetic freelancer and ticketing examples, and the
-[BT mapping](docs/reference/bt-mapping.md). It builds with `make docs` (mkdocs-material). The GitHub Pages site is deployed at each release
-once the maintainer enables Pages for the repository and sets the repository variable `DOCS_DEPLOY=true`.
+[BT mapping](docs/reference/bt-mapping.md). It builds with `make docs` (mkdocs-material). The site at https://letsrevel.github.io/euinvoice/ is published at each release.
 
 ## Known limitations
 
