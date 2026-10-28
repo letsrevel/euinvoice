@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Docs: a countries page for Germany, France and Austria (mandates, formats, delivery, what euinvoice covers), and a
+  note that the ticketing example's 13 % admission rate is Austrian only for the §10 Abs. 3 UStG categories
+  ([#177](https://github.com/letsrevel/euinvoice/issues/177)).
+
 ## [0.2.1] - 2026-10-27
 
 ### Fixed

@@ -4,7 +4,10 @@ A synthetic event organiser sells tickets and merchandise online. Its checkout s
 and one order can mix VAT rates. After the event, one ticket is refunded with a **credit note**.
 
 The rates are assumptions of the example (13 % on admission, 20 % on merchandise and the booking fee), not tax
-advice. Everything is written under the EN 16931 core profile and, in the conformance suite, validated against the
+advice. In Austria the 13 % admission rate applies only to the categories in
+[§10 Abs. 3 UStG](https://www.ris.bka.gv.at/NormDokument.wxe?Abfrage=Bundesnormen&Gesetzesnummer=10004873&Paragraf=10)
+(theatre, music performances and museums in Z 6, film in Z 7, circus in Z 8, sport in Z 12); other events are at
+20 %, so it is not a general rate. Everything is written under the EN 16931 core profile and, in the conformance suite, validated against the
 official CEN rules.
 
 ## The order
