@@ -5,7 +5,7 @@ or **UN/CEFACT CII**, validate them against the **official** rule sets, parse th
 **Factur-X / ZUGFeRD** PDFs.
 
 !!! warning "Pre-1.0"
-    The library is at v0.2.0. APIs can still change. See the
+    The library is at v0.2.1. APIs can still change. See the
     [changelog](https://github.com/letsrevel/euinvoice/blob/main/CHANGELOG.md).
 
 ## What it does
