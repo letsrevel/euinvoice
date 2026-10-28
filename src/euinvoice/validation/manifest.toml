@@ -53,17 +53,17 @@ Does NOT contain the CII XSD: see `xrechnung-validator-configuration`."""
 version = "3.0.21"
 # ponytail: GitHub-generated archive of a commit. GitHub does not contractually guarantee stable
 # archive checksums; if the sha256 ever drifts, re-verify the content and re-pin.
-url = "https://github.com/OpenPEPPOL/peppol-bis-invoice-3/archive/806866bd2bd91d7e9623b68f08164e8fbe9e67a0.zip"
-sha256 = "25939567e01b65fe5c93412f49ee3d7dffd264dd508aeb21c6447fcf83ef4755"
+url = "https://github.com/OpenPEPPOL/peppol-bis-invoice-3/archive/5df0eff7c8efafd7c79c0dacce55082d175db759.zip"
+sha256 = "6435af87c469db230bbe09d82af685018cfdb8a0aae6c78e77de8b075a583369"
 license = "none stated (repository has no licence file; fetch only, never redistribute)"
 members = ["rules/sch/*", "rules/examples/*", "rules/unit-UBL-*", "rules/unit-CII-*"]
 strip_components = 1
 precompile = ["rules/sch/PEPPOL-EN16931-UBL.sch", "rules/sch/PEPPOL-EN16931-CII.sch"]
 note = """Peppol BIS Billing 3.0 release 3.0.21 (published 2026-05-20, mandatory from 2026-08-17 per \
-docs.peppol.eu/poacc/billing/3.0/release-notes/). Upstream did not tag 3.0.21 (newest tag is v3.0.20); \
-commit 806866bd (head of branch 2026-Q2-QA2, 2026-06-10) is pinned because its rules/sch/PEPPOL-EN16931-UBL.sch \
-and CEN-EN16931-UBL.sch are byte-identical (git blob 17b05402 / 58de2a5d) to the files published at \
-docs.peppol.eu/poacc/billing/3.0/files/, and XRechnung Schematron 2.6.0 states it uses Peppol 3.0.21. \
+docs.peppol.eu/poacc/billing/3.0/release-notes/). Pinned to the upstream tag 3.0.21 \
+(commit 5df0eff7, tagged 2026-10-28). Compared with the earlier untagged commit 806866bd it changes only rule \
+PEPPOL-EN16931-P0112 in rules/sch/PEPPOL-EN16931-UBL.sch (type code 389 joins the German-only list; 384 is also \
+allowed when both parties are Slovak) and its unit test; XRechnung Schematron 2.6.0 states it uses Peppol 3.0.21. \
 Rules ship as .sch only, so the PEPPOL-EN16931-*.sch files are precompiled with SchXslt."""
 
 [sources.xrechnung-schematron]

@@ -43,7 +43,7 @@ CURRENT: dict[str, t.Any] = {
     ],
     PEPPOL_SCH: SCH_BYTES,
     PEPPOL_NOTES: b'<h1>Notes</h1><h2 id="_version_3_0_21">Version 3.0.21</h2><h2 id="_version_3_0_20_hotfix">',
-    # Real situation: 3.0.21 is pinned to an untagged commit, the newest tag is v3.0.20.
+    # 3.0.21 is pinned to its own tag; tags at or below the pin are not drift.
     PEPPOL_TAGS: [{"name": "v3.0.20"}, {"name": "v3.0.19"}, {"name": "3.0.18"}, {"name": "not-a-version"}],
     f"{GH}/ZUGFeRD/corpus": {"default_branch": "master"},
     f"{GH}/ZUGFeRD/corpus/commits/master": {"sha": "82e886fb21369e3e83c1e97170a4ff406deceee7"},
@@ -86,7 +86,7 @@ def test_every_manifest_source_has_a_check() -> None:
 
 
 def test_peppol_hash_is_pinned_next_to_the_manifest_version() -> None:
-    # sha256 of rules/sch/PEPPOL-EN16931-UBL.sch at commit 806866bd (manifest peppol-bis 3.0.21).
+    # sha256 of the UBL .sch published at docs.peppol.eu (see check_upstream.py for why it can lag the pin).
     assert load_manifest()["peppol-bis"].version == "3.0.21"
     (check,) = (c for c in cu.CHECKS["peppol-bis"] if c.strategy == "published-sha256")
     assert check.url == PEPPOL_SCH

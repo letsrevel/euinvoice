@@ -18,7 +18,7 @@ None of them is committed (D7).
 | **CEN** | CEN validation artifacts `validation-1.3.16`: `schematron/abstract/EN16931-model.sch`, `UBL/EN16931-UBL-{model,syntax}.sch`, `CII/EN16931-CII-{model,syntax}.sch`, `codelist/EN16931-{UBL,CII}-codes.sch` (fetched by `make artifacts`) | mandatory terms (BR-01…BR-65, BR-CO-04, BR-CO-18), code lists (BR-CL-*), syntax restrictions (UBL-SR-*, CII-SR-*) |
 | **XR** | XRechnung 3.0.2 specification, chapter 11 "Detailbeschreibung" (xeinkauf.de, `302-XRechnung-2024-06-20.pdf`) | the id inventory, names, data types, the semantic tree (which group holds which term) and the cardinality of every term |
 | **KoSIT viz** | `itplr-kosit/xrechnung-visualization` `v2026-08-31`, `src/xsl/ubl-invoice-xr.xsl` and `src/xsl/cii-xr.xsl` (Apache-2.0): one `xsl:template mode="BT-n" match="<XPath>"` per term | UBL and CII XPaths |
-| **Peppol** | Peppol BIS Billing 3.0.21 syntax binding, `structure/syntax/ubl-invoice.xml` and `ubl-creditnote.xml` from the same commit `806866bd` as the pinned `peppol-bis` artifact, but **not part of it** (the manifest extracts only `rules/`); read from GitHub for reference | UBL XPaths for BT-22, BT-23, BT-24, BG-1, BG-16, cross-check of the others |
+| **Peppol** | Peppol BIS Billing 3.0.21 syntax binding, `structure/syntax/ubl-invoice.xml` and `ubl-creditnote.xml` from the same tag commit `5df0eff7` as the pinned `peppol-bis` artifact, but **not part of it** (the manifest extracts only `rules/`); read from GitHub for reference | UBL XPaths for BT-22, BT-23, BT-24, BG-1, BG-16, cross-check of the others |
 | **CEN examples** | `cen-cii/1.3.16/examples/CII_example*.xml` | CII XPaths of BT-7, BT-149, BT-150, which the KoSIT viz does not bind |
 
 ### How cardinalities were decided

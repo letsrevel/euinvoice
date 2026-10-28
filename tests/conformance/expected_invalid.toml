@@ -162,9 +162,9 @@ link = "https://github.com/ZUGFeRD/corpus/blob/82e886fb21369e3e83c1e97170a4ff406
 source = "zugferd-corpus"
 file = "XML-Rechnung/UBL/EN16931_Innergemeinschaftliche_Lieferungen.ubl.xml"
 outcome = "reads"
-rules = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
-upstream = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
-reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): P0100 (invoice type code per profile); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
+rules = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-P0112", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+upstream = ["PEPPOL-EN16931-P0100", "PEPPOL-EN16931-P0112", "PEPPOL-EN16931-R003", "PEPPOL-EN16931-R010", "PEPPOL-EN16931-R020"]
+reason = "Carries the Peppol BIS BT-24, so validate() runs the Peppol rules (#64), but the upstream file was written for EN 16931 (ZUGFeRD/XRechnung-style sample) and fails them itself; the round trip keeps exactly those findings. Rules (peppol-bis 3.0.21 PEPPOL-EN16931-UBL.sch): P0100 (invoice type code per profile); P0112 (type code 389 is only allowed when seller and buyer are both German; the seller is in GB, and 389 joined this rule in the 3.0.21 tag); R003 (buyer reference or purchase order reference); R010 (buyer electronic address BT-49); R020 (seller electronic address BT-34)."
 link = "https://github.com/ZUGFeRD/corpus/blob/82e886fb21369e3e83c1e97170a4ff406deceee7/XML-Rechnung/UBL/EN16931_Innergemeinschaftliche_Lieferungen.ubl.xml"
 
 [[sample]]
