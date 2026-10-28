@@ -14,6 +14,8 @@ All notable changes to this project are documented here. The format follows
   ([#177](https://github.com/letsrevel/euinvoice/issues/177)).
 - Docs: the ticketing example no longer implies that 13 % is a general Austrian admission rate; it applies only to
   the §10 Abs. 3 UStG categories ([#177](https://github.com/letsrevel/euinvoice/issues/177)).
+- Docs: Germany on the countries page now gives the §27 Abs. 38 UStG transition per supply year (including the EDI
+  exception) and the permanent §34a UStDV exception for small businesses ([#187](https://github.com/letsrevel/euinvoice/issues/187)).
 
 ### Changed
 
