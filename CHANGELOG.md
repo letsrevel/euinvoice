@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-31
+
 ### Added
 
 - Docs: a compliance status page with the per-country support table and what is next, kept current at each release
@@ -484,7 +486,8 @@ generated, parsed and validated per profile is in the README table; the open que
   `EN16931-UBL-codes.sch` lines 67-68).
 - A BT-125 attachment over about 7.5 MB exceeds the hardened parser's text node limit ([#40](https://github.com/letsrevel/euinvoice/issues/40)).
 
-[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/letsrevel/euinvoice/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/letsrevel/euinvoice/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/letsrevel/euinvoice/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/letsrevel/euinvoice/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/letsrevel/euinvoice/releases/tag/v0.1.0

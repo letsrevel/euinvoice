@@ -1,6 +1,6 @@
 # Compliance status
 
-Status as of euinvoice **v0.2.1** (2026-10-27). This page is updated with every release; the issues linked below
+Status as of euinvoice **v0.2.2** (2026-10-31). This page is updated with every release; the issues linked below
 show the work in between.
 
 It says which countries' e-invoicing rules euinvoice covers, what it validates against, and what comes next.

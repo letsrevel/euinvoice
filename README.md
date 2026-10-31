@@ -6,7 +6,7 @@
 to **UBL** or **CII**, validate them against the **official** rule sets, parse them back, and embed them
 in **Factur-X / ZUGFeRD** PDFs.
 
-> **Status: 0.2.1.** Pre-1.0: the API can still change; see
+> **Status: 0.2.2.** Pre-1.0: the API can still change; see
 > [`CHANGELOG.md`](CHANGELOG.md) and the [known limitations](#known-limitations).
 
 ## Why
@@ -21,7 +21,7 @@ is a small, typed, MIT-licensed Python library with three principles:
 - **Framework-free and side-effect-free.** Bytes go in and bytes come out, with no Django, no network and no
   file system in the core.
 
-## What 0.2.1 supports
+## What 0.2.2 supports
 
 | Profile | Syntax | Generate | Parse | Validate |
 |---|---|---|---|---|
