@@ -22,6 +22,12 @@ All notable changes to this project are documented here. The format follows
 - Docs site: deployed at each release (and on manual dispatch) instead of on every push to main, so it describes the
   released version ([#185](https://github.com/letsrevel/euinvoice/issues/185)).
 
+### Security
+
+- The `[pdf]` extra now requires `pypdf>=6.21.4`. Releases 6.21.3 and 6.21.4 fix seven CVEs reported in pip-audit
+  for 6.21.2 (CVE-2026-119203 to CVE-2026-119209); `facturx.extract` reads PDFs from untrusted senders
+  ([#189](https://github.com/letsrevel/euinvoice/issues/189)).
+
 ## [0.2.1] - 2026-10-27
 
 ### Fixed
